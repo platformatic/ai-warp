@@ -1,0 +1,47 @@
+{
+  "name": "@fastify/ai",
+  "private": true,
+  "version": "0.0.1",
+  "description": "",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "type": "module",
+  "license": "Apache-2.0",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts",
+      "require": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "test": "node --test --experimental-strip-types test/*.test.ts",
+    "lint": "eslint src test",
+    "lint:fix": "eslint src test --fix",
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist;",
+    "check": "pnpm clean && pnpm lint && pnpm typecheck && pnpm test && pnpm build"
+  },
+  "author": "Platformatic Inc. <oss@platformatic.dev> (https://platformatic.dev)",
+  "dependencies": {
+    "fastify-plugin": "^5.0.1",
+    "iovalkey": "^0.3.3",
+    "openai": "^5.7.0",
+    "undici": "^7.10.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.9",
+    "eslint": "^9.21.0",
+    "fastify": "^5.2.1",
+    "neostandard": "^0.12.1",
+    "typescript": "^5.8.2"
+  },
+  "engines": {
+    "node": ">=22.16.0"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ]
+}

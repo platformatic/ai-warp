@@ -1,0 +1,40 @@
+import undici from 'undici'
+import { app } from './prompt.ts'
+import type { ProviderResponse } from '../src/lib/ai.ts'
+
+const url = 'http://localhost:3000/chat'
+
+const prompts = [
+  'Can you help me to prepare a dinner?',
+  "I'd like to prepare a dinner for my 2 kids, they love fish and potatoes",
+  "Oh I forgot, they don't like garlic. Also, I don't think the cheese is a good idea to put on top of fish. Since you suggest to use the oven, add some tomatoes",
+  'Sounds delicious! Thank you'
+]
+
+const headers = {
+  'Content-Type': 'application/json'
+}
+
+async function main () {
+  const server = await app({ start: true })
+
+  console.log('\n**********')
+
+  for (const prompt of prompts) {
+    console.log('\n>>>', prompt)
+
+    const response = await undici.request(url, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ prompt })
+    })
+
+    console.log('<<<', (await response.body.json() as ProviderResponse).text)
+  }
+
+  console.log('\n**********\n')
+
+  server.close()
+}
+
+main()
