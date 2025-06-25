@@ -25,6 +25,7 @@
   },
   "author": "Platformatic Inc. <oss@platformatic.dev> (https://platformatic.dev)",
   "dependencies": {
+    "@fastify/deepmerge": "^3.1.0",
     "fastify-plugin": "^5.0.1",
     "iovalkey": "^0.3.3",
     "openai": "^5.7.0",

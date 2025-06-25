@@ -1,10 +1,12 @@
 import fp from 'fastify-plugin'
-// import { createProviders } from '../providers/providers.ts'
+import { Ai, type AiOptions, type ModelOptions } from '../lib/ai.ts'
 
-export interface AiPluginOptions {
-  providers: {
-    openai: {
-      apiKey: string | undefined
+export type AiPluginOptions = AiOptions
+
+export type FastifyAiRouteConfig = {
+  config: {
+    ai: {
+      models: ModelOptions[]
     }
   }
 }
@@ -27,32 +29,32 @@ declare module 'fastify' {
 }
 
 export default fp((fastify, options: AiPluginOptions) => {
-//   console.log('ai', options)
-// TODO validate options
+  // TODO validate options
+  const ai = new Ai(options)
 
-  // const providersOptions = {
-  //   // TODO settings: timeout, rateLimit, ...
-  //   providers: {
-  //     openai: {
-  //       // apiKey: options.providers.openai.apiKey,
-  //       // TODO baseURL: process.env.OPENAI_BASE_URL
-  //     }
-  //   }
-  // }
-  // const providers = createProviders(providersOptions)
+  fastify.addHook('onRoute', (routeOptions) => {
+    const aiRouteOptions = routeOptions?.config?.ai as FastifyAiRouteConfig
+    if (!aiRouteOptions) {
+      return
+    }
 
-  fastify.addHook('preHandler', async (request, reply) => {
-    // TODO
-    // request.routeOptions.config
-    // TODO merge with global config
-    // console.log('preHandler', config)
-    // request.routeOptions.config.default = 'TODO'
+    // TODO validate routeOptions
+    ai.addModels('openai', aiRouteOptions)
   })
 
   fastify.decorate('ai', {
     request: async (request: FastifyAiRequest): Promise<FastifyAiResponse> => {
       // console.log('request', request, options)
       // console.log('request config', query.request.routeOptions.config)
+
+      // const response = await ai.request({
+      //   models: request.models,
+      //   prompt: request.prompt,
+      //   options: request.options
+      // })
+      // return {
+      //   text: response.text
+      // }
 
       return {
         text: 'TODO'

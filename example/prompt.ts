@@ -1,26 +1,30 @@
 import fastify, { type FastifyRequest } from 'fastify'
 import ai from '../src/plugins/ai.ts'
+import type { PinoLoggerOptions } from 'fastify/types/logger.js'
 
 interface AppOptions {
   start?: boolean
+  logger?: PinoLoggerOptions
 }
 
 interface ChatRequestBody {
   prompt: string
-  sessionId?: string
+  stream?: boolean
 }
 
-export async function app ({ start = false }: AppOptions) {
+export async function app ({ start = false, logger }: AppOptions) {
   const app = fastify({
-    logger: {
-      level: 'error'
-    }
+    logger
   })
 
+  if(!process.env.OPENAI_API_KEY) {
+    throw new Error('OPENAI_API_KEY is not set')
+  }
+
   const chatConfig = {
-    // TODO context: '...', // optional
-    temperature: 0.5, // optional, default
-    maxTokens: 1000, // optional, default
+    context: 'You are a nice helpful assistant.',
+    temperature: 0.5,
+    maxTokens: 250,
     // TODO stream
     // rate limit, timeout, lifetime (sessionId)
 
@@ -34,14 +38,13 @@ export async function app ({ start = false }: AppOptions) {
         // maxTokens
         // timeout
         // rate limit
-        // override apiKeys? baseUrl?
       }
     ]
   }
   // TODO translations / single prompt, no session
 
   // TODO naming: session?
-  app.register(ai, {
+  await app.register(ai, {
     providers: {
       openai: {
         apiKey: process.env.OPENAI_API_KEY,
@@ -49,7 +52,7 @@ export async function app ({ start = false }: AppOptions) {
       }
     }
 
-    // TODO defaults
+    // TODO default values
     // rateLimit: {
     //     max: 100,
     //     timeWindow: '1m'
@@ -62,7 +65,7 @@ export async function app ({ start = false }: AppOptions) {
 
   app.post('/chat', { config: { ai: chatConfig } }, async (request: FastifyRequest<{ Body: ChatRequestBody }>, reply) => {
     // TODO auth
-    const { prompt, sessionId } = request.body
+    const { prompt, stream } = request.body
     // // TODO resume flow by sessionId
 
     const response = await app.ai.request({

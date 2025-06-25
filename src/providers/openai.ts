@@ -1,6 +1,6 @@
 import OpenAI from 'openai'
 import type { AiProvider } from '../lib/ai.ts'
-import type { ProviderClient, ProviderResponse } from '../lib/provider.ts'
+import type { ProviderClient, ProviderRequestOptions, ProviderResponse } from '../lib/provider.ts'
 
 // @see https://github.com/openai/openai-node
 
@@ -9,6 +9,8 @@ export type OpenAIOptions = {
   apiKey: string
   baseURL?: string
 }
+
+type OpenAIRequestOptions = ProviderRequestOptions
 
 // TODO implements Provider interface
 export class OpenAIProvider {
@@ -28,18 +30,32 @@ export class OpenAIProvider {
     }
   }
 
-  async request (model: string, prompt: string): Promise<ProviderResponse> {
-    // TODO
+  async request (model: string, prompt: string, options: OpenAIRequestOptions): Promise<ProviderResponse> {
+    const input = options.context
+      ? [
+          {
+            role: 'system',
+            content: options.context
+          },
+          {
+            role: 'user',
+            content: prompt
+          }
+        ]
+      : prompt
+
     const response = await this.client.responses.create({
       model,
-      input: prompt,
-
-      // instructions, roles ...
-
-      // TODO temperature, maxTokens, stream ...
+      input,
+      temperature: options.temperature,
+      // TODO filter in o-series models https://platform.openai.com/docs/api-reference/chat/create#chat-create-max_tokens
+      max_completion_tokens: options.maxTokens,
+      stream: options.stream,
     })
 
     // logger.debug console.dir(response, { depth: null })
+
+    // TODO if stream
 
     return {
       text: response.output_text

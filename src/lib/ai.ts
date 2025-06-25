@@ -1,5 +1,5 @@
 import { OpenAIProvider } from '../providers/openai.ts'
-import type { Provider, ProviderClient } from './provider.ts'
+import type { Provider, ProviderClient, ProviderRequestOptions } from './provider.ts'
 
 // supported providers
 export type AiProvider = 'openai'
@@ -17,62 +17,105 @@ export type AiOptions = {
 
 export type ProviderOptions = {
   apiKey: string,
-  models: ModelOptions[]
+  models?: ModelOptions[]
   client?: ProviderClient
 }
 
 export type ModelOptions = {
   name: string
+} | string
+
+export type AddModelsOptions = {
+  provider: AiProvider
+  model: ModelOptions
 }
 
 export type ModelProvider = {
-  provider: Provider
-  model: string
+  provider: ProviderState
+  model: ModelState
 }
 
 export type Request = {
   models: QueryModel[]
 
   prompt: string
+  options?: ProviderRequestOptions
 }
 
 export type Response = {
   text: string
 }
 
+export type ProviderState = {
+  provider: Provider
+  models: Map<string, ModelState>
+}
+
+export type ModelState = {
+  name: string
+}
+
 export class Ai {
-  providers: Map<string, Provider>
+  providers: Map<AiProvider, ProviderState>
 
   constructor (options: AiOptions) {
-    // TODO options, validate options
+    // TODO validate options
 
     this.providers = new Map()
 
     for (const provider of Object.keys(options.providers)) {
       const p = provider as AiProvider
-      for (const model of options.providers[p].models) {
-        // TODO nest by provider/model
-        if (options.providers[p].client) {
-          this.providers.set(`${p}:${model.name}`, new OpenAIProvider(options.providers[p], options.providers[p].client))
+
+      const providerState = {
+        provider: new OpenAIProvider(options.providers[p], options.providers[p].client),
+        models: new Map()
+      }
+
+      if (options.providers[p].models) {
+        for (const model of options.providers[p].models) {
+          if (typeof model === 'string') {
+            providerState.models.set(model, { name: model })
+          } else {
+            providerState.models.set(model.name, { name: model.name })
+          }
+        }
+      }
+
+      this.providers.set(p, providerState)
+    }
+  }
+
+  addModels (models: AddModelsOptions[]) {
+    for (const model of models) {
+      const providerState = this.providers.get(model.provider)
+      if (providerState) {
+        if (typeof model.model === 'string') {
+          providerState.models.set(model.model, { name: model.model })
         } else {
-          this.providers.set(`${p}:${model.name}`, new OpenAIProvider(options.providers[p]))
+          providerState.models.set(model.model.name, { name: model.model.name })
         }
       }
     }
   }
 
   select (models: QueryModel[]): ModelProvider | undefined {
-    let provider: Provider | undefined
-    let model = models[0]
+    let provider: ProviderState | undefined
+    let model: ModelState | undefined
+    // TODO selection
+    const modelName = models[0]
 
-    if (typeof model === 'string') {
-      provider = this.providers.get(model)
+    if (typeof modelName === 'string') {
+      const [providerName, m] = modelName.split(':')
+      provider = this.providers.get(providerName as AiProvider)
+      model = provider?.models.get(m)
     } else {
-      provider = this.providers.get(`${model.provider}:${model.model}`)
-      model = model.model
+      provider = this.providers.get(modelName.provider)
+      model = provider?.models.get(modelName.model)
     }
 
-    return provider ? { provider, model } : undefined
+    return provider && model
+      ? { provider, model }
+      : undefined
   }
 
   async request (request: Request): Promise<Response> {
@@ -84,7 +127,14 @@ export class Ai {
       throw new Error(`Provider not found for model: ${request.models[0]}`)
     }
 
-    const response = await p.provider.request(p.model, request.prompt)
+    const options = {
+      context: request.options?.context,
+      temperature: request.options?.temperature,
+      maxTokens: request.options?.maxTokens,
+      stream: request.options?.stream,
+    }
+
+    const response = await p.provider.provider.request(p.model.name, request.prompt, options)
 
     // TODO update state
 

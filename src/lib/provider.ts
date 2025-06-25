@@ -1,10 +1,16 @@
-// provider interface
+export type ProviderRequestOptions = {
+  context?: string
+  temperature?: number
+  maxTokens?: number
+  stream?: boolean
+}
 
 export interface Provider {
-  request: (model: string, prompt: string) => Promise<ProviderResponse>
+  request: (model: string, prompt: string, options: ProviderRequestOptions) => Promise<ProviderResponse>
 }
 
 export interface ProviderClient {
+  // OpenAI client
   responses: {
     create: (request: any) => Promise<any>
   }
@@ -12,9 +18,6 @@ export interface ProviderClient {
 
 export type ProviderResponse = {
   // TODO
-  text: string
-}
-
-export type Response = {
-  text: string
+  text: string,
+  // TODO id
 }
