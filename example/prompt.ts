@@ -69,7 +69,7 @@ export async function app ({ start = false, logger }: AppOptions) {
     // // TODO resume flow by sessionId
 
     const response = await app.ai.request({
-      // request,
+      request,
       prompt,
       // sessionId,
       // TODO stream: true

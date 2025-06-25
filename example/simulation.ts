@@ -24,19 +24,19 @@ async function main () {
 
   console.log('\n**********')
 
-  // for (const prompt of prompts) {
-  //   console.log('\n>>>', prompt)
+  for (const prompt of prompts) {
+    console.log('\n>>>', prompt)
 
-  //   const response = await undici.request(url, {
-  //     method: 'POST',
-  //     headers,
-  //     body: JSON.stringify({ prompt })
-  //   })
+    const response = await undici.request(url, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ prompt })
+    })
 
-  //   console.log('<<<', (await response.body.json() as FastifyAiResponse).text)
-  // }
+    console.log('<<<', (await response.body.json() as FastifyAiResponse).text)
+  }
 
-  // console.log('\n**********\n')
+  console.log('\n**********\n')
 
   server.close()
 }

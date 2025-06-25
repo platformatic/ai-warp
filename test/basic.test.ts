@@ -80,7 +80,8 @@ test('should be able to perform a prompt with options', async () => {
       }
     ],
     temperature: 0.5,
-    max_completion_tokens: 1000,
+    max_output_tokens: 1000,
+    stream: undefined,
   }])
   assert.equal(response.text, 'All good')
 })
@@ -128,6 +129,8 @@ test('should be able to perform a prompt with stream', async () => {
         content: 'Hello, how are you?'
       }
     ],
+    max_output_tokens: undefined,
+    temperature: undefined,
     stream: true,
   }])
   assert.equal(response.text, 'All good')

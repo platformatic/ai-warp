@@ -49,7 +49,7 @@ export class OpenAIProvider {
       input,
       temperature: options.temperature,
       // TODO filter in o-series models https://platform.openai.com/docs/api-reference/chat/create#chat-create-max_tokens
-      max_completion_tokens: options.maxTokens,
+      max_output_tokens: options.maxTokens,
       stream: options.stream,
     })
 
