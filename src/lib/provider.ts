@@ -11,8 +11,10 @@ export interface Provider {
 
 export interface ProviderClient {
   // OpenAI client
-  responses: {
-    create: (request: any) => Promise<any>
+  chat: {
+    completions: {
+      create: (request: any) => Promise<any>
+    }
   }
 }
 

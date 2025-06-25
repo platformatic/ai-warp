@@ -4,11 +4,22 @@ import type { FastifyAiResponse } from '../src/plugins/ai.ts'
 
 const url = 'http://localhost:3000/chat'
 
-const prompts = [
-  'Can you help me to prepare a dinner?',
-  "I'd like to prepare a dinner for my 2 kids, they love fish and potatoes",
-  "Oh I forgot, they don't like garlic. Also, I don't think the cheese is a good idea to put on top of fish. Since you suggest to use the oven, add some tomatoes",
-  'Sounds delicious! Thank you'
+const prompts =
+[
+  [
+    'Can you help me to prepare a dinner?',
+    "I'd like to prepare a dinner for my 2 kids, they love fish and potatoes",
+    "Oh I forgot, they don't like garlic. Also, I don't think the cheese is a good idea to put on top of fish. Since you suggest to use the oven, add some tomatoes",
+    'Sounds delicious! Thank you'
+  ],
+
+  [
+    'Can you help me to schedule a trip?',
+    "I'd like to go on a nice sea town with my family in Italy",
+    "Great, I'd like to visit some places, please schedule a week trip for me",
+    'Thank you!'
+  ],
+
 ]
 
 // TODO concurrent multiple prompts
@@ -22,21 +33,23 @@ const headers = {
 async function main () {
   const server = await app({ start: true, logger: { level: 'debug' } })
 
-  console.log('\n**********')
+  for (const set of prompts) {
+    console.log('\n**********')
 
-  for (const prompt of prompts) {
-    console.log('\n>>>', prompt)
+    for (const prompt of set) {
+      console.log('\n>>>', prompt)
 
-    const response = await undici.request(url, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({ prompt })
-    })
+      const response = await undici.request(url, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ prompt })
+      })
 
-    console.log('<<<', (await response.body.json() as FastifyAiResponse).text)
+      console.log('<<<', (await response.body.json() as FastifyAiResponse).text)
+    }
+
+    console.log('\n**********\n')
   }
-
-  console.log('\n**********\n')
 
   server.close()
 }

@@ -31,34 +31,30 @@ export class OpenAIProvider {
   }
 
   async request (model: string, prompt: string, options: OpenAIRequestOptions): Promise<ProviderResponse> {
-    const input = options.context
-      ? [
-          {
-            role: 'system',
-            content: options.context
-          },
-          {
-            role: 'user',
-            content: prompt
-          }
-        ]
-      : prompt
+    // TODO history
 
-    const response = await this.client.responses.create({
+    const messages = options.context
+      ? [
+          { role: 'system', content: options.context },
+          { role: 'user', content: prompt }
+        ]
+      : [{ role: 'user', content: prompt }]
+
+    const response = await this.client.chat.completions.create({
       model,
-      input,
+      messages,
       temperature: options.temperature,
-      // TODO filter in o-series models https://platform.openai.com/docs/api-reference/chat/create#chat-create-max_tokens
-      max_output_tokens: options.maxTokens,
+      max_tokens: options.maxTokens,
       stream: options.stream,
     })
 
-    // logger.debug console.dir(response, { depth: null })
+    // logger.debug response
+    // console.dir(response, { depth: null })
 
     // TODO if stream
 
     return {
-      text: response.output_text
+      text: response.choices[0].message.content
     }
   }
 }

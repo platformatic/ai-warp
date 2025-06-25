@@ -7,14 +7,21 @@ const apiKey = 'test'
 
 test('should be able to perform a basic prompt', async () => {
   const client = {
-    responses: {
-      create: async () => {
-        return {
-          output_text: 'All good'
+    chat: {
+      completions: {
+        create: async () => {
+          return {
+            choices: [{
+              message: {
+                content: 'All good'
+              }
+            }]
+          }
         }
       }
     }
   }
+
   const ai = new Ai({
     providers: {
       openai: {
@@ -37,14 +44,21 @@ test('should be able to perform a basic prompt', async () => {
 
 test('should be able to perform a prompt with options', async () => {
   const client = {
-    responses: {
-      create: mock.fn(async () => {
-        return {
-          output_text: 'All good'
-        }
-      })
+    chat: {
+      completions: {
+        create: mock.fn(async () => {
+          return {
+            choices: [{
+              message: {
+                content: 'All good'
+              }
+            }]
+          }
+        })
+      }
     }
   }
+
   const ai = new Ai({
     providers: {
       openai: {
@@ -67,9 +81,9 @@ test('should be able to perform a prompt with options', async () => {
     }
   })
 
-  assert.deepEqual(client.responses.create.mock.calls[0].arguments, [{
+  assert.deepEqual(client.chat.completions.create.mock.calls[0].arguments, [{
     model: 'gpt-4o-mini',
-    input: [
+    messages: [
       {
         role: 'system',
         content: 'You are a nice helpful assistant.'
@@ -80,7 +94,7 @@ test('should be able to perform a prompt with options', async () => {
       }
     ],
     temperature: 0.5,
-    max_output_tokens: 1000,
+    max_tokens: 1000,
     stream: undefined,
   }])
   assert.equal(response.text, 'All good')
@@ -88,14 +102,21 @@ test('should be able to perform a prompt with options', async () => {
 
 test('should be able to perform a prompt with stream', async () => {
   const client = {
-    responses: {
-      create: mock.fn(async () => {
-        return {
-          output_text: 'All good'
-        }
-      })
+    chat: {
+      completions: {
+        create: mock.fn(async () => {
+          return {
+            choices: [{
+              message: {
+                content: 'All good'
+              }
+            }]
+          }
+        })
+      }
     }
   }
+
   const ai = new Ai({
     providers: {
       openai: {
@@ -117,9 +138,9 @@ test('should be able to perform a prompt with stream', async () => {
     }
   })
 
-  assert.deepEqual(client.responses.create.mock.calls[0].arguments, [{
+  assert.deepEqual(client.chat.completions.create.mock.calls[0].arguments, [{
     model: 'gpt-4o-mini',
-    input: [
+    messages: [
       {
         role: 'system',
         content: 'You are a nice helpful assistant.'
@@ -129,7 +150,7 @@ test('should be able to perform a prompt with stream', async () => {
         content: 'Hello, how are you?'
       }
     ],
-    max_output_tokens: undefined,
+    max_tokens: undefined,
     temperature: undefined,
     stream: true,
   }])

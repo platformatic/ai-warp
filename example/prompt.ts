@@ -1,5 +1,5 @@
 import fastify, { type FastifyRequest } from 'fastify'
-import ai from '../src/plugins/ai.ts'
+import ai, { type FastifyAiRouteConfig } from '../src/plugins/ai.ts'
 import type { PinoLoggerOptions } from 'fastify/types/logger.js'
 
 interface AppOptions {
@@ -17,11 +17,11 @@ export async function app ({ start = false, logger }: AppOptions) {
     logger
   })
 
-  if(!process.env.OPENAI_API_KEY) {
+  if (!process.env.OPENAI_API_KEY) {
     throw new Error('OPENAI_API_KEY is not set')
   }
 
-  const chatConfig = {
+  const chatConfig: FastifyAiRouteConfig = {
     context: 'You are a nice helpful assistant.',
     temperature: 0.5,
     maxTokens: 250,
@@ -31,7 +31,7 @@ export async function app ({ start = false, logger }: AppOptions) {
     models: [
       {
         provider: 'openai',
-        model: 'gpt-4o-mini',
+        model: 'gpt-4o-mini'
 
         // TODO override
         // temperature
@@ -71,8 +71,8 @@ export async function app ({ start = false, logger }: AppOptions) {
     const response = await app.ai.request({
       request,
       prompt,
-      // sessionId,
-      // TODO stream: true
+      stream,
+      // TODO sessionId,
     })
 
     return response
