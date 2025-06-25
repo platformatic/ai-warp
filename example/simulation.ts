@@ -1,6 +1,6 @@
 import undici from 'undici'
 import { app } from './prompt.ts'
-import type { ProviderResponse } from '../src/lib/ai.ts'
+import type { FastifyAiResponse } from '../src/plugins/ai.ts'
 
 const url = 'http://localhost:3000/chat'
 
@@ -29,7 +29,7 @@ async function main () {
       body: JSON.stringify({ prompt })
     })
 
-    console.log('<<<', (await response.body.json() as ProviderResponse).text)
+    console.log('<<<', (await response.body.json() as FastifyAiResponse).text)
   }
 
   console.log('\n**********\n')

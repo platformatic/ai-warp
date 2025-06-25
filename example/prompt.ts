@@ -1,4 +1,4 @@
-import fastify, { type FastifyRequest, type FastifyReply } from 'fastify'
+import fastify, { type FastifyRequest } from 'fastify'
 import ai from '../src/plugins/ai.ts'
 
 interface AppOptions {
@@ -8,26 +8,6 @@ interface AppOptions {
 interface ChatRequestBody {
   prompt: string
   sessionId?: string
-}
-
-interface AiPluginOptions {
-  providers: {
-    openai: {
-      apiKey: string | undefined
-    }
-  }
-}
-
-declare module 'fastify' {
-  interface FastifyInstance {
-    ai: {
-      request: (query: {
-        request: FastifyRequest
-        prompt: string
-        sessionId?: string
-      }) => Promise<any>
-    }
-  }
 }
 
 export async function app ({ start = false }: AppOptions) {
@@ -75,7 +55,7 @@ export async function app ({ start = false }: AppOptions) {
     //     timeWindow: '1m'
     // },
     // timeout: 10_000 // ms
-  } as AiPluginOptions)
+  })
 
   // TODO app.post('/prompt', async (request, reply) => {
   // const { prompt, context, maxTokens, temperature, sessionId } = request.body
@@ -88,7 +68,7 @@ export async function app ({ start = false }: AppOptions) {
     const response = await app.ai.request({
       // request,
       prompt,
-      sessionId,
+      // sessionId,
       // TODO stream: true
     })
 

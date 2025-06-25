@@ -1,5 +1,6 @@
 import OpenAI from 'openai'
-import type { AiProvider, QueryRequest, ProviderResponse, ProviderClient } from '../lib/ai.ts'
+import type { AiProvider } from '../lib/ai.ts'
+import type { ProviderClient, ProviderResponse } from '../lib/provider.ts'
 
 // @see https://github.com/openai/openai-node
 
@@ -27,11 +28,11 @@ export class OpenAIProvider {
     }
   }
 
-  async request (request: QueryRequest): Promise<ProviderResponse> {
+  async request (model: string, prompt: string): Promise<ProviderResponse> {
     // TODO
     const response = await this.client.responses.create({
-      model: request.model,
-      input: request.query.prompt,
+      model,
+      input: prompt,
 
       // instructions, roles ...
 

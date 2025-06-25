@@ -1,5 +1,3 @@
-import { OpenAIProvider } from './openai.ts'
-
 export function createProviders (options: any) {
   // TODO
   return new Providers(options)
@@ -11,7 +9,7 @@ export class Providers {
   constructor (options: any) {
     this.providers = []
     // TODO
-    this.providers.push(new OpenAIProvider(options))
+    // this.providers.push(new OpenAIProvider(options))
   }
 
   select (config: any) {

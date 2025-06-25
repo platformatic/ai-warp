@@ -1,4 +1,5 @@
 import { OpenAIProvider } from '../providers/openai.ts'
+import type { Provider, ProviderClient } from './provider.ts'
 
 // supported providers
 export type AiProvider = 'openai'
@@ -8,21 +9,7 @@ export type Model = {
   model: string
 }
 
-export type ProviderState = {
-  // TODO
-}
-
 type QueryModel = string | Model
-
-export type Query = {
-  models: QueryModel[]
-
-  prompt: string
-}
-
-export type Response = {
-  text: string
-}
 
 export type AiOptions = {
   providers: Record<AiProvider, ProviderOptions>
@@ -38,28 +25,18 @@ export type ModelOptions = {
   name: string
 }
 
-export interface Provider {
-  request: (request: QueryRequest) => Promise<Response>
-}
-
-export type QueryProvider = {
+export type ModelProvider = {
   provider: Provider
   model: string
 }
 
-export type QueryRequest = {
-  model: string
-  query: Query
+export type Request = {
+  models: QueryModel[]
+
+  prompt: string
 }
 
-export interface ProviderClient {
-  responses: {
-    create: (request: any) => Promise<any>
-  }
-}
-
-export type ProviderResponse = {
-  // TODO
+export type Response = {
   text: string
 }
 
@@ -84,7 +61,7 @@ export class Ai {
     }
   }
 
-  select (models: QueryModel[]): QueryProvider | undefined {
+  select (models: QueryModel[]): ModelProvider | undefined {
     let provider: Provider | undefined
     let model = models[0]
 
@@ -98,18 +75,20 @@ export class Ai {
     return provider ? { provider, model } : undefined
   }
 
-  async request (query: Query): Promise<Response> {
+  async request (request: Request): Promise<Response> {
     // TODO validate query models
 
-    const p = this.select(query.models)
+    const p = this.select(request.models)
 
     if (!p) {
-      throw new Error(`Provider not found for model: ${query.models[0]}`)
+      throw new Error(`Provider not found for model: ${request.models[0]}`)
     }
 
-    const response: ProviderResponse = await p.provider.request({ query, model: p.model })
+    const response = await p.provider.request(p.model, request.prompt)
 
     // TODO update state
+
+    // TODO map provider response to response
 
     return response
   }
