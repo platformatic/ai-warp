@@ -42,9 +42,11 @@ export type Request = {
   options?: ProviderRequestOptions
 }
 
-export type Response = {
+export type PlainResponse = {
   text: string
 }
+
+export type Response = PlainResponse | ReadableStream
 
 export type ProviderState = {
   provider: Provider

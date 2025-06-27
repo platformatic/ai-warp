@@ -1,7 +1,7 @@
 import { test, mock } from 'node:test'
 import assert from 'node:assert'
-
 import { Ai } from '../src/lib/ai.ts'
+import { ReadableStream as ReadableStreamPolyfill } from 'web-streams-polyfill'
 
 const apiKey = 'test'
 
@@ -39,7 +39,7 @@ test('should be able to perform a basic prompt', async () => {
     prompt: 'Hello, how are you?'
   })
 
-  assert.equal(response.text, 'All good')
+  assert.equal((response as { text: string }).text, 'All good')
 })
 
 test('should be able to perform a prompt with options', async () => {
@@ -97,7 +97,7 @@ test('should be able to perform a prompt with options', async () => {
     max_tokens: 1000,
     stream: undefined,
   }])
-  assert.equal(response.text, 'All good')
+  assert.equal((response as { text: string }).text, 'All good')
 })
 
 test('should be able to perform a prompt with stream', async () => {
@@ -106,11 +106,34 @@ test('should be able to perform a prompt with stream', async () => {
       completions: {
         create: mock.fn(async () => {
           return {
-            choices: [{
-              message: {
-                content: 'All good'
-              }
-            }]
+            toReadableStream: () => {
+              // Mock the readable stream to emit chunks that will result in 'All good'
+              const chunks = [
+                { choices: [{ delta: { content: 'All' } }] },
+                { choices: [{ delta: { content: ' good' } }] }
+              ]
+
+              let chunkIndex = 0
+
+              return new ReadableStreamPolyfill({
+                start (controller) {
+                  // Emit the chunks
+                  const sendChunk = () => {
+                    if (chunkIndex < chunks.length) {
+                      const chunk = chunks[chunkIndex++]
+                      const jsonString = JSON.stringify(chunk)
+                      const uint8Array = new TextEncoder().encode(jsonString)
+                      controller.enqueue(uint8Array)
+                      // Send next chunk after a short delay to simulate streaming
+                      setTimeout(sendChunk, 10)
+                    } else {
+                      controller.close()
+                    }
+                  }
+                  sendChunk()
+                }
+              })
+            }
           }
         })
       }
@@ -154,7 +177,35 @@ test('should be able to perform a prompt with stream', async () => {
     temperature: undefined,
     stream: true,
   }])
-  assert.equal(response.text, 'All good')
+
+  const chunks: string[] = []
+
+  // The response is a ReadableStream that emits Server-sent events
+  const reader = (response as ReadableStream).getReader()
+  const decoder = new TextDecoder()
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+
+      const eventData = decoder.decode(value)
+      // Parse Server-sent events format
+      const lines = eventData.split('\n')
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          const data = JSON.parse(line.substring(6))
+          if (data.response) {
+            chunks.push(data.response)
+          }
+        }
+      }
+    }
+  } finally {
+    reader.releaseLock()
+  }
+
+  assert.equal(chunks.join(''), 'All good')
 })
 
 // session id, multiple concurrent prompts

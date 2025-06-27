@@ -1,6 +1,6 @@
 import fp from 'fastify-plugin'
 import { Ai, type AiOptions, type AiProvider } from '../lib/ai.ts'
-import type { FastifyRequest } from 'fastify'
+import type { FastifyReply, FastifyRequest } from 'fastify'
 
 export type AiPluginOptions = AiOptions
 
@@ -32,12 +32,12 @@ export type FastifyAiRequest = {
 
 export type FastifyAiResponse = {
   text: string
-}
+} | ReadableStream
 
 declare module 'fastify' {
   interface FastifyInstance {
     ai: {
-      request: (request: FastifyAiRequest) => Promise<FastifyAiResponse>
+      request: (request: FastifyAiRequest, reply: FastifyReply) => Promise<FastifyAiResponse>
     }
   }
 
@@ -74,9 +74,9 @@ export default fp((fastify, options: AiPluginOptions) => {
   })
 
   fastify.decorate('ai', {
-    request: async (request: FastifyAiRequest): Promise<FastifyAiResponse> => {
-      console.log('request', request.prompt)
-      console.log('request config', request.request.routeOptions.config.ai)
+    request: async (request: FastifyAiRequest, reply: FastifyReply): Promise<FastifyAiResponse> => {
+      // console.log('request', request.prompt)
+      // console.log('request config', request.request.routeOptions.config.ai)
 
       // TODO merge request.request.routeOptions.config.ai with default config
 
@@ -95,6 +95,17 @@ export default fp((fastify, options: AiPluginOptions) => {
           stream: request.stream
         }
       })
+
+      if (request.stream) {
+        reply.header('content-type', 'text/event-stream')
+        return response
+      }
+
+      // Type guard: response should have text property when not streaming
+      if (response instanceof ReadableStream) {
+        throw new Error('Unexpected ReadableStream response for non-streaming request')
+      }
+
       return {
         text: response.text
       }

@@ -73,7 +73,7 @@ export async function app ({ start = false, logger }: AppOptions) {
       prompt,
       stream,
       // TODO sessionId,
-    })
+    }, reply)
 
     return response
   })
