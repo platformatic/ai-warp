@@ -1,7 +1,14 @@
 import createError from '@fastify/error'
+import type { PlainResponse } from './ai.ts'
+
+export type ChatHistory = {
+  prompt: string
+  response: string
+}[]
 
 export type ProviderRequestOptions = {
   context?: string
+  history?: ChatHistory
   temperature?: number
   maxTokens?: number
   stream?: boolean
@@ -21,11 +28,7 @@ export interface ProviderClient {
   }
 }
 
-export type ProviderResponse = {
-  // TODO
-  text: string,
-  // TODO id
-} | ReadableStream
+export type ProviderResponse = PlainResponse | ReadableStream
 
 export type StreamChunkCallback = (response: string) => Promise<string>
 export const NoContentError = createError<[string]>('NO_CONTENT', '%s didn\'t return any content')

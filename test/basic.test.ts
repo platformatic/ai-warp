@@ -1,7 +1,7 @@
 import { test, mock } from 'node:test'
 import assert from 'node:assert'
-import { Ai } from '../src/lib/ai.ts'
-import { ReadableStream as ReadableStreamPolyfill } from 'web-streams-polyfill'
+import { Ai, type PlainResponse } from '../src/lib/ai.ts'
+import { mockOpenAiStream, consumeStream } from './helper/helper.ts'
 
 const apiKey = 'test'
 
@@ -37,9 +37,9 @@ test('should be able to perform a basic prompt', async () => {
   const response = await ai.request({
     models: ['openai:gpt-4o-mini'],
     prompt: 'Hello, how are you?'
-  })
+  }) as PlainResponse
 
-  assert.equal((response as { text: string }).text, 'All good')
+  assert.equal((response).text, 'All good')
 })
 
 test('should be able to perform a prompt with options', async () => {
@@ -79,7 +79,7 @@ test('should be able to perform a prompt with options', async () => {
       temperature: 0.5,
       maxTokens: 1000,
     }
-  })
+  }) as PlainResponse
 
   assert.deepEqual(client.chat.completions.create.mock.calls[0].arguments, [{
     model: 'gpt-4o-mini',
@@ -97,7 +97,7 @@ test('should be able to perform a prompt with options', async () => {
     max_tokens: 1000,
     stream: undefined,
   }])
-  assert.equal((response as { text: string }).text, 'All good')
+  assert.equal((response).text, 'All good')
 })
 
 test('should be able to perform a prompt with stream', async () => {
@@ -105,36 +105,10 @@ test('should be able to perform a prompt with stream', async () => {
     chat: {
       completions: {
         create: mock.fn(async () => {
-          return {
-            toReadableStream: () => {
-              // Mock the readable stream to emit chunks that will result in 'All good'
-              const chunks = [
-                { choices: [{ delta: { content: 'All' } }] },
-                { choices: [{ delta: { content: ' good' } }] }
-              ]
-
-              let chunkIndex = 0
-
-              return new ReadableStreamPolyfill({
-                start (controller) {
-                  // Emit the chunks
-                  const sendChunk = () => {
-                    if (chunkIndex < chunks.length) {
-                      const chunk = chunks[chunkIndex++]
-                      const jsonString = JSON.stringify(chunk)
-                      const uint8Array = new TextEncoder().encode(jsonString)
-                      controller.enqueue(uint8Array)
-                      // Send next chunk after a short delay to simulate streaming
-                      setTimeout(sendChunk, 10)
-                    } else {
-                      controller.close()
-                    }
-                  }
-                  sendChunk()
-                }
-              })
-            }
-          }
+          return mockOpenAiStream([
+            { choices: [{ delta: { content: 'All' } }] },
+            { choices: [{ delta: { content: ' good' } }] }
+          ])
         })
       }
     }
@@ -159,7 +133,7 @@ test('should be able to perform a prompt with stream', async () => {
       context: 'You are a nice helpful assistant.',
       stream: true,
     }
-  })
+  }) as ReadableStream
 
   assert.deepEqual(client.chat.completions.create.mock.calls[0].arguments, [{
     model: 'gpt-4o-mini',
@@ -178,34 +152,79 @@ test('should be able to perform a prompt with stream', async () => {
     stream: true,
   }])
 
-  const chunks: string[] = []
-
-  // The response is a ReadableStream that emits Server-sent events
-  const reader = (response as ReadableStream).getReader()
-  const decoder = new TextDecoder()
-
-  try {
-    while (true) {
-      const { done, value } = await reader.read()
-      if (done) break
-
-      const eventData = decoder.decode(value)
-      // Parse Server-sent events format
-      const lines = eventData.split('\n')
-      for (const line of lines) {
-        if (line.startsWith('data: ')) {
-          const data = JSON.parse(line.substring(6))
-          if (data.response) {
-            chunks.push(data.response)
-          }
-        }
-      }
-    }
-  } finally {
-    reader.releaseLock()
-  }
+  const chunks = await consumeStream(response)
 
   assert.equal(chunks.join(''), 'All good')
 })
 
-// session id, multiple concurrent prompts
+test('should be able to perform a prompt with history', async () => {
+  const client = {
+    chat: {
+      completions: {
+        create: mock.fn(async () => {
+          return {
+            choices: [{
+              message: {
+                content: 'Sure, I can help you with math.'
+              }
+            }]
+          }
+        })
+      }
+    }
+  }
+
+  const ai = new Ai({
+    providers: {
+      openai: {
+        apiKey,
+        models: [{
+          name: 'gpt-4o-mini',
+        }],
+        client
+      }
+    }
+  })
+
+  const response = await ai.request({
+    models: ['openai:gpt-4o-mini'],
+    prompt: 'Can you help me to with math?',
+    options: {
+      context: 'You are a nice helpful assistant.',
+      temperature: 0.5,
+      maxTokens: 1000,
+      history: [
+        {
+          prompt: 'Hello, how are you?',
+          response: 'All good'
+        }
+      ]
+    }
+  }) as PlainResponse
+
+  assert.deepEqual(client.chat.completions.create.mock.calls[0].arguments, [{
+    model: 'gpt-4o-mini',
+    messages: [
+      {
+        role: 'system',
+        content: 'You are a nice helpful assistant.'
+      },
+      {
+        role: 'user',
+        content: 'Hello, how are you?'
+      },
+      {
+        role: 'assistant',
+        content: 'All good'
+      },
+      {
+        role: 'user',
+        content: 'Can you help me to with math?'
+      }
+    ],
+    temperature: 0.5,
+    max_tokens: 1000,
+    stream: undefined,
+  }])
+  assert.equal((response).text, 'Sure, I can help you with math.')
+})

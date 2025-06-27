@@ -3,7 +3,7 @@ import { ReadableStream as ReadableStreamPolyfill } from 'web-streams-polyfill'
 import { type ChatCompletionChunk } from 'openai/resources/index'
 import OpenAI from 'openai'
 import type { AiProvider } from '../lib/ai.ts'
-import { InvalidTypeError, NoContentError, type ProviderClient, type ProviderRequestOptions, type ProviderResponse, type StreamChunkCallback } from '../lib/provider.ts'
+import { InvalidTypeError, NoContentError, type ChatHistory, type ProviderClient, type ProviderRequestOptions, type ProviderResponse, type StreamChunkCallback } from '../lib/provider.ts'
 import { encodeEvent, type AiStreamEvent } from '../lib/event.ts'
 
 // @see https://github.com/openai/openai-node
@@ -16,6 +16,11 @@ export type OpenAIOptions = {
 }
 
 type OpenAIRequestOptions = ProviderRequestOptions
+
+type Messages = {
+  role: 'system' | 'user' | 'assistant'
+  content: string
+}
 
 // TODO implements Provider interface
 export class OpenAIProvider {
@@ -36,14 +41,9 @@ export class OpenAIProvider {
   }
 
   async request (model: string, prompt: string, options: OpenAIRequestOptions): Promise<ProviderResponse> {
-    // TODO history
-
-    const messages = options.context
-      ? [
-          { role: 'system', content: options.context },
-          { role: 'user', content: prompt }
-        ]
-      : [{ role: 'user', content: prompt }]
+    const messages = options.context ? [{ role: 'system', content: options.context }] : []
+    messages.push(...this.chatHistoryToMessages(options.history))
+    messages.push({ role: 'user', content: prompt })
 
     const request = {
       model,
@@ -55,7 +55,6 @@ export class OpenAIProvider {
 
     if (options.stream) {
       const response = await this.client.chat.completions.create(request)
-      console.log('response', response)
       return new ReadableStream(new OpenAiByteSource(response.toReadableStream() as ReadableStreamPolyfill, options.onStreamChunk))
     }
 
@@ -67,6 +66,20 @@ export class OpenAIProvider {
     return {
       text: response.choices[0].message.content
     }
+  }
+
+  private chatHistoryToMessages (chatHistory?: ChatHistory): Messages[] {
+    if (chatHistory === undefined) {
+      return []
+    }
+
+    const messages: Messages[] = []
+    for (const previousInteraction of chatHistory) {
+      messages.push({ role: 'user', content: previousInteraction.prompt })
+      messages.push({ role: 'assistant', content: previousInteraction.response })
+    }
+
+    return messages
   }
 }
 

@@ -1,6 +1,7 @@
 import fastify, { type FastifyRequest } from 'fastify'
 import ai, { type FastifyAiRouteConfig } from '../src/plugins/ai.ts'
 import type { PinoLoggerOptions } from 'fastify/types/logger.js'
+import type { ChatHistory } from '../src/lib/provider.ts'
 
 interface AppOptions {
   start?: boolean
@@ -10,12 +11,11 @@ interface AppOptions {
 interface ChatRequestBody {
   prompt: string
   stream?: boolean
+  history?: ChatHistory
 }
 
 export async function app ({ start = false, logger }: AppOptions) {
-  const app = fastify({
-    logger
-  })
+  const app = fastify({    logger  })
 
   if (!process.env.OPENAI_API_KEY) {
     throw new Error('OPENAI_API_KEY is not set')
@@ -65,13 +65,14 @@ export async function app ({ start = false, logger }: AppOptions) {
 
   app.post('/chat', { config: { ai: chatConfig } }, async (request: FastifyRequest<{ Body: ChatRequestBody }>, reply) => {
     // TODO auth
-    const { prompt, stream } = request.body
+    const { prompt, stream, history } = request.body
     // // TODO resume flow by sessionId
 
     const response = await app.ai.request({
       request,
       prompt,
       stream,
+      history,
       // TODO sessionId,
     }, reply)
 

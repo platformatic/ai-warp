@@ -1,6 +1,7 @@
 import fp from 'fastify-plugin'
 import { Ai, type AiOptions, type AiProvider } from '../lib/ai.ts'
 import type { FastifyReply, FastifyRequest } from 'fastify'
+import type { ChatHistory } from '../lib/provider.ts'
 
 export type AiPluginOptions = AiOptions
 
@@ -28,6 +29,7 @@ export type FastifyAiRequest = {
   request: FastifyRequest
   prompt: string
   stream?: boolean
+  history?: ChatHistory
 }
 
 export type FastifyAiResponse = {
@@ -62,12 +64,12 @@ export default fp((fastify, options: AiPluginOptions) => {
       model: model.model
     }))
 
-    // TODO use requst decorator
+    // TODO use request decorator
     aiRouteOptions.handlerOptions = {
       models,
       context: aiRouteOptions.context,
       maxTokens: aiRouteOptions.maxTokens,
-      temperature: aiRouteOptions.temperature,
+      temperature: aiRouteOptions.temperature
     }
 
     ai.addModels(models)
@@ -92,7 +94,8 @@ export default fp((fastify, options: AiPluginOptions) => {
           context: options.context,
           maxTokens: options.maxTokens,
           temperature: options.temperature,
-          stream: request.stream
+          stream: request.stream,
+          history: request.history
         }
       })
 

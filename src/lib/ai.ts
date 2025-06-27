@@ -134,6 +134,7 @@ export class Ai {
       temperature: request.options?.temperature,
       maxTokens: request.options?.maxTokens,
       stream: request.options?.stream,
+      history: request.options?.history
     }
 
     const response = await p.provider.provider.request(p.model.name, request.prompt, options)
