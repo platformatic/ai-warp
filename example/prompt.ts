@@ -50,6 +50,9 @@ export async function app ({ start = false, logger }: AppOptions) {
         apiKey: process.env.OPENAI_API_KEY,
         // TODO baseURL: process.env.OPENAI_BASE_URL
       }
+    },
+    storage: {
+      type: 'memory'
     }
 
     // TODO default values

@@ -26,9 +26,7 @@ test('should be able to perform a basic prompt', async () => {
     providers: {
       openai: {
         apiKey,
-        models: [{
-          name: 'gpt-4o-mini',
-        }],
+        models: [{ name: 'gpt-4o-mini' }],
         client
       }
     }

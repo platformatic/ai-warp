@@ -1,5 +1,6 @@
 import { OpenAIProvider } from '../providers/openai.ts'
 import type { Provider, ProviderClient, ProviderRequestOptions } from './provider.ts'
+import { createStorage, type Storage, type StorageOptions } from './storage/index.ts'
 
 // supported providers
 export type AiProvider = 'openai'
@@ -13,6 +14,7 @@ type QueryModel = string | Model
 
 export type AiOptions = {
   providers: Record<AiProvider, ProviderOptions>
+  storage?: StorageOptions
 }
 
 export type ProviderOptions = {
@@ -50,7 +52,7 @@ export type Response = PlainResponse | ReadableStream
 
 export type ProviderState = {
   provider: Provider
-  models: Map<string, ModelState>
+  models: Storage
 }
 
 export type ModelState = {
@@ -70,16 +72,13 @@ export class Ai {
 
       const providerState = {
         provider: new OpenAIProvider(options.providers[p], options.providers[p].client),
-        models: new Map()
+        models: createStorage(options.storage)
       }
 
       if (options.providers[p].models) {
         for (const model of options.providers[p].models) {
-          if (typeof model === 'string') {
-            providerState.models.set(model, { name: model })
-          } else {
-            providerState.models.set(model.name, { name: model.name })
-          }
+          const modelName = typeof model === 'string' ? model : model.name
+          this.updateModelState(modelName, providerState)
         }
       }
 
@@ -87,34 +86,45 @@ export class Ai {
     }
   }
 
-  addModels (models: AddModelsOptions[]) {
+  async addModels (models: AddModelsOptions[]) {
+    const updates = []
+
     for (const model of models) {
       const providerState = this.providers.get(model.provider)
-      if (providerState) {
-        if (typeof model.model === 'string') {
-          providerState.models.set(model.model, { name: model.model })
-        } else {
-          providerState.models.set(model.model.name, { name: model.model.name })
-        }
+      if (!providerState) {
+        throw new Error(`Provider ${model.provider} not found`)
       }
+
+      const modelName = typeof model.model === 'string' ? model.model : model.model.name
+      updates.push(this.updateModelState(modelName, providerState))
     }
+
+    await Promise.all(updates)
   }
 
-  select (models: QueryModel[]): ModelProvider | undefined {
-    let provider: ProviderState | undefined
-    let model: ModelState | undefined
-    // TODO selection
-    const modelName = models[0]
+  async select (models: QueryModel[]): Promise<ModelProvider | undefined> {
+    // TODO real selection
+    const selectedModel = models[0]
+    let modelName: string
+    let providerName: AiProvider
 
-    if (typeof modelName === 'string') {
-      const [providerName, m] = modelName.split(':')
-      provider = this.providers.get(providerName as AiProvider)
-      model = provider?.models.get(m)
+    if (typeof selectedModel === 'string') {
+      const [provider, model] = selectedModel.split(':')
+      providerName = provider as AiProvider
+      modelName = model
     } else {
-      provider = this.providers.get(modelName.provider)
-      model = provider?.models.get(modelName.model)
+      providerName = selectedModel.provider
+      modelName = selectedModel.model
+    }
+    
+    const provider = this.providers.get(providerName)
+    if (!provider) {
+      throw new Error(`Provider ${providerName} not found`)
     }
 
+    // const model = await provider?.models.get(selectedModel.model)
+    const model = await this.getModelState(modelName, provider)
+    
     return provider && model
       ? { provider, model }
       : undefined
@@ -123,7 +133,7 @@ export class Ai {
   async request (request: Request): Promise<Response> {
     // TODO validate query models
 
-    const p = this.select(request.models)
+    const p = await this.select(request.models)
 
     if (!p) {
       throw new Error(`Provider not found for model: ${request.models[0]}`)
@@ -145,4 +155,14 @@ export class Ai {
 
     return response
   }
+
+  async updateModelState (modelName: string, providerState: ProviderState) {
+    // TODO try/catch
+    await providerState.models.set(`${providerState.provider.name}:${modelName}`, { name: modelName }) // TODO options, model state
+  }
+
+  async getModelState (modelName: string, provider: ProviderState): Promise<ModelState | undefined> {
+    return await provider.models.get(`${provider.provider.name}:${modelName}`)
+  }
+
 }

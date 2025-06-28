@@ -1,5 +1,5 @@
 import createError from '@fastify/error'
-import type { PlainResponse } from './ai.ts'
+import type { AiProvider, PlainResponse } from './ai.ts'
 
 export type ChatHistory = {
   prompt: string
@@ -16,6 +16,7 @@ export type ProviderRequestOptions = {
 }
 
 export interface Provider {
+  name: AiProvider
   request: (model: string, prompt: string, options: ProviderRequestOptions) => Promise<ProviderResponse>
 }
 
