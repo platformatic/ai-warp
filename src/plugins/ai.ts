@@ -110,7 +110,7 @@ export default fp(async (fastify, options: AiPluginOptions) => {
       if (request.stream) {
         reply.header('content-type', 'text/event-stream')
 
-        if(response.sessionId) {
+        if (response.sessionId) {
           // TODO config header name
           reply.header('x-session-id', response.sessionId)
         }
@@ -121,7 +121,7 @@ export default fp(async (fastify, options: AiPluginOptions) => {
         throw new Error('Unexpected ReadableStream response for non-streaming request')
       }
 
-      if(response.sessionId) {
+      if (response.sessionId) {
         // TODO config header name
         reply.header('x-session-id', response.sessionId)
       }

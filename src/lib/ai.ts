@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { OpenAIProvider } from '../providers/openai.ts'
 import type { ChatHistory, Provider, ProviderClient, ProviderRequestOptions } from './provider.ts'
 import { createStorage, type Storage, type StorageOptions } from './storage/index.ts'
+import { processStream } from './utils.ts'
 
 // supported providers
 export type AiProvider = 'openai'
@@ -171,7 +172,25 @@ export class Ai {
     const response = await p.provider.provider.request(p.model.name, request.prompt, options)
 
     if (response instanceof ReadableStream) {
-      // TODO clone stream response to store in history
+      if (sessionId) {
+        const [responseStream, historyStream] = response.tee()
+
+        // Process the cloned stream in background to accumulate response for history
+        processStream(historyStream)
+          .then(response => {
+            return this.history.push(sessionId, { prompt: request.prompt, response })
+          })
+          .catch(error => {
+          // TODO logger
+            console.error('Failed to store stream response in history:', error)
+          });
+
+        // Attach sessionId to the stream for the user
+        (responseStream as StreamResponse).sessionId = sessionId
+        return responseStream
+      }
+
+      return response
     } else {
       if (sessionId) {
         await this.history.push(sessionId, { prompt: request.prompt, response: response.text })
