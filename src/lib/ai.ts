@@ -50,7 +50,11 @@ export type PlainResponse = {
   sessionId?: string
 }
 
-export type Response = PlainResponse | ReadableStream
+export type StreamResponse = ReadableStream & {
+  sessionId?: string
+}
+
+export type Response = PlainResponse | StreamResponse
 
 export type ProviderState = {
   provider: Provider
@@ -166,7 +170,6 @@ export class Ai {
 
     const response = await p.provider.provider.request(p.model.name, request.prompt, options)
 
-    // TODO response as stream
     if (response instanceof ReadableStream) {
       // TODO clone stream response to store in history
     } else {

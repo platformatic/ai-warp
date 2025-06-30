@@ -70,19 +70,24 @@ const prompts: Prompt[] =
 //   prompts: [
 //     'Can you help me to schedule a trip?',
 //     "I'd like to go on a nice sea town with my family in Italy",
-//     "Great, I'd like to visit some places, please schedule a week trip for me",
-//     'Thank you!'
 //   ]
 // },
 
-{
-  sessionId: lastSessionId,
-  prompts: [
-    'Can you add another place to visit?',
-  ]
-}
+// {
+//   sessionId: lastSessionId,
+//   prompts: [
+//     'Can you add another place to visit?',
+//   ]
+// }
 
-// TODO sessionId and stream
+{
+  sessionId: true, // start new session
+  stream: true,
+  prompts: [
+    'Can you help me to schedule a trip?',
+    "I'd like to go on a nice sea town with my family in Italy",
+  ]
+},
 ]
 
 const headers = {
@@ -109,6 +114,12 @@ async function main () {
         body: JSON.stringify({ prompt, history, stream: set.stream, sessionId })
       })
 
+      if(response.headers['x-session-id']) {
+        sessionId = response.headers['x-session-id'] as string
+        console.log(' *** sessionId', sessionId)
+        lastSessionId = sessionId
+      }
+
       if (set.stream) {
         let buffer = ''
         for await (const chunk of response.body) {
@@ -132,16 +143,13 @@ async function main () {
             buffer = buffer.substring(lastDoubleNewline + 2)
           }          
         }
-        // TODO history.push({ prompt, response: buffer })
+        if(history) {
+          history.push({ prompt, response: buffer })
+        }
       } else {
         const responseData = await response.body.json() as FastifyAiResponse
         if (responseData instanceof ReadableStream) {
           throw new Error('Unexpected ReadableStream response for non-streaming request')
-        }
-        sessionId = responseData.sessionId
-        if (sessionId) {
-          // console.log(' *** sessionId', sessionId)
-          lastSessionId = sessionId
         }
         console.log('<<<', responseData.text)
         
