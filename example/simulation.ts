@@ -2,10 +2,19 @@ import undici from 'undici'
 import { app } from './prompt.ts'
 import type { FastifyAiResponse } from '../src/plugins/ai.ts'
 import { decodeEventStream } from '../src/lib/event.ts'
+import type { ChatHistory } from '../src/lib/provider.ts'
 
 const url = 'http://localhost:3000/chat'
 
-const prompts =
+type Prompt = {
+  stream?: boolean
+  sessionId?: string | boolean
+  history?: ChatHistory
+  prompts: string[]
+}
+
+let lastSessionId: string | undefined
+const prompts: Prompt[] =
 [
   // {
   //   stream: false,
@@ -25,36 +34,55 @@ const prompts =
   //   'Thank you!'
   // ]},
 
-  {
-    stream: false,
-    history: [
-      {
-        prompt: 'Can you help me to schedule a trip?',
-        response: `
-Of course! I'd be happy to help you schedule your trip. Please provide me with some details:
-1. Where are you traveling from and to?
-2. What are your travel dates?
-3. What type of activities are you interested in (e.g., sightseeing, adventure, relaxation)?
-4. Do you have a budget in mind?
-5. How many people are traveling with you?
-Feel free to share any other preferences or requirements you have!
-        `
-      },
-      {
-        prompt:         "I'd like to go on a nice sea town with my family in Italy",
-        response: `
-Italy is home to many beautiful seaside towns that are perfect for a family vacation. Here are a few recommendations:
-1. **Cinque Terre**: This stunning coastal region consists of five picturesque villages—Monterosso al Mare, Vernazza, Corniglia, Manarola, and Riomaggiore. The colorful houses, breathtaking views, and hiking trails make it a great place for families. There are also lovely beaches where you can relax.
-2. **Sorrento**: Overlooking the Bay of Naples, Sorrento is known for its charming streets, beautiful villas, and stunning views of Mount Vesuvius. It’s a great base for exploring nearby attractions like Pompeii and the Amalfi Coast.
-3. **Positano**: Famous for its steep cliffs and colorful buildings, Positano is a beautiful town on the Amalfi Coast. While it can be touristy, its stunning scenery and beaches make it worth a visit. Families can enjoy boat trips and exploring nearby towns.
-4. **Portofino**: This small fishing village is known for its picturesque harbor and colorful buildings. It’s a great spot for families who enjoy nature, as there are hiking trails and beautiful views. The nearby Parco        
-`
-      }
-    ],
-    prompts: [
-    "Great, I'd like to visit some places, please schedule a week trip for me",
-    'Thank you!'
-  ]}
+//   {
+//     stream: false,
+//     history: [
+//       {
+//         prompt: 'Can you help me to schedule a trip?',
+//         response: `
+// Of course! I'd be happy to help you schedule your trip. Please provide me with some details:
+// 1. Where are you traveling from and to?
+// 2. What are your travel dates?
+// 3. What type of activities are you interested in (e.g., sightseeing, adventure, relaxation)?
+// 4. Do you have a budget in mind?
+// 5. How many people are traveling with you?
+// Feel free to share any other preferences or requirements you have!
+//         `
+//       },
+//       {
+//         prompt:         "I'd like to go on a nice sea town with my family in Italy",
+//         response: `
+// Italy is home to many beautiful seaside towns that are perfect for a family vacation. Here are a few recommendations:
+// 1. **Cinque Terre**: This stunning coastal region consists of five picturesque villages—Monterosso al Mare, Vernazza, Corniglia, Manarola, and Riomaggiore. The colorful houses, breathtaking views, and hiking trails make it a great place for families. There are also lovely beaches where you can relax.
+// 2. **Sorrento**: Overlooking the Bay of Naples, Sorrento is known for its charming streets, beautiful villas, and stunning views of Mount Vesuvius. It’s a great base for exploring nearby attractions like Pompeii and the Amalfi Coast.
+// 3. **Positano**: Famous for its steep cliffs and colorful buildings, Positano is a beautiful town on the Amalfi Coast. While it can be touristy, its stunning scenery and beaches make it worth a visit. Families can enjoy boat trips and exploring nearby towns.
+// 4. **Portofino**: This small fishing village is known for its picturesque harbor and colorful buildings. It’s a great spot for families who enjoy nature, as there are hiking trails and beautiful views. The nearby Parco        
+// `
+//       }
+//     ],
+//     prompts: [
+//     "Great, I'd like to visit some places, please schedule a week trip for me",
+//     'Thank you!'
+//   ]}
+
+// {
+//   sessionId: true, // start new session
+//   prompts: [
+//     'Can you help me to schedule a trip?',
+//     "I'd like to go on a nice sea town with my family in Italy",
+//     "Great, I'd like to visit some places, please schedule a week trip for me",
+//     'Thank you!'
+//   ]
+// },
+
+{
+  sessionId: lastSessionId,
+  prompts: [
+    'Can you add another place to visit?',
+  ]
+}
+
+// TODO sessionId and stream
 ]
 
 const headers = {
@@ -67,14 +95,18 @@ async function main () {
   for (const set of prompts) {
     console.log('\n**********')
 
-    const history = structuredClone(set.history)
+    const history = set.history ? structuredClone(set.history) : undefined
+    let sessionId = set.sessionId
     for (const prompt of set.prompts) {
+      if(sessionId) {
+        console.log(' *** sessionId', sessionId)
+      }
       console.log('\n>>>', prompt)
 
       const response = await undici.request(url, {
         method: 'POST',
         headers,
-        body: JSON.stringify({ prompt, history, stream: set.stream })
+        body: JSON.stringify({ prompt, history, stream: set.stream, sessionId })
       })
 
       if (set.stream) {
@@ -86,6 +118,7 @@ async function main () {
           // Process complete events from buffer
           const events = decodeEventStream(buffer)
           for (const event of events) {
+            // TODO sessionId
             if (event.event === 'content') {
               console.log('<<<', event.data.response)
             } else if (event.event === 'error') {
@@ -99,14 +132,22 @@ async function main () {
             buffer = buffer.substring(lastDoubleNewline + 2)
           }          
         }
-        history.push({ prompt, response: buffer })
+        // TODO history.push({ prompt, response: buffer })
       } else {
         const responseData = await response.body.json() as FastifyAiResponse
         if (responseData instanceof ReadableStream) {
           throw new Error('Unexpected ReadableStream response for non-streaming request')
         }
+        sessionId = responseData.sessionId
+        if (sessionId) {
+          // console.log(' *** sessionId', sessionId)
+          lastSessionId = sessionId
+        }
         console.log('<<<', responseData.text)
-        history.push({ prompt, response: responseData.text })
+        
+        if (history) {
+          history.push({ prompt, response: responseData.text })
+        }
       }
     }
 

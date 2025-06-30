@@ -30,16 +30,19 @@ export type FastifyAiRequest = {
   prompt: string
   stream?: boolean
   history?: ChatHistory
+  sessionId?: string | boolean // TODO doc sessionId and history are mutually exclusive
 }
 
 export type FastifyAiResponse = {
   text: string
+  sessionId?: string
 } | ReadableStream
 
 declare module 'fastify' {
   interface FastifyInstance {
     ai: {
       request: (request: FastifyAiRequest, reply: FastifyReply) => Promise<FastifyAiResponse>
+      retrieveHistory: (sessionId: string) => Promise<ChatHistory>
     }
   }
 
@@ -48,9 +51,11 @@ declare module 'fastify' {
   }
 }
 
-export default fp((fastify, options: AiPluginOptions) => {
+export default fp(async (fastify, options: AiPluginOptions) => {
   // TODO validate options
   const ai = new Ai(options)
+  // TODO try/catch
+  await ai.init()
 
   fastify.addHook('onRoute', (routeOptions) => {
     const aiRouteOptions = routeOptions?.config?.ai as FastifyAiRouteConfig
@@ -87,6 +92,8 @@ export default fp((fastify, options: AiPluginOptions) => {
         // TODO log, throw error missing config
       }
 
+      // TODO check sessionId and history are mutually exclusive
+
       const response = await ai.request({
         models: options.models,
         prompt: request.prompt,
@@ -95,23 +102,26 @@ export default fp((fastify, options: AiPluginOptions) => {
           maxTokens: options.maxTokens,
           temperature: options.temperature,
           stream: request.stream,
-          history: request.history
+          history: request.history,
+          sessionId: request.sessionId
         }
       })
 
       if (request.stream) {
         reply.header('content-type', 'text/event-stream')
+        // TODO add sessionId
         return response
       }
 
-      // Type guard: response should have text property when not streaming
       if (response instanceof ReadableStream) {
         throw new Error('Unexpected ReadableStream response for non-streaming request')
       }
 
-      return {
-        text: response.text
-      }
+      return response
+    },
+
+    retrieveHistory: async (sessionId: string) => {
+      return await ai.history.range(sessionId)
     }
   })
 })

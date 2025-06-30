@@ -9,6 +9,7 @@ export type ChatHistory = {
 export type ProviderRequestOptions = {
   context?: string
   history?: ChatHistory
+  sessionId?: string | boolean
   temperature?: number
   maxTokens?: number
   stream?: boolean

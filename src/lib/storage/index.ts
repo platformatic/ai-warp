@@ -3,25 +3,39 @@ import { ValkeyStorage } from './valkey.ts'
 
 export type StorageType = 'memory' | 'valkey'
 
+export type ValkeyOptions = {
+  host?: string
+  port?: number
+  username?: string
+  password?: string
+  database?: number
+}
+
 export type StorageOptions = {
   type: StorageType
+  valkey?: ValkeyOptions
 }
 
 export type Storage = {
-  get: (key: string) => Promise<any>
-  set: (key: string, value: any) => Promise<void>
+  valueGet: (key: string) => Promise<any>
+  valueSet: (key: string, value: any) => Promise<void>
+  listPush: (key: string, value: any) => Promise<void>
+  listRange: (key: string) => Promise<any[]>
 }
 
 const defaultStorageOptions: StorageOptions = {
   type: 'memory'
 }
 
-export function createStorage (options?: StorageOptions): Storage {
+export async function createStorage (options?: StorageOptions): Promise<Storage> {
   // TODO validate options
   const storageOptions = options ? { ...defaultStorageOptions, ...options } : defaultStorageOptions
 
   if (storageOptions.type === 'valkey') {
-    return new ValkeyStorage(storageOptions)
+    const s = new ValkeyStorage(storageOptions)
+    // TODO try/catch
+    await s.init()
+    return s
   } else {
     return new MemoryStorage(storageOptions)
   }

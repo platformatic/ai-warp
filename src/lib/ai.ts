@@ -1,5 +1,6 @@
+import { randomUUID } from 'node:crypto'
 import { OpenAIProvider } from '../providers/openai.ts'
-import type { Provider, ProviderClient, ProviderRequestOptions } from './provider.ts'
+import type { ChatHistory, Provider, ProviderClient, ProviderRequestOptions } from './provider.ts'
 import { createStorage, type Storage, type StorageOptions } from './storage/index.ts'
 
 // supported providers
@@ -46,13 +47,14 @@ export type Request = {
 
 export type PlainResponse = {
   text: string
+  sessionId?: string
 }
 
 export type Response = PlainResponse | ReadableStream
 
 export type ProviderState = {
   provider: Provider
-  models: Storage
+  models: Models
 }
 
 export type ModelState = {
@@ -60,23 +62,35 @@ export type ModelState = {
 }
 
 export class Ai {
+  options: AiOptions
+  // @ts-expect-error
+  storage: Storage
+  // @ts-expect-error
   providers: Map<AiProvider, ProviderState>
+  // @ts-expect-error
+  history: History
 
   constructor (options: AiOptions) {
     // TODO validate options
 
+    this.options = options
+  }
+
+  async init () {
+    this.storage = await createStorage(this.options.storage)
+    this.history = new History(this.storage)
     this.providers = new Map()
 
-    for (const provider of Object.keys(options.providers)) {
+    for (const provider of Object.keys(this.options.providers)) {
       const p = provider as AiProvider
 
       const providerState = {
-        provider: new OpenAIProvider(options.providers[p], options.providers[p].client),
-        models: createStorage(options.storage)
+        provider: new OpenAIProvider(this.options.providers[p], this.options.providers[p].client),
+        models: new Models(this.storage)
       }
 
-      if (options.providers[p].models) {
-        for (const model of options.providers[p].models) {
+      if (this.options.providers[p].models) {
+        for (const model of this.options.providers[p].models) {
           const modelName = typeof model === 'string' ? model : model.name
           this.updateModelState(modelName, providerState)
         }
@@ -116,15 +130,14 @@ export class Ai {
       providerName = selectedModel.provider
       modelName = selectedModel.model
     }
-    
+
     const provider = this.providers.get(providerName)
     if (!provider) {
       throw new Error(`Provider ${providerName} not found`)
     }
 
-    // const model = await provider?.models.get(selectedModel.model)
     const model = await this.getModelState(modelName, provider)
-    
+
     return provider && model
       ? { provider, model }
       : undefined
@@ -134,26 +147,60 @@ export class Ai {
     // TODO validate query models
 
     const p = await this.select(request.models)
-
     if (!p) {
       throw new Error(`Provider not found for model: ${request.models[0]}`)
     }
+
+    const { history, sessionId } = await this.getHistory(request.options?.history, request.options?.sessionId)
+
+    console.log('history', history)
+    console.log('sessionId', sessionId)
 
     const options = {
       context: request.options?.context,
       temperature: request.options?.temperature,
       maxTokens: request.options?.maxTokens,
       stream: request.options?.stream,
-      history: request.options?.history
+      history
     }
 
     const response = await p.provider.provider.request(p.model.name, request.prompt, options)
 
-    // TODO update state
+    // TODO response as stream
+    if (response instanceof ReadableStream) {
+      // TODO clone stream response to store in history
+    } else {
+      if (sessionId) {
+        await this.history.push(sessionId, { prompt: request.prompt, response: response.text })
+        response.sessionId = sessionId
+      }
+    }
 
-    // TODO map provider response to response
+    // TODO update state on error, set model state to error
 
     return response
+  }
+
+  // get history from storage if sessionId is a value
+  // TODO lock with auth
+
+  async getHistory (history: ChatHistory | undefined, sessionId: string | boolean | undefined) {
+    if (history) {
+      return { history, sessionId: undefined }
+    }
+
+    if (sessionId === true) {
+      sessionId = await this.createSessionId()
+    } else if (sessionId) {
+      history = await this.history.range(sessionId)
+    }
+
+    return { history, sessionId }
+  }
+
+  // TODO add auth
+  async createSessionId () {
+    return randomUUID()
   }
 
   async updateModelState (modelName: string, providerState: ProviderState) {
@@ -162,7 +209,39 @@ export class Ai {
   }
 
   async getModelState (modelName: string, provider: ProviderState): Promise<ModelState | undefined> {
+    // TODO try/catch
     return await provider.models.get(`${provider.provider.name}:${modelName}`)
   }
+}
 
+class Models {
+  storage: Storage
+
+  constructor (storage: Storage) {
+    this.storage = storage
+  }
+
+  async get (key: string) {
+    return await this.storage.valueGet(key)
+  }
+
+  async set (key: string, value: any) {
+    return await this.storage.valueSet(key, value)
+  }
+}
+
+class History {
+  storage: Storage
+
+  constructor (storage: Storage) {
+    this.storage = storage
+  }
+
+  async push (key: string, value: any) {
+    return await this.storage.listPush(key, value)
+  }
+
+  async range (key: string) {
+    return await this.storage.listRange(key)
+  }
 }

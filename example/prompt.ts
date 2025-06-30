@@ -2,6 +2,7 @@ import fastify, { type FastifyRequest } from 'fastify'
 import ai, { type FastifyAiRouteConfig } from '../src/plugins/ai.ts'
 import type { PinoLoggerOptions } from 'fastify/types/logger.js'
 import type { ChatHistory } from '../src/lib/provider.ts'
+import type { StorageOptions } from '../src/lib/storage/index.ts'
 
 interface AppOptions {
   start?: boolean
@@ -12,6 +13,22 @@ interface ChatRequestBody {
   prompt: string
   stream?: boolean
   history?: ChatHistory
+  sessionId?: string | boolean
+}
+
+const valkeyStorage: StorageOptions = {
+  type: 'valkey',
+  valkey: {
+    host: 'localhost',
+    port: 6379,
+    database: 0,
+    username: 'default',
+    password: 'password'
+  }
+}
+
+const memoryStorage = {
+  type: 'memory'
 }
 
 export async function app ({ start = false, logger }: AppOptions) {
@@ -51,9 +68,7 @@ export async function app ({ start = false, logger }: AppOptions) {
         // TODO baseURL: process.env.OPENAI_BASE_URL
       }
     },
-    storage: {
-      type: 'memory'
-    }
+    storage: valkeyStorage
 
     // TODO default values
     // rateLimit: {
@@ -68,18 +83,22 @@ export async function app ({ start = false, logger }: AppOptions) {
 
   app.post('/chat', { config: { ai: chatConfig } }, async (request: FastifyRequest<{ Body: ChatRequestBody }>, reply) => {
     // TODO auth
-    const { prompt, stream, history } = request.body
-    // // TODO resume flow by sessionId
+    const { prompt, stream, history, sessionId } = request.body
 
     const response = await app.ai.request({
       request,
       prompt,
       stream,
       history,
-      // TODO sessionId,
+      sessionId,
     }, reply)
 
     return response
+  })
+
+  app.get('/history', async (request: FastifyRequest<{ Querystring: { sessionId: string } }>, reply) => {
+    const history = await app.ai.retrieveHistory(request.query.sessionId)
+    return history
   })
 
   const port = process.env.PORT ? parseInt(process.env.PORT) : 3000

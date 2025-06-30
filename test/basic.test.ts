@@ -31,6 +31,7 @@ test('should be able to perform a basic prompt', async () => {
       }
     }
   })
+  await ai.init()
 
   const response = await ai.request({
     models: ['openai:gpt-4o-mini'],
@@ -68,6 +69,7 @@ test('should be able to perform a prompt with options', async () => {
       }
     }
   })
+  await ai.init()
 
   const response = await ai.request({
     models: ['openai:gpt-4o-mini'],
@@ -123,6 +125,7 @@ test('should be able to perform a prompt with stream', async () => {
       }
     }
   })
+  await ai.init()
 
   const response = await ai.request({
     models: ['openai:gpt-4o-mini'],
@@ -183,6 +186,7 @@ test('should be able to perform a prompt with history', async () => {
       }
     }
   })
+  await ai.init()
 
   const response = await ai.request({
     models: ['openai:gpt-4o-mini'],
