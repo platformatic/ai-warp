@@ -3,6 +3,7 @@ import ai, { type FastifyAiRouteConfig } from '../src/plugins/ai.ts'
 import type { PinoLoggerOptions } from 'fastify/types/logger.js'
 import type { ChatHistory } from '../src/lib/provider.ts'
 import type { StorageOptions } from '../src/lib/storage/index.ts'
+import type { Logger } from 'pino'
 
 interface AppOptions {
   start?: boolean
@@ -42,7 +43,6 @@ export async function app ({ start = false, logger }: AppOptions) {
     context: 'You are a nice helpful assistant.',
     temperature: 0.5,
     maxTokens: 250,
-    // TODO stream
     // rate limit, timeout, lifetime (sessionId)
 
     models: [
@@ -60,8 +60,8 @@ export async function app ({ start = false, logger }: AppOptions) {
   }
   // TODO translations / single prompt, no session
 
-  // TODO naming: session?
   await app.register(ai, {
+    logger: app.log as Logger,
     providers: {
       openai: {
         apiKey: process.env.OPENAI_API_KEY,

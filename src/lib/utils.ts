@@ -27,7 +27,7 @@ export async function processStream (stream: ReadableStream): Promise<string> {
           response += event.data.response
         }
         if (event.event === 'error') {
-            // TODO handle error
+          // TODO handle error
           throw new Error(event.data.message)
         }
       }

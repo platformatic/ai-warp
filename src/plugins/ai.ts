@@ -114,6 +114,7 @@ export default fp(async (fastify, options: AiPluginOptions) => {
           // TODO config header name
           reply.header('x-session-id', response.sessionId)
         }
+        // TODO response error
         return response
       }
 
@@ -125,6 +126,8 @@ export default fp(async (fastify, options: AiPluginOptions) => {
         // TODO config header name
         reply.header('x-session-id', response.sessionId)
       }
+
+      // TODO response error
       return response
     },
 

@@ -2,8 +2,10 @@ import { test, mock } from 'node:test'
 import assert from 'node:assert'
 import { Ai, type PlainResponse } from '../src/lib/ai.ts'
 import { mockOpenAiStream, consumeStream } from './helper/helper.ts'
+import pino from 'pino'
 
 const apiKey = 'test'
+const logger = pino() // TODO spy
 
 test('should be able to perform a basic prompt', async () => {
   const client = {
@@ -23,6 +25,7 @@ test('should be able to perform a basic prompt', async () => {
   }
 
   const ai = new Ai({
+    logger,
     providers: {
       openai: {
         apiKey,
@@ -59,6 +62,7 @@ test('should be able to perform a prompt with options', async () => {
   }
 
   const ai = new Ai({
+    logger,
     providers: {
       openai: {
         apiKey,
@@ -115,6 +119,7 @@ test('should be able to perform a prompt with stream', async () => {
   }
 
   const ai = new Ai({
+    logger,
     providers: {
       openai: {
         apiKey,
@@ -176,6 +181,7 @@ test('should be able to perform a prompt with history', async () => {
   }
 
   const ai = new Ai({
+    logger,
     providers: {
       openai: {
         apiKey,

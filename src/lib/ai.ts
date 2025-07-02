@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import type { Logger } from 'pino'
 import { OpenAIProvider } from '../providers/openai.ts'
 import type { ChatHistory, Provider, ProviderClient, ProviderRequestOptions } from './provider.ts'
 import { createStorage, type Storage, type StorageOptions } from './storage/index.ts'
@@ -15,6 +16,7 @@ export type Model = {
 type QueryModel = string | Model
 
 export type AiOptions = {
+  logger: Logger
   providers: Record<AiProvider, ProviderOptions>
   storage?: StorageOptions
 }
@@ -68,6 +70,7 @@ export type ModelState = {
 
 export class Ai {
   options: AiOptions
+  logger: Logger
   // @ts-expect-error
   storage: Storage
   // @ts-expect-error
@@ -79,6 +82,7 @@ export class Ai {
     // TODO validate options
 
     this.options = options
+    this.logger = options.logger
   }
 
   async init () {
@@ -90,7 +94,7 @@ export class Ai {
       const p = provider as AiProvider
 
       const providerState = {
-        provider: new OpenAIProvider(this.options.providers[p], this.options.providers[p].client),
+        provider: new OpenAIProvider({ logger: this.logger, ...this.options.providers[p] }, this.options.providers[p].client),
         models: new Models(this.storage)
       }
 
@@ -111,6 +115,8 @@ export class Ai {
     for (const model of models) {
       const providerState = this.providers.get(model.provider)
       if (!providerState) {
+        this.logger.warn(`Provider ${model.provider} not found`)
+        // TODO error format
         throw new Error(`Provider ${model.provider} not found`)
       }
 
@@ -138,6 +144,8 @@ export class Ai {
 
     const provider = this.providers.get(providerName)
     if (!provider) {
+      this.logger.warn(`Provider ${providerName} not found`)
+      // TODO error format
       throw new Error(`Provider ${providerName} not found`)
     }
 
@@ -153,13 +161,14 @@ export class Ai {
 
     const p = await this.select(request.models)
     if (!p) {
+      this.logger.warn(`Provider not found for model: ${request.models[0]}`)
+      // TODO error format
       throw new Error(`Provider not found for model: ${request.models[0]}`)
     }
 
     const { history, sessionId } = await this.getHistory(request.options?.history, request.options?.sessionId)
 
-    console.log('history', history)
-    console.log('sessionId', sessionId)
+    this.logger.debug({ history, sessionId }, 'ai request history and sessionId')
 
     const options = {
       context: request.options?.context,
@@ -180,9 +189,10 @@ export class Ai {
           .then(response => {
             return this.history.push(sessionId, { prompt: request.prompt, response })
           })
-          .catch(error => {
-          // TODO logger
-            console.error('Failed to store stream response in history:', error)
+          .catch(err => {
+            // TODO error format
+            this.logger.error({ err }, 'Failed to store stream response in history')
+            // TODO reply.status(500).send('...')
           });
 
         // Attach sessionId to the stream for the user

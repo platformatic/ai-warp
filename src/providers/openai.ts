@@ -5,12 +5,13 @@ import OpenAI from 'openai'
 import type { AiProvider } from '../lib/ai.ts'
 import { InvalidTypeError, NoContentError, type ChatHistory, type ProviderClient, type ProviderRequestOptions, type ProviderResponse, type StreamChunkCallback } from '../lib/provider.ts'
 import { encodeEvent, type AiStreamEvent } from '../lib/event.ts'
+import type { Logger } from 'pino'
 
 // @see https://github.com/openai/openai-node
 // @see https://platform.openai.com/docs/api-reference/chat/create
 
 export type OpenAIOptions = {
-  // TODO logger
+  logger: Logger
   apiKey: string
   baseURL?: string
 }
@@ -22,15 +23,18 @@ type Messages = {
   content: string
 }
 
-// TODO implements Provider interface
 export class OpenAIProvider {
   name: AiProvider = 'openai'
-
+  logger: Logger
   client: ProviderClient
 
   constructor (options: OpenAIOptions, client?: ProviderClient) {
+    // TODO validate options
+
+    this.logger = options.logger
+
     if (client) {
-      // for testing
+      // inject client for testing
       this.client = client
     } else {
       this.client = new OpenAI({
@@ -60,8 +64,7 @@ export class OpenAIProvider {
 
     const response = await this.client.chat.completions.create(request)
 
-    // logger.debug response
-    // console.dir(response, { depth: null })
+    this.logger.debug({ response }, 'openai full response (no stream)')
 
     return {
       text: response.choices[0].message.content
