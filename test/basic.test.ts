@@ -5,7 +5,7 @@ import { mockOpenAiStream, consumeStream } from './helper/helper.ts'
 import pino from 'pino'
 
 const apiKey = 'test'
-const logger = pino() // TODO spy
+const logger = pino({ level: 'silent' })
 
 test('should be able to perform a basic prompt', async () => {
   const client = {
@@ -81,7 +81,9 @@ test('should be able to perform a prompt with options', async () => {
     options: {
       context: 'You are a nice helpful assistant.',
       temperature: 0.5,
-      maxTokens: 1000,
+      limits: {
+        maxTokens: 1000,
+      }
     }
   }) as PlainResponse
 
@@ -200,7 +202,9 @@ test('should be able to perform a prompt with history', async () => {
     options: {
       context: 'You are a nice helpful assistant.',
       temperature: 0.5,
-      maxTokens: 1000,
+      limits: {
+        maxTokens: 1000,
+      },
       history: [
         {
           prompt: 'Hello, how are you?',

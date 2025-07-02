@@ -1,5 +1,6 @@
 import createError from '@fastify/error'
 import type { AiProvider, PlainResponse } from './ai.ts'
+import type { AiLimits } from '../plugins/ai.ts'
 
 export type ChatHistory = {
   prompt: string
@@ -11,7 +12,7 @@ export type ProviderRequestOptions = {
   history?: ChatHistory
   sessionId?: string | boolean
   temperature?: number
-  maxTokens?: number
+  limits?: AiLimits
   stream?: boolean
   onStreamChunk?: (response: string) => Promise<string>
 }

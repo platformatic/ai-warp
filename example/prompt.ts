@@ -32,8 +32,8 @@ const memoryStorage = {
   type: 'memory'
 }
 
-export async function app ({ start = false, logger }: AppOptions) {
-  const app = fastify({    logger  })
+export async function app({ start = false, logger }: AppOptions) {
+  const app = fastify({ logger })
 
   if (!process.env.OPENAI_API_KEY) {
     throw new Error('OPENAI_API_KEY is not set')
@@ -42,23 +42,36 @@ export async function app ({ start = false, logger }: AppOptions) {
   const chatConfig: FastifyAiRouteConfig = {
     context: 'You are a nice helpful assistant.',
     temperature: 0.5,
-    maxTokens: 250,
-    // rate limit, timeout, lifetime (sessionId)
+    // route limits
+    limits: {
+      maxTokens: 250,
+      rate: {
+        max: 5,
+        timeWindow: '1m'
+      },
+      requestTimeout: 10_000,
+      historyExpiration: '1d',
+      retry: {
+        max: 1,
+        interval: 1_000
+      }
+    },
 
     models: [
       {
         provider: 'openai',
-        model: 'gpt-4o-mini'
-
-        // TODO override
-        // temperature
-        // maxTokens
-        // timeout
-        // rate limit
+        model: 'gpt-4o-mini',
+        // override route limits for the specific model
+        limits: {
+          maxTokens: 100,
+          rate: {
+            max: 10,
+            timeWindow: '1s'
+          }
+        }
       }
     ]
   }
-  // TODO translations / single prompt, no session
 
   await app.register(ai, {
     logger: app.log as Logger,
@@ -69,16 +82,10 @@ export async function app ({ start = false, logger }: AppOptions) {
       }
     },
     storage: valkeyStorage
-
-    // TODO default values
-    // rateLimit: {
-    //     max: 100,
-    //     timeWindow: '1m'
-    // },
-    // timeout: 10_000 // ms
   })
 
-  // TODO app.post('/prompt', async (request, reply) => {
+  // TODO example with full settings from call
+  // app.post('/prompt', async (request, reply) => {
   // const { prompt, context, maxTokens, temperature, sessionId } = request.body
 
   app.post('/chat', { config: { ai: chatConfig } }, async (request: FastifyRequest<{ Body: ChatRequestBody }>, reply) => {

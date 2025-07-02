@@ -1,12 +1,36 @@
 import { randomUUID } from 'node:crypto'
+import { setTimeout as wait } from 'node:timers/promises'
 import type { Logger } from 'pino'
 import { OpenAIProvider } from '../providers/openai.ts'
 import type { ChatHistory, Provider, ProviderClient, ProviderRequestOptions } from './provider.ts'
 import { createStorage, type Storage, type StorageOptions } from './storage/index.ts'
 import { processStream } from './utils.ts'
+import type { AiLimits } from '../plugins/ai.ts'
+import deepmerge from '@fastify/deepmerge'
 
 // supported providers
 export type AiProvider = 'openai'
+
+export const DEFAULT_RATE = {
+  max: 10,
+  timeWindow: '1m'
+}
+export const DEFAULT_REQUEST_TIMEOUT = 30_000
+export const DEFAULT_HISTORY_EXPIRATION = '1d'
+export const DEFAULT_MAX_RETRIES = 1
+export const DEFAULT_RETRY_INTERVAL = 1_000
+
+export const DEFAULT_LIMITS: AiLimits = {
+  rate: DEFAULT_RATE,
+  requestTimeout: DEFAULT_REQUEST_TIMEOUT,
+  historyExpiration: DEFAULT_HISTORY_EXPIRATION,
+  retry: {
+    max: DEFAULT_MAX_RETRIES,
+    interval: DEFAULT_RETRY_INTERVAL
+  }
+}
+
+const merge = deepmerge({ all: true })
 
 export type Model = {
   provider: AiProvider
@@ -15,23 +39,11 @@ export type Model = {
 
 type QueryModel = string | Model
 
+// TODO doc
 export type AiOptions = {
   logger: Logger
   providers: Record<AiProvider, ProviderOptions>
-  storage?: StorageOptions,
-
-  // TODO
-  // generalOptions?: {
-  //   maxTokens?: number
-  //   rateLimit?: {
-  //     max: number
-  //     timeWindow: string
-  //   }
-  //   timeout?: number // provider request timeout
-  //   historyExpiration?: number // history expiration time
-  //   maxRetries?: number // 0 to disable retries
-  // }
-
+  storage?: StorageOptions
 }
 
 export type ProviderOptions = {
@@ -93,6 +105,7 @@ export class Ai {
 
   constructor (options: AiOptions) {
     // TODO validate options
+    // warn missing limit values
 
     this.options = options
     this.logger = options.logger
@@ -186,12 +199,37 @@ export class Ai {
     const options = {
       context: request.options?.context,
       temperature: request.options?.temperature,
-      maxTokens: request.options?.maxTokens,
       stream: request.options?.stream,
-      history
+      history,
+      limits: merge(DEFAULT_LIMITS, request.options?.limits ?? {}),
     }
 
-    const response = await p.provider.provider.request(p.model.name, request.prompt, options)
+    let response!: Response
+    let error: Error | undefined
+    let attempts = 0
+    let retry
+    const retryInterval = options.limits.retry?.interval!
+    do {
+      error = undefined
+      try {
+        response = await p.provider.provider.request(p.model.name, request.prompt, options)
+        break
+      } catch (err) {
+        // TODO format return error with code
+        error = err as Error
+
+        retry = options.limits.retry && attempts++ < options.limits.retry.max
+        if (retry) {
+          this.logger.warn({ err }, `Failed to request from provider, retrying in ${retryInterval} ms...`)
+          await wait(retryInterval)
+        }
+      }
+    } while (retry && error)
+
+    if (error) {
+      this.logger.error({ err: error }, 'Failed to request from provider')
+      throw error
+    }
 
     if (response instanceof ReadableStream) {
       if (sessionId) {
@@ -217,6 +255,7 @@ export class Ai {
     } else {
       if (sessionId) {
         await this.history.push(sessionId, { prompt: request.prompt, response: response.text })
+        // TODO options.limits.historyExpiration
         response.sessionId = sessionId
       }
     }

@@ -1,4 +1,2 @@
-// testcontainer valkey TODO CI
-
 // check models state
-// use session id
+// check history by session id

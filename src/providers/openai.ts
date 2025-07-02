@@ -53,7 +53,7 @@ export class OpenAIProvider {
       model,
       messages,
       temperature: options.temperature,
-      max_tokens: options.maxTokens,
+      max_tokens: options.limits?.maxTokens,
       stream: options.stream,
     }
 
@@ -66,8 +66,13 @@ export class OpenAIProvider {
 
     this.logger.debug({ response }, 'openai full response (no stream)')
 
+    const text = response.choices?.[0]?.message?.content
+    if (!text) {
+      throw new NoContentError('OpenAI response')
+    }
+
     return {
-      text: response.choices[0].message.content
+      text
     }
   }
 
