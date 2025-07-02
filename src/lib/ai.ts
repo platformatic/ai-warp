@@ -18,7 +18,20 @@ type QueryModel = string | Model
 export type AiOptions = {
   logger: Logger
   providers: Record<AiProvider, ProviderOptions>
-  storage?: StorageOptions
+  storage?: StorageOptions,
+
+  // TODO
+  // generalOptions?: {
+  //   maxTokens?: number
+  //   rateLimit?: {
+  //     max: number
+  //     timeWindow: string
+  //   }
+  //   timeout?: number // provider request timeout
+  //   historyExpiration?: number // history expiration time
+  //   maxRetries?: number // 0 to disable retries
+  // }
+
 }
 
 export type ProviderOptions = {

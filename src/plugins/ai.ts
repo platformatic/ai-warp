@@ -14,7 +14,7 @@ export type FastifyAiRouteConfig = {
   maxTokens?: number
   temperature?: number
 
-  handlerOptions?: {
+  _handlerOptions?: {
     models: Array<{
       provider: AiProvider
       model: string
@@ -69,9 +69,8 @@ export default fp(async (fastify, options: AiPluginOptions) => {
       model: model.model
     }))
 
-    // TODO use request decorator
-    aiRouteOptions.handlerOptions = {
-      models,
+    aiRouteOptions._handlerOptions = {
+     models,
       context: aiRouteOptions.context,
       maxTokens: aiRouteOptions.maxTokens,
       temperature: aiRouteOptions.temperature
@@ -82,12 +81,9 @@ export default fp(async (fastify, options: AiPluginOptions) => {
 
   fastify.decorate('ai', {
     request: async (request: FastifyAiRequest, reply: FastifyReply): Promise<FastifyAiResponse> => {
-      // console.log('request', request.prompt)
-      // console.log('request config', request.request.routeOptions.config.ai)
-
       // TODO merge request.request.routeOptions.config.ai with default config
 
-      const options = (request.request.routeOptions.config.ai as FastifyAiRouteConfig).handlerOptions!
+      const options = (request.request.routeOptions.config.ai as FastifyAiRouteConfig)._handlerOptions!
       if (!options) {
         // TODO log, throw error missing config
       }
