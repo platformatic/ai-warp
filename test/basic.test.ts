@@ -233,7 +233,7 @@ test('should be able to perform a prompt with session and stream (cloning stream
         { choices: [{ delta: { content: ' with math.' }, finish_reason: 'stop' }] }
       ])
     })
-  }  
+  }
 
   const ai = new Ai({
     logger,
@@ -264,23 +264,22 @@ test('should be able to perform a prompt with session and stream (cloning stream
   // @ts-ignore
   assert.deepEqual(client.stream.mock.calls[0].arguments[1], {
     model: 'gpt-4o-mini',
-      max_tokens: undefined,
-      messages: [
-        {
-          content: 'You are a nice helpful assistant.',
-          role: 'system'
-        },
-        {
-          content: 'Can you help me to with math?',
-          role: 'user'
-        }
-      ],
-      stream: true,
-      temperature: 0.5
+    max_tokens: undefined,
+    messages: [
+      {
+        content: 'You are a nice helpful assistant.',
+        role: 'system'
+      },
+      {
+        content: 'Can you help me to with math?',
+        role: 'user'
+      }
+    ],
+    stream: true,
+    temperature: 0.5
   })
 
   const { content } = await consumeStream(response)
 
   assert.equal(content.join(''), 'Sure, I can help you with math.')
-
 })

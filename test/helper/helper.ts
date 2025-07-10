@@ -1,4 +1,4 @@
-import { Ai, type AiProvider, type ModelStateErrorReason, type ModelStatus, type ProviderState } from '../../src/lib/ai.ts'
+import { Ai, createModelState, type AiProvider, type ModelStateErrorReason, type ModelStatus, type ProviderState } from '../../src/lib/ai.ts'
 
 export function createDummyClient () {
   return {
@@ -102,10 +102,10 @@ export async function setModelState ({
   rateLimit?: { count: number, windowStart: number }
 }) {
   const providerState: ProviderState = ai.providers.get(provider)!
-  const restoredModelState = await ai.getModelState(model, providerState)!
-  restoredModelState!.state.status = status
-  restoredModelState!.state.reason = reason ?? 'NONE'
-  restoredModelState!.state.timestamp = timestamp || Date.now()
-  restoredModelState!.rateLimit = rateLimit ?? { count: 0, windowStart: 0 }
-  await ai.setModelState(model, providerState, restoredModelState!, timestamp || Date.now())
+  const restoredModelState = (await ai.getModelState(model, providerState)) ?? createModelState(model)
+  restoredModelState.state.status = status
+  restoredModelState.state.reason = reason ?? 'NONE'
+  restoredModelState.state.timestamp = timestamp || Date.now()
+  restoredModelState.rateLimit = rateLimit ?? { count: 0, windowStart: 0 }
+  await ai.setModelState(model, providerState, restoredModelState, timestamp || Date.now())
 }

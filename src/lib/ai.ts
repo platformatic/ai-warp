@@ -15,8 +15,8 @@ export const DEFAULT_STORAGE: StorageOptions = {
   type: 'memory'
 }
 
-export const DEFAULT_RATE_LIMIT_MAX = 10
-export const DEFAULT_RATE_LIMIT_TIME_WINDOW = '1m'
+export const DEFAULT_RATE_LIMIT_MAX = 200
+export const DEFAULT_RATE_LIMIT_TIME_WINDOW = '30s'
 export const DEFAULT_REQUEST_TIMEOUT = 30_000
 export const DEFAULT_HISTORY_EXPIRATION = '1d'
 export const DEFAULT_MAX_RETRIES = 1
@@ -331,10 +331,15 @@ export class Ai {
   /**
    * Select a model from the list of models, depending on the provider and model state
    * @param models - List of models to select from
+   * @param skip - List of models to skip
    * @returns Selected model with provider and limits
    * TODO implement logic, for example round robin, random, least used, etc.
    */
-  async selectModel (models: QueryModel[]): Promise<ModeleSelection | undefined> {
+  async selectModel (models: QueryModel[], skip?: string[]): Promise<ModeleSelection | undefined> {
+    if (models.length === 0) {
+      return undefined
+    }
+
     for (const model of models) {
       let modelName: string
       let providerName: AiProvider
@@ -346,6 +351,10 @@ export class Ai {
       } else {
         providerName = model.provider
         modelName = model.model
+      }
+
+      if (skip?.includes(`${providerName}:${modelName}`)) {
+        continue
       }
 
       const provider = this.providers.get(providerName)
@@ -396,133 +405,171 @@ export class Ai {
     this.logger.debug({ request }, 'AI request')
 
     const models = request.models ?? this.options.models
-    const selected = await this.selectModel(models)
+    const skipModels: string[] = []
+
+    let selected = await this.selectModel(models)
     if (!selected) {
       this.logger.warn({ models }, 'No models available')
       throw new ProviderNoModelsAvailableError(models)
     }
 
-    let history: ChatHistory | undefined, sessionId: string | undefined
-    try {
-      const h = await this.getHistory(request.options?.history, request.options?.sessionId)
-      history = h.history
-      sessionId = h.sessionId
-    } catch (err) {
-      this.logger.error({ err }, 'Failed to get history')
-      throw new HistoryGetError()
-    }
+    let r!: Response
 
-    const options = {
-      context: request.options?.context,
-      temperature: request.options?.temperature,
-      stream: request.options?.stream,
-      history,
-      maxTokens: selected.settings.limits.maxTokens ?? request.options?.maxTokens ?? this.options.limits.maxTokens
-    }
+    while (selected) {
+      this.logger.debug({ model: selected.model.name }, 'Selected model')
 
-    const rateLimit = {
-      max: selected.settings.limits.rate.max,
-      timeWindow: selected.settings.limits.rate.timeWindow
-    }
+      let history: ChatHistory | undefined, sessionId: string | undefined
+      try {
+        const h = await this.getHistory(request.options?.history, request.options?.sessionId)
+        history = h.history
+        sessionId = h.sessionId
+      } catch (err) {
+        this.logger.error({ err }, 'Failed to get history')
+        throw new HistoryGetError()
+      }
 
-    const operationTimestamp = Date.now()
+      const options = {
+        context: request.options?.context,
+        temperature: request.options?.temperature,
+        stream: request.options?.stream,
+        history,
+        maxTokens: selected.settings.limits.maxTokens ?? request.options?.maxTokens ?? this.options.limits.maxTokens
+      }
 
-    let response!: Response
-    try {
-      await this.checkRateLimit(selected, rateLimit)
-      await this.updateModelStateRateLimit(selected.model.name, selected.provider, selected.model.rateLimit)
+      const rateLimit = {
+        max: selected.settings.limits.rate.max,
+        timeWindow: selected.settings.limits.rate.timeWindow
+      }
+      const operationTimestamp = Date.now()
 
+      let response!: Response
       let err: FastifyError | undefined
-      let attempts = 0
-      let retry
-      const retryInterval = this.options.limits.retry.interval
-      do {
-        err = undefined
-        try {
-          response = await this.requestTimeout(
-            selected.provider.provider.request(selected.model.name, request.prompt, options),
-            this.options.limits.requestTimeout,
-            options.stream
-          )
-          break
-        } catch (error: any) { // TODO fix type
-          err = error
+      try {
+        await this.checkRateLimit(selected, rateLimit)
+        await this.updateModelStateRateLimit(selected.model.name, selected.provider, selected.model.rateLimit)
 
-          // do not retry on timeout errors
-          if (error.code && (error.code === 'PROVIDER_REQUEST_TIMEOUT_ERROR' || error.code === 'PROVIDER_REQUEST_STREAM_TIMEOUT_ERROR')) {
+        let attempts = 0
+        let retry
+        const retryInterval = this.options.limits.retry.interval
+        do {
+          err = undefined
+          try {
+            response = await this.requestTimeout(
+              selected.provider.provider.request(selected.model.name, request.prompt, options),
+              this.options.limits.requestTimeout,
+              options.stream
+            )
             break
-          }
+          } catch (error: any) { // TODO fix type
+            err = error
 
-          retry = this.options.limits.retry && attempts++ < this.options.limits.retry.max
-          if (retry) {
-            this.logger.warn({ err }, `Failed to request from provider, retrying in ${retryInterval} ms...`)
-            await wait(retryInterval)
-          } else {
-            this.logger.error({ err }, `Failed to request from provider after ${attempts} attempts`)
+            // do not retry on timeout errors
+            if (error.code && (error.code === 'PROVIDER_REQUEST_TIMEOUT_ERROR' || error.code === 'PROVIDER_REQUEST_STREAM_TIMEOUT_ERROR')) {
+              break
+            }
+
+            retry = this.options.limits.retry && attempts++ < this.options.limits.retry.max
+            if (retry) {
+              this.logger.warn({ err }, `Failed to request from provider, retrying in ${retryInterval} ms...`)
+              await wait(retryInterval)
+            } else {
+              this.logger.error({ err }, `Failed to request from provider after ${attempts} attempts`)
+            }
           }
+        } while (retry && err)
+
+        if (err) {
+          throw err
         }
-      } while (retry && err)
+
+        // @ts-ignore
+        if (typeof response.pipe === 'function' || response instanceof ReadableStream) {
+          if (sessionId) {
+            const streamResponse = response as ReadableStream
+            const [responseStream, historyStream] = streamResponse.tee()
+
+            // Process the cloned stream in background to accumulate response for history
+            processStream(historyStream)
+              .then(response => {
+                if (!response) {
+                  this.logger.error({ err }, 'Failed to clone stream, skipping history store')
+                  return
+                }
+                this.history.push(sessionId as string, { prompt: request.prompt, response }, this.options.limits.historyExpiration)
+              })
+            // processStream should not throw
+              .catch(() => { });
+
+            // Attach sessionId to the stream for the user
+            (responseStream as StreamResponse).sessionId = sessionId
+            return responseStream
+          }
+          return response as StreamResponse
+        }
+
+        const contentResponse = response as ContentResponse
+        if (sessionId) {
+          await this.history.push(sessionId, { prompt: request.prompt, response: contentResponse.text }, this.options.limits.historyExpiration)
+          contentResponse.sessionId = sessionId
+          return contentResponse
+        }
+
+        // never happen, but makes typescript happy
+        r = response
+
+        return response
+      } catch (error: any) { // TODO fix type
+      // skip storage errors, update state if errors are one of:
+        if (error.code !== 'PROVIDER_RATE_LIMIT_ERROR' &&
+        error.code !== 'PROVIDER_REQUEST_TIMEOUT_ERROR' &&
+        error.code !== 'PROVIDER_REQUEST_STREAM_TIMEOUT_ERROR' &&
+        error.code !== 'PROVIDER_RESPONSE_ERROR' &&
+        error.code !== 'PROVIDER_RESPONSE_NO_CONTENT' &&
+        error.code !== 'PROVIDER_EXCEEDED_QUOTA_ERROR'
+        ) {
+          throw error
+        }
+
+        err = error
+      }
 
       if (err) {
-        throw err
-      }
+        try {
+          selected.model.state.status = 'error'
+          selected.model.state.timestamp = Date.now()
+          selected.model.state.reason = err.code as ModelStateErrorReason
 
+          await this.setModelState(selected.model.name, selected.provider, selected.model, operationTimestamp)
 
-      // @ts-ignore
-      if (typeof response.pipe === 'function' || response instanceof ReadableStream) {
-        if (sessionId) {
-          const streamResponse = response as ReadableStream
-          const [responseStream, historyStream] = streamResponse.tee()
+          // try to select a new model from the remaining models
+          skipModels.push(`${selected.provider.provider.name}:${selected.model.name}`)
+          selected = await this.selectModel(models, skipModels)
 
-          // Process the cloned stream in background to accumulate response for history
-          processStream(historyStream)
-            .then(response => {
-              if (!response) {
-                this.logger.error({ err }, 'Failed to clone stream, skipping history store')
-                return
-              }
-              this.history.push(sessionId as string, { prompt: request.prompt, response }, this.options.limits.historyExpiration)
-            })
-            // processStream should not throw
-            .catch(() => { });
+          if (!selected) {
+            this.logger.warn({ models }, 'No more models available')
+            throw err
+          }
 
-          // Attach sessionId to the stream for the user
-          (responseStream as StreamResponse).sessionId = sessionId
-          return responseStream
+          // then try to request again
+          continue
+        } catch (error) {
+          this.logger.error({ err: error }, 'Failed to set model state')
+          throw err
         }
       }
-
-      const contentResponse = response as ContentResponse
-      if (sessionId) {
-        await this.history.push(sessionId, { prompt: request.prompt, response: contentResponse.text }, this.options.limits.historyExpiration)
-        contentResponse.sessionId = sessionId
-      }
-    } catch (err: any) { // TODO fix type
-      // skip storage errors, update state if errors are one of:
-      if (err.code !== 'PROVIDER_RATE_LIMIT_ERROR' &&
-        err.code !== 'PROVIDER_REQUEST_TIMEOUT_ERROR' &&
-        err.code !== 'PROVIDER_REQUEST_STREAM_TIMEOUT_ERROR' &&
-        err.code !== 'PROVIDER_RESPONSE_ERROR' &&
-        err.code !== 'PROVIDER_RESPONSE_NO_CONTENT' &&
-        err.code !== 'PROVIDER_EXCEEDED_QUOTA_ERROR'
-      ) {
-        throw err
-      }
-
-      selected.model.state.status = 'error'
-      selected.model.state.timestamp = Date.now()
-      selected.model.state.reason = err.code
-
-      this.setModelState(selected.model.name, selected.provider, selected.model, operationTimestamp)
-      throw err
     }
 
-    return response
+    // never happen, but makes typescript happy
+    return r
   }
 
-  // get history from storage if sessionId is a value
-  // TODO lock with auth
-
+  /**
+   * get history from storage if sessionId is a value
+   * TODO lock with auth
+   * @param history
+   * @param sessionId
+   * @returns
+   */
   async getHistory (history: ChatHistory | undefined, sessionId: string | boolean | undefined): Promise<{ history: ChatHistory | undefined, sessionId: string | undefined }> {
     // TODO try/catch
     if (history) {
@@ -694,7 +741,7 @@ export class Ai {
   }
 }
 
-function createModelState (modelName: string): ModelState {
+export function createModelState (modelName: string): ModelState {
   return {
     name: modelName,
     rateLimit: { count: 0, windowStart: 0 },
