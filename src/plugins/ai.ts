@@ -1,59 +1,32 @@
 import fp from 'fastify-plugin'
-import { Ai, DEFAULT_HISTORY_EXPIRATION, DEFAULT_MAX_RETRIES, DEFAULT_RATE, DEFAULT_REQUEST_TIMEOUT, DEFAULT_RETRY_INTERVAL, type AiOptions, type AiProvider } from '../lib/ai.ts'
+import { Ai, type AiOptions, type Model, type ResponseResult } from '../lib/ai.ts'
 import type { FastifyReply, FastifyRequest } from 'fastify'
 import type { ChatHistory } from '../lib/provider.ts'
 
-export type AiPluginOptions = AiOptions
+const DEFAULT_HEADER_SESSION_ID_NAME = 'x-session-id'
 
-export type AiLimits = {
-  maxTokens?: number
-  rate?: {
-    max: number
-    timeWindow: number | string
-  }
-  requestTimeout?: number // provider request timeout
-  retry?: {
-    max: number
-    interval: number
-  }
-  historyExpiration?: number | string // history expiration time
-}
-
-export type FastifyAiRouteConfig = {
-  models: Array<{
-    provider: AiProvider
-    model: string
-    limits?: AiLimits
-  }>
-  context?: string
-  temperature?: number
-  limits?: AiLimits
-
-  // computed options for the handler
-  _handlerOptions?: {
-    models: Array<{
-      provider: AiProvider
-      model: string
-      limits?: AiLimits
-    }>
-    context?: string
-    temperature?: number
-    limits: AiLimits
-  }
+export type AiPluginOptions = AiOptions & {
+  headerSessionIdName?: string
 }
 
 export type FastifyAiRequest = {
   request: FastifyRequest
   prompt: string
+  context?: string
+  temperature?: number
+  models?: Model[]
   stream?: boolean
   history?: ChatHistory
   sessionId?: string | boolean // TODO doc sessionId and history are mutually exclusive
 }
 
-export type FastifyAiResponse = {
+export type ContentResponse = {
   text: string
+  result: ResponseResult
   sessionId?: string
-} | ReadableStream
+}
+
+export type FastifyAiResponse = ContentResponse | ReadableStream
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -62,91 +35,45 @@ declare module 'fastify' {
       retrieveHistory: (sessionId: string) => Promise<ChatHistory>
     }
   }
-
-  interface FastifyContextConfig {
-    ai?: FastifyAiRouteConfig
-  }
 }
 
 export default fp(async (fastify, options: AiPluginOptions) => {
-  // TODO validate options
+  if (!options.headerSessionIdName) {
+    options.headerSessionIdName = DEFAULT_HEADER_SESSION_ID_NAME
+  }
+
   const ai = new Ai(options)
-  // TODO try/catch
+  // TODO try/catch, valkey connection error
   await ai.init()
 
-  fastify.addHook('onRoute', (routeOptions) => {
-    const aiRouteOptions = routeOptions?.config?.ai as FastifyAiRouteConfig
-    if (!aiRouteOptions) {
-      return
-    }
-
-    // TODO validate routeOptions
-    const models = aiRouteOptions.models.map(model => ({
-      provider: model.provider as AiProvider,
-      model: model.model,
-      limits: model.limits
-    }))
-
-    aiRouteOptions._handlerOptions = {
-      models,
-      context: aiRouteOptions.context,
-      temperature: aiRouteOptions.temperature,
-      limits: {
-        maxTokens: aiRouteOptions.limits?.maxTokens, // can be undefined
-        rate: aiRouteOptions.limits?.rate ?? DEFAULT_RATE,
-        requestTimeout: aiRouteOptions.limits?.requestTimeout ?? DEFAULT_REQUEST_TIMEOUT,
-        historyExpiration: aiRouteOptions.limits?.historyExpiration ?? DEFAULT_HISTORY_EXPIRATION,
-        retry: {
-          max: aiRouteOptions.limits?.retry?.max ?? DEFAULT_MAX_RETRIES,
-          interval: aiRouteOptions.limits?.retry?.interval ?? DEFAULT_RETRY_INTERVAL
-        }
-      }
-    }
-
-    ai.addModels(models)
-  })
+  // TODO ai.close on shutdown
 
   fastify.decorate('ai', {
     request: async (request: FastifyAiRequest, reply: FastifyReply): Promise<FastifyAiResponse> => {
-      const options = (request.request.routeOptions.config.ai as FastifyAiRouteConfig)._handlerOptions!
-      if (!options) {
-        // TODO log, throw error missing config
-      }
-
       // TODO validate request params
       // sessionId and history are mutually exclusive
 
       const response = await ai.request({
-        models: options.models,
+        models: request.models ?? options.models,
         prompt: request.prompt,
         options: {
-          context: options.context,
-          temperature: options.temperature,
+          context: request.context,
+          temperature: request.temperature,
           stream: request.stream,
           history: request.history,
-          sessionId: request.sessionId,
-          limits: options.limits
+          sessionId: request.sessionId
         }
       })
+
+      if (response.sessionId) {
+        reply.header(options.headerSessionIdName!, response.sessionId)
+      }
 
       if (request.stream) {
         reply.header('content-type', 'text/event-stream')
 
-        if (response.sessionId) {
-          // TODO config header name
-          reply.header('x-session-id', response.sessionId)
-        }
         // TODO response error
         return response
-      }
-
-      if (response instanceof ReadableStream) {
-        throw new Error('Unexpected ReadableStream response for non-streaming request')
-      }
-
-      if (response.sessionId) {
-        // TODO config header name
-        reply.header('x-session-id', response.sessionId)
       }
 
       // TODO response error

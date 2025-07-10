@@ -1,5 +1,6 @@
 import type { FastifyError } from '@fastify/error'
 import fastJson from 'fast-json-stringify'
+import type { ResponseResult } from './ai.ts'
 
 const stringifyEventData = fastJson({
   title: 'Stream Event Data',
@@ -17,10 +18,19 @@ export interface AiStreamEventContent {
   response: string
 }
 
+export interface AiStreamEventEnd {
+  response: ResponseResult
+}
+
 export type AiStreamEvent = {
   event: 'content'
   data: AiStreamEventContent
-} | {
+} |
+{
+  event: 'end'
+  data: AiStreamEventEnd
+} |
+{
   event: 'error'
   data: FastifyError
 }
@@ -61,6 +71,11 @@ export function decodeEventStream (chunk: string): AiStreamEvent[] {
             event: 'content',
             data: parsedData as AiStreamEventContent
           })
+        } if (currentEvent === 'end') {
+          events.push({
+            event: 'end',
+            data: parsedData as AiStreamEventEnd
+          })
         } else if (currentEvent === 'error') {
           events.push({
             event: 'error',
@@ -68,6 +83,7 @@ export function decodeEventStream (chunk: string): AiStreamEvent[] {
           })
         }
       } catch (error) {
+        // TODO throw error, use logger
         console.error('Failed to parse event data:', error)
       }
 
@@ -75,6 +91,98 @@ export function decodeEventStream (chunk: string): AiStreamEvent[] {
       currentEvent = null
       currentData = null
     }
+  }
+
+  return events
+}
+
+export interface ParsedEvent {
+  event?: string
+  data?: string
+  id?: string
+  retry?: number
+}
+
+export function parseEventStream (chunk: string): ParsedEvent[] {
+  const events: ParsedEvent[] = []
+  const lines = chunk.split('\n')
+
+  let currentEvent: ParsedEvent = {}
+  let dataLines: string[] = []
+
+  for (const line of lines) {
+    // Skip comments (lines starting with :)
+    if (line.startsWith(':')) {
+      continue
+    }
+
+    // Empty line indicates end of event
+    if (line === '') {
+      if (dataLines.length > 0 || currentEvent.event || currentEvent.id || currentEvent.retry) {
+        // Join multiple data lines with newlines
+        if (dataLines.length > 0) {
+          currentEvent.data = dataLines.join('\n')
+        }
+        events.push(currentEvent)
+      }
+      // Reset for next event
+      currentEvent = {}
+      dataLines = []
+      continue
+    }
+
+    // Parse field and value
+    const colonIndex = line.indexOf(':')
+    if (colonIndex === -1) {
+      // Line doesn't contain colon, treat entire line as field name with empty value
+      const fieldName = line.trim()
+      if (fieldName === 'data') {
+        dataLines.push('')
+      } else if (fieldName === 'event') {
+        currentEvent.event = ''
+      } else if (fieldName === 'id') {
+        currentEvent.id = ''
+      } else if (fieldName === 'retry') {
+        currentEvent.retry = 0
+      }
+      continue
+    }
+
+    const fieldName = line.substring(0, colonIndex).trim()
+    let fieldValue = line.substring(colonIndex + 1)
+
+    // Remove leading space from value if present
+    if (fieldValue.startsWith(' ')) {
+      fieldValue = fieldValue.substring(1)
+    }
+
+    switch (fieldName) {
+      case 'event':
+        currentEvent.event = fieldValue
+        break
+      case 'data':
+        dataLines.push(fieldValue)
+        break
+      case 'id':
+        currentEvent.id = fieldValue
+        break
+      case 'retry':
+        // eslint-disable-next-line no-case-declarations
+        const retryValue = parseInt(fieldValue, 10)
+        if (!isNaN(retryValue)) {
+          currentEvent.retry = retryValue
+        }
+        break
+      // All other field names are ignored according to spec
+    }
+  }
+
+  // Handle case where stream doesn't end with empty line
+  if (dataLines.length > 0 || currentEvent.event || currentEvent.id || currentEvent.retry) {
+    if (dataLines.length > 0) {
+      currentEvent.data = dataLines.join('\n')
+    }
+    events.push(currentEvent)
   }
 
   return events

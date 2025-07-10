@@ -1,1 +1,0 @@
-// test as fastify plugin

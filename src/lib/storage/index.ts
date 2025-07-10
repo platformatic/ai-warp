@@ -19,7 +19,7 @@ export type StorageOptions = {
 export type Storage = {
   valueGet: (key: string) => Promise<any>
   valueSet: (key: string, value: any) => Promise<void>
-  listPush: (key: string, value: any) => Promise<void>
+  listPush: (key: string, value: any, expiration: number) => Promise<void>
   listRange: (key: string) => Promise<any[]>
 }
 

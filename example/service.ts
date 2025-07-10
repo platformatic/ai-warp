@@ -1,9 +1,11 @@
 import fastify, { type FastifyRequest } from 'fastify'
-import ai, { type FastifyAiRouteConfig } from '../src/plugins/ai.ts'
+import ai from '../src/plugins/ai.ts'
 import type { PinoLoggerOptions } from 'fastify/types/logger.js'
-import type { ChatHistory } from '../src/lib/provider.ts'
+import type { ChatHistory, ProviderClient, ProviderClientContext, ProviderClientOptions, ProviderClientRequest } from '../src/lib/provider.ts'
 import type { StorageOptions } from '../src/lib/storage/index.ts'
 import type { Logger } from 'pino'
+import OpenAI from 'openai'
+import type { OpenAIRequest, OpenAIResponse } from '../src/providers/openai.ts'
 
 interface AppOptions {
   start?: boolean
@@ -39,15 +41,20 @@ export async function app({ start = false, logger }: AppOptions) {
     throw new Error('OPENAI_API_KEY is not set')
   }
 
-  const chatConfig: FastifyAiRouteConfig = {
-    context: 'You are a nice helpful assistant.',
-    temperature: 0.5,
-    // route limits
+  await app.register(ai, {
+    logger: app.log as Logger,
+    providers: {
+      openai: {
+        apiKey: process.env.OPENAI_API_KEY,
+        // client: TODO custom client
+      }
+    },
+    storage: valkeyStorage,
     limits: {
-      maxTokens: 250,
+      maxTokens: 500,
       rate: {
-        max: 5,
-        timeWindow: '1m'
+        max: 10,
+        timeWindow: '1m',
       },
       requestTimeout: 10_000,
       historyExpiration: '1d',
@@ -56,43 +63,46 @@ export async function app({ start = false, logger }: AppOptions) {
         interval: 1_000
       }
     },
-
+    restore: {
+      rateLimit: '1m',
+      retry: '1m',
+      timeout: '1m',
+      providerCommunicationError: '1m',
+      providerExceededError: '10m'
+    },
     models: [
       {
         provider: 'openai',
         model: 'gpt-4o-mini',
-        // override route limits for the specific model
         limits: {
-          maxTokens: 100,
+          maxTokens: 50,
           rate: {
             max: 10,
             timeWindow: '1s'
           }
-        }
+        },
+        restore: {
+          rateLimit: '30s',
+          retry: '2m',
+          timeout: '1m',
+          providerCommunicationError: '30s',
+          providerExceededError: '5m'
+        },        
       }
     ]
-  }
-
-  await app.register(ai, {
-    logger: app.log as Logger,
-    providers: {
-      openai: {
-        apiKey: process.env.OPENAI_API_KEY,
-        // TODO baseURL: process.env.OPENAI_BASE_URL
-      }
-    },
-    storage: valkeyStorage
   })
 
   // TODO example with full settings from call
   // app.post('/prompt', async (request, reply) => {
   // const { prompt, context, maxTokens, temperature, sessionId } = request.body
 
-  app.post('/chat', { config: { ai: chatConfig } }, async (request: FastifyRequest<{ Body: ChatRequestBody }>, reply) => {
+  app.post('/chat', async (request: FastifyRequest<{ Body: ChatRequestBody }>, reply) => {
     // TODO auth
     const { prompt, stream, history, sessionId } = request.body
 
     const response = await app.ai.request({
+      context: 'You are a nice helpful assistant.',
+      temperature: 0.5,
       request,
       prompt,
       stream,

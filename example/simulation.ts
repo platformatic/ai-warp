@@ -1,8 +1,9 @@
 import undici from 'undici'
-import { app } from './prompt.ts'
+import { app } from './service.ts'
 import type { FastifyAiResponse } from '../src/plugins/ai.ts'
 import { decodeEventStream } from '../src/lib/event.ts'
 import type { ChatHistory } from '../src/lib/provider.ts'
+import type { ContentResponse } from '../src/lib/ai.ts'
 
 const url = 'http://localhost:3000/chat'
 
@@ -17,7 +18,7 @@ let lastSessionId: string | undefined
 const prompts: Prompt[] =
   [
     {
-      stream: false,
+      stream: true,
       prompts: [
         'Can you help me to prepare a dinner?',
         "I'd like to prepare a dinner for my 2 kids, they love fish and potatoes",
@@ -98,7 +99,7 @@ const headers = {
 }
 
 async function main() {
-  const server = await app({ start: true, logger: { level: 'debug' } })
+  const server = await app({ start: true, logger: { level: 'debug', transport: { target: 'pino-pretty' } } })
 
   for (const set of prompts) {
     console.log('\n**********')
@@ -109,6 +110,7 @@ async function main() {
       if (sessionId) {
         console.log(' *** sessionId', sessionId)
       }
+      
       console.log('\n>>>', prompt)
 
       const response = await undici.request(url, {
@@ -124,35 +126,33 @@ async function main() {
       }
 
       if (set.stream) {
-        let buffer = ''
+        let content = ''
         for await (const chunk of response.body) {
           const r = new TextDecoder().decode(chunk)
-          buffer += r
 
           // Process complete events from buffer
-          const events = decodeEventStream(buffer)
+          const events = decodeEventStream(r)
           for (const event of events) {
             if (event.event === 'content') {
-              console.log('<<<', event.data.response)
+              console.log('<<< * ', event.data.response)
+              if(event.data.response) {
+                content += event.data.response
+              }
+            } else if (event.event === 'end') {
+              console.log('<<< END', event.data.response)
             } else if (event.event === 'error') {
               console.error('Error:', event.data.message)
             }
           }
-
-          // Keep any remaining incomplete data in buffer
-          const lastDoubleNewline = buffer.lastIndexOf('\n\n')
-          if (lastDoubleNewline !== -1) {
-            buffer = buffer.substring(lastDoubleNewline + 2)
-          }
         }
+
+        console.log('\n<<<', content)
+
         if (history) {
-          history.push({ prompt, response: buffer })
+          history.push({ prompt, response: content })
         }
       } else {
-        const responseData = await response.body.json() as FastifyAiResponse
-        if (responseData instanceof ReadableStream) {
-          throw new Error('Unexpected ReadableStream response for non-streaming request')
-        }
+        const responseData = await response.body.json() as ContentResponse
         console.log('<<<', responseData.text)
 
         if (history) {

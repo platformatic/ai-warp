@@ -17,8 +17,8 @@ export class MemoryStorage implements Storage {
     this.values.set(key, value)
   }
 
-  async listPush (key: string, value: any) {
-    this.list.push(key, value)
+  async listPush (key: string, value: any, expiration: number) {
+    this.list.push(key, value, expiration)
   }
 
   async listRange (key: string) {
@@ -42,20 +42,41 @@ class KeyValueStorage {
   }
 }
 
+type ListValue = {
+  value: any
+  expire: number
+}
+
 class ListStorage {
-  storage: Map<string, string[]>
+  storage: Map<string, ListValue[]>
 
   constructor () {
     this.storage = new Map()
   }
 
-  async push (key: string, value: any) {
+  async push (key: string, value: any, expiration: number) {
     const list = this.storage.get(key) || []
-    list.push(value)
-    this.storage.set(key, list)
+    list.push({ value, expire: Date.now() + expiration })
+
+    // Clean up expired items when pushing new ones
+    const now = Date.now()
+    const filteredList = list.filter(item => item.expire > now)
+
+    this.storage.set(key, filteredList)
   }
 
   async range (key: string) {
-    return this.storage.get(key) || []
+    const list = this.storage.get(key)
+    if (!list) { return [] }
+
+    const now = Date.now()
+    const validItems = list.filter(item => item.expire > now)
+
+    // Update storage with filtered items to remove expired ones
+    if (validItems.length !== list.length) {
+      this.storage.set(key, validItems)
+    }
+
+    return validItems.map(item => item.value)
   }
 }

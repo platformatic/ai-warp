@@ -1,40 +1,60 @@
 import { randomUUID } from 'node:crypto'
 import { setTimeout as wait } from 'node:timers/promises'
 import type { Logger } from 'pino'
+import type { FastifyError } from 'fastify'
 import { OpenAIProvider } from '../providers/openai.ts'
-import type { ChatHistory, Provider, ProviderClient, ProviderRequestOptions } from './provider.ts'
+import type { ChatHistory, Provider, ProviderClient, ProviderOptions, ProviderRequestOptions } from './provider.ts'
 import { createStorage, type Storage, type StorageOptions } from './storage/index.ts'
-import { processStream } from './utils.ts'
-import type { AiLimits } from '../plugins/ai.ts'
-import deepmerge from '@fastify/deepmerge'
+import { parseTimeWindow, processStream } from './utils.ts'
+import { AiOptionsError, HistoryGetError, ModelStateError, ProviderNoModelsAvailableError, ProviderRateLimitError, ProviderRequestStreamTimeoutError, ProviderRequestTimeoutError } from './errors.ts'
 
 // supported providers
 export type AiProvider = 'openai'
 
-export const DEFAULT_RATE = {
-  max: 10,
-  timeWindow: '1m'
+export const DEFAULT_STORAGE: StorageOptions = {
+  type: 'memory'
 }
+
+export const DEFAULT_RATE_LIMIT_MAX = 10
+export const DEFAULT_RATE_LIMIT_TIME_WINDOW = '1m'
 export const DEFAULT_REQUEST_TIMEOUT = 30_000
 export const DEFAULT_HISTORY_EXPIRATION = '1d'
 export const DEFAULT_MAX_RETRIES = 1
 export const DEFAULT_RETRY_INTERVAL = 1_000
 
-export const DEFAULT_LIMITS: AiLimits = {
-  rate: DEFAULT_RATE,
-  requestTimeout: DEFAULT_REQUEST_TIMEOUT,
-  historyExpiration: DEFAULT_HISTORY_EXPIRATION,
-  retry: {
-    max: DEFAULT_MAX_RETRIES,
-    interval: DEFAULT_RETRY_INTERVAL
-  }
-}
-
-const merge = deepmerge({ all: true })
+export const DEFAULT_RESTORE_RATE_LIMIT = '1m'
+export const DEFAULT_RESTORE_RETRY = '1m'
+export const DEFAULT_RESTORE_REQUEST_TIMEOUT = '1m'
+export const DEFAULT_RESTORE_PROVIDER_COMMUNICATION_ERROR = '1m'
+export const DEFAULT_RESTORE_PROVIDER_EXCEEDED_QUOTA_ERROR = '10m'
 
 export type Model = {
   provider: AiProvider
   model: string
+  limits?: {
+    maxTokens?: number
+    rate?: {
+      max: number
+      timeWindow: TimeWindow
+    }
+    // TODO requestTimeout, retry
+  },
+  restore?: AiRestore
+}
+
+type ModelLimits = {
+  maxTokens?: number
+  rate: {
+    max: number
+    timeWindow: number
+  }
+}
+
+type ModelRestore = StrictAiRestore
+
+type ModelSettings = {
+  limits: ModelLimits
+  restore: ModelRestore
 }
 
 type QueryModel = string | Model
@@ -42,13 +62,22 @@ type QueryModel = string | Model
 // TODO doc
 export type AiOptions = {
   logger: Logger
-  providers: Record<AiProvider, ProviderOptions>
+  providers: Record<AiProvider, ProviderDefinitionOptions>
   storage?: StorageOptions
+  limits?: AiLimits
+  restore?: AiRestore
+  models?: Model[]
 }
 
-export type ProviderOptions = {
+type StrictAiOptions = AiOptions & {
+  storage: StorageOptions
+  limits: StrictAiLimits
+  restore: StrictAiRestore
+  models: Model[]
+}
+
+export type ProviderDefinitionOptions = {
   apiKey: string,
-  models?: ModelOptions[]
   client?: ProviderClient
 }
 
@@ -61,20 +90,26 @@ export type AddModelsOptions = {
   model: ModelOptions
 }
 
-export type ModelProvider = {
+export type ModeleSelection = {
   provider: ProviderState
   model: ModelState
+  settings: ModelSettings
 }
 
 export type Request = {
-  models: QueryModel[]
+  models?: QueryModel[]
+  context?: string
+  temperature?: number
 
   prompt: string
   options?: ProviderRequestOptions
 }
 
-export type PlainResponse = {
+export type ResponseResult = 'COMPLETE' | 'INCOMPLETE_MAX_TOKENS' | 'INCOMPLETE_UNKNOWN'
+
+export type ContentResponse = {
   text: string
+  result: ResponseResult
   sessionId?: string
 }
 
@@ -82,20 +117,81 @@ export type StreamResponse = ReadableStream & {
   sessionId?: string
 }
 
-export type Response = PlainResponse | StreamResponse
+export type Response = ContentResponse | StreamResponse
 
 export type ProviderState = {
   provider: Provider
   models: Models
 }
 
+export type ModelStatus = 'ready' | 'error'
+export type ModelStateErrorReason = 'NONE' | 'PROVIDER_RATE_LIMIT_ERROR' | 'PROVIDER_REQUEST_TIMEOUT_ERROR' | 'PROVIDER_REQUEST_STREAM_TIMEOUT_ERROR' | 'PROVIDER_RESPONSE_ERROR' | 'PROVIDER_RESPONSE_NO_CONTENT' | 'PROVIDER_EXCEEDED_QUOTA_ERROR'
+
 export type ModelState = {
   name: string
+
+  rateLimit: {
+    count: number
+    windowStart: number
+  },
+
+  state: {
+    status: ModelStatus
+    timestamp: number
+    reason: ModelStateErrorReason
+  }
+}
+
+export type TimeWindow = number | string
+
+export type AiLimits = {
+  maxTokens?: number
+  rate?: {
+    max: number
+    timeWindow: TimeWindow
+  }
+  requestTimeout?: number // provider request timeout in ms
+  retry?: {
+    max: number
+    interval: number
+  }
+  historyExpiration?: TimeWindow // history expiration time in ms
+}
+
+type StrictAiLimits = {
+  maxTokens?: number
+  rate: {
+    max: number
+    timeWindow: number // ms
+  }
+  requestTimeout: number // ms
+  retry: {
+    max: number
+    interval: number
+  }
+  historyExpiration: number // ms
+}
+
+export type AiRestore = {
+  rateLimit?: TimeWindow
+  retry?: TimeWindow
+  timeout?: TimeWindow
+  providerCommunicationError?: TimeWindow
+  providerExceededError?: TimeWindow
+}
+
+type StrictAiRestore = {
+  rateLimit: number // ms
+  retry: number // ms
+  timeout: number // ms
+  providerCommunicationError: number // ms
+  providerExceededError: number // ms
 }
 
 export class Ai {
-  options: AiOptions
+  options: StrictAiOptions
   logger: Logger
+  modelSettings: Record<string, ModelSettings>
   // @ts-expect-error
   storage: Storage
   // @ts-expect-error
@@ -104,13 +200,13 @@ export class Ai {
   history: History
 
   constructor (options: AiOptions) {
-    // TODO validate options
-    // warn missing limit values
-
-    this.options = options
+    this.options = this.validateOptions(options)
     this.logger = options.logger
+    this.modelSettings = {}
   }
 
+  // test: options must have all the values, default if not from options
+  // model state must be inited if not
   async init () {
     this.storage = await createStorage(this.options.storage)
     this.history = new History(this.storage)
@@ -118,149 +214,308 @@ export class Ai {
 
     for (const provider of Object.keys(this.options.providers)) {
       const p = provider as AiProvider
-
-      const providerState = {
-        provider: new OpenAIProvider({ logger: this.logger, ...this.options.providers[p] }, this.options.providers[p].client),
-        models: new Models(this.storage)
-      }
-
-      if (this.options.providers[p].models) {
-        for (const model of this.options.providers[p].models) {
-          const modelName = typeof model === 'string' ? model : model.name
-          this.updateModelState(modelName, providerState)
+      const options: ProviderOptions = {
+        logger: this.logger,
+        client: this.options.providers[p].client,
+        clientOptions: {
+          apiKey: this.options.providers[p].apiKey
         }
       }
 
-      this.providers.set(p, providerState)
-    }
-  }
-
-  async addModels (models: AddModelsOptions[]) {
-    const updates = []
-
-    for (const model of models) {
-      const providerState = this.providers.get(model.provider)
-      if (!providerState) {
-        this.logger.warn(`Provider ${model.provider} not found`)
-        // TODO error format
-        throw new Error(`Provider ${model.provider} not found`)
+      const providerState = {
+        // TODO generic provider
+        provider: new OpenAIProvider(options, options.client),
+        models: new Models(this.storage)
       }
 
-      const modelName = typeof model.model === 'string' ? model.model : model.model.name
-      updates.push(this.updateModelState(modelName, providerState))
+      try {
+        await providerState.provider.init()
+      } catch (error) {
+        this.logger.error({ error }, 'Provider init error')
+        throw error
+      }
+
+      const writes = []
+      // TODO batch ops
+      // Init models if not present
+      for (const model of this.options.models.filter(m => m.provider === p)) {
+        const modelName = typeof model === 'string' ? model : model.model
+        const modelState = await this.getModelState(modelName, providerState)
+        if (!modelState) {
+          const modelState = createModelState(modelName)
+          writes.push(this.setModelState(modelName, providerState, modelState, Date.now()))
+        }
+      }
+      await Promise.all(writes)
+
+      this.providers.set(p, providerState)
     }
 
-    await Promise.all(updates)
+    this.modelSettings = this.options.models.reduce((models: Record<string, ModelSettings>, model) => {
+      models[model.model] = {
+        limits: {
+          maxTokens: model.limits?.maxTokens,
+          rate: {
+            max: model.limits?.rate?.max ?? this.options.limits.rate.max,
+            timeWindow: parseTimeWindow(model.limits?.rate?.timeWindow ?? this.options.limits.rate.timeWindow)
+          }
+        },
+        restore: {
+          rateLimit: parseTimeWindow(model.restore?.rateLimit ?? this.options.restore.rateLimit),
+          retry: parseTimeWindow(model.restore?.retry ?? this.options.restore.retry),
+          timeout: parseTimeWindow(model.restore?.timeout ?? this.options.restore.timeout),
+          providerCommunicationError: parseTimeWindow(model.restore?.providerCommunicationError ?? this.options.restore.providerCommunicationError),
+          providerExceededError: parseTimeWindow(model.restore?.providerExceededError ?? this.options.restore.providerExceededError)
+        }
+      }
+      return models
+    }, {})
   }
 
-  async select (models: QueryModel[]): Promise<ModelProvider | undefined> {
-    // TODO real selection
-    const selectedModel = models[0]
-    let modelName: string
-    let providerName: AiProvider
+  // TODO
+  async close () {
+    // for (const provider of this.providers.values()) {
+    //   await provider.provider.close()
+    // }
+    // TODO close storage
+  }
 
-    if (typeof selectedModel === 'string') {
-      const [provider, model] = selectedModel.split(':')
-      providerName = provider as AiProvider
-      modelName = model
+  validateOptions (options: AiOptions): StrictAiOptions {
+    // TODO validate values
+
+    // warn missing max tokens
+
+    if (options.models && options.models.length < 1) {
+      throw new AiOptionsError('No models provided')
+    }
+
+    const limits = {
+      maxTokens: options.limits?.maxTokens,
+      rate: {
+        max: options.limits?.rate?.max ?? DEFAULT_RATE_LIMIT_MAX,
+        timeWindow: parseTimeWindow(options.limits?.rate?.timeWindow ?? DEFAULT_RATE_LIMIT_TIME_WINDOW)
+      },
+      requestTimeout: parseTimeWindow(options.limits?.requestTimeout ?? DEFAULT_REQUEST_TIMEOUT),
+      retry: {
+        max: options.limits?.retry?.max ?? DEFAULT_MAX_RETRIES,
+        interval: options.limits?.retry?.interval ?? DEFAULT_RETRY_INTERVAL
+      },
+      historyExpiration: parseTimeWindow(options.limits?.historyExpiration ?? DEFAULT_HISTORY_EXPIRATION)
+    }
+
+    const restore = {
+      rateLimit: parseTimeWindow(options.restore?.rateLimit ?? DEFAULT_RESTORE_RATE_LIMIT),
+      retry: parseTimeWindow(options.restore?.retry ?? DEFAULT_RESTORE_RETRY),
+      timeout: parseTimeWindow(options.restore?.timeout ?? DEFAULT_RESTORE_REQUEST_TIMEOUT),
+      providerCommunicationError: parseTimeWindow(options.restore?.providerCommunicationError ?? DEFAULT_RESTORE_PROVIDER_COMMUNICATION_ERROR),
+      providerExceededError: parseTimeWindow(options.restore?.providerExceededError ?? DEFAULT_RESTORE_PROVIDER_EXCEEDED_QUOTA_ERROR)
+    }
+
+    return {
+      logger: options.logger,
+      providers: options.providers,
+      storage: options.storage ?? DEFAULT_STORAGE,
+      limits,
+      restore,
+      models: options.models
+        ? options.models.map(model => ({
+          provider: model.provider,
+          model: model.model,
+          limits: model.limits,
+          restore: model.restore
+        }))
+        : []
+    }
+  }
+
+  /**
+   * Select a model from the list of models, depending on the provider and model state
+   * @param models - List of models to select from
+   * @returns Selected model with provider and limits
+   * TODO implement logic, for example round robin, random, least used, etc.
+   */
+  async selectModel (models: QueryModel[]): Promise<ModeleSelection | undefined> {
+    for (const model of models) {
+      let modelName: string
+      let providerName: AiProvider
+
+      if (typeof model === 'string') {
+        const [p, m] = model.split(':')
+        providerName = p as AiProvider
+        modelName = m
+      } else {
+        providerName = model.provider
+        modelName = model.model
+      }
+
+      const provider = this.providers.get(providerName)
+      if (!provider) {
+        this.logger.warn(`Provider ${providerName} not found`)
+        continue
+      }
+
+      const modelState = await this.getModelState(modelName, provider)
+      if (!modelState) {
+        this.logger.warn(`Model ${modelName} not found for provider ${providerName}`)
+        continue
+      }
+
+      if (modelState.state.status !== 'ready') {
+        if (this.restoreModelState(modelState, this.modelSettings[modelName].restore)) {
+          this.setModelState(modelName, provider, modelState, Date.now())
+          return { provider, model: modelState, settings: this.modelSettings[modelName] }
+        }
+        this.logger.debug({ modelState }, `Model ${modelName} is not ready for provider ${providerName}`)
+        continue
+      } else {
+        return { provider, model: modelState, settings: this.modelSettings[modelName] }
+      }
+    }
+  }
+
+  restoreModelState (modelState: ModelState, restore: ModelRestore): boolean {
+    let wait: number
+    if (modelState.state.reason === 'PROVIDER_RATE_LIMIT_ERROR') {
+      wait = restore.rateLimit
+    } else if (modelState.state.reason === 'PROVIDER_REQUEST_TIMEOUT_ERROR' || modelState.state.reason === 'PROVIDER_REQUEST_STREAM_TIMEOUT_ERROR') {
+      wait = restore.timeout
+    } else if (modelState.state.reason === 'PROVIDER_RESPONSE_ERROR' || modelState.state.reason === 'PROVIDER_RESPONSE_NO_CONTENT') {
+      wait = restore.providerCommunicationError
+    } else if (modelState.state.reason === 'PROVIDER_EXCEEDED_QUOTA_ERROR') {
+      wait = restore.providerExceededError
     } else {
-      providerName = selectedModel.provider
-      modelName = selectedModel.model
+      return false
     }
 
-    const provider = this.providers.get(providerName)
-    if (!provider) {
-      this.logger.warn(`Provider ${providerName} not found`)
-      // TODO error format
-      throw new Error(`Provider ${providerName} not found`)
-    }
-
-    const model = await this.getModelState(modelName, provider)
-
-    return provider && model
-      ? { provider, model }
-      : undefined
+    return modelState.state.timestamp + wait < Date.now()
   }
 
   async request (request: Request): Promise<Response> {
-    // TODO validate query models
+    // TODO validate request: query models
 
-    const p = await this.select(request.models)
-    if (!p) {
-      this.logger.warn(`Provider not found for model: ${request.models[0]}`)
-      // TODO error format
-      throw new Error(`Provider not found for model: ${request.models[0]}`)
+    this.logger.debug({ request }, 'AI request')
+
+    const models = request.models ?? this.options.models
+    const selected = await this.selectModel(models)
+    if (!selected) {
+      this.logger.warn({ models }, 'No models available')
+      throw new ProviderNoModelsAvailableError(models)
     }
 
-    const { history, sessionId } = await this.getHistory(request.options?.history, request.options?.sessionId)
-
-    this.logger.debug({ history, sessionId }, 'ai request history and sessionId')
+    let history: ChatHistory | undefined, sessionId: string | undefined
+    try {
+      const h = await this.getHistory(request.options?.history, request.options?.sessionId)
+      history = h.history
+      sessionId = h.sessionId
+    } catch (err) {
+      this.logger.error({ err }, 'Failed to get history')
+      throw new HistoryGetError()
+    }
 
     const options = {
       context: request.options?.context,
       temperature: request.options?.temperature,
       stream: request.options?.stream,
       history,
-      limits: merge(DEFAULT_LIMITS, request.options?.limits ?? {}),
+      maxTokens: selected.settings.limits.maxTokens ?? request.options?.maxTokens ?? this.options.limits.maxTokens
     }
+
+    const rateLimit = {
+      max: selected.settings.limits.rate.max,
+      timeWindow: selected.settings.limits.rate.timeWindow
+    }
+
+    const operationTimestamp = Date.now()
 
     let response!: Response
-    let error: Error | undefined
-    let attempts = 0
-    let retry
-    const retryInterval = options.limits.retry?.interval!
-    do {
-      error = undefined
-      try {
-        response = await p.provider.provider.request(p.model.name, request.prompt, options)
-        break
-      } catch (err) {
-        // TODO format return error with code
-        error = err as Error
+    try {
+      await this.checkRateLimit(selected, rateLimit)
+      await this.updateModelStateRateLimit(selected.model.name, selected.provider, selected.model.rateLimit)
 
-        retry = options.limits.retry && attempts++ < options.limits.retry.max
-        if (retry) {
-          this.logger.warn({ err }, `Failed to request from provider, retrying in ${retryInterval} ms...`)
-          await wait(retryInterval)
+      let err: FastifyError | undefined
+      let attempts = 0
+      let retry
+      const retryInterval = this.options.limits.retry.interval
+      do {
+        err = undefined
+        try {
+          response = await this.requestTimeout(
+            selected.provider.provider.request(selected.model.name, request.prompt, options),
+            this.options.limits.requestTimeout,
+            options.stream
+          )
+          break
+        } catch (error: any) { // TODO fix type
+          err = error
+
+          // do not retry on timeout errors
+          if (error.code && (error.code === 'PROVIDER_REQUEST_TIMEOUT_ERROR' || error.code === 'PROVIDER_REQUEST_STREAM_TIMEOUT_ERROR')) {
+            break
+          }
+
+          retry = this.options.limits.retry && attempts++ < this.options.limits.retry.max
+          if (retry) {
+            this.logger.warn({ err }, `Failed to request from provider, retrying in ${retryInterval} ms...`)
+            await wait(retryInterval)
+          } else {
+            this.logger.error({ err }, `Failed to request from provider after ${attempts} attempts`)
+          }
+        }
+      } while (retry && err)
+
+      if (err) {
+        throw err
+      }
+
+
+      // @ts-ignore
+      if (typeof response.pipe === 'function' || response instanceof ReadableStream) {
+        if (sessionId) {
+          const streamResponse = response as ReadableStream
+          const [responseStream, historyStream] = streamResponse.tee()
+
+          // Process the cloned stream in background to accumulate response for history
+          processStream(historyStream)
+            .then(response => {
+              if (!response) {
+                this.logger.error({ err }, 'Failed to clone stream, skipping history store')
+                return
+              }
+              this.history.push(sessionId as string, { prompt: request.prompt, response }, this.options.limits.historyExpiration)
+            })
+            // processStream should not throw
+            .catch(() => { });
+
+          // Attach sessionId to the stream for the user
+          (responseStream as StreamResponse).sessionId = sessionId
+          return responseStream
         }
       }
-    } while (retry && error)
 
-    if (error) {
-      this.logger.error({ err: error }, 'Failed to request from provider')
-      throw error
-    }
-
-    if (response instanceof ReadableStream) {
+      const contentResponse = response as ContentResponse
       if (sessionId) {
-        const [responseStream, historyStream] = response.tee()
-
-        // Process the cloned stream in background to accumulate response for history
-        processStream(historyStream)
-          .then(response => {
-            return this.history.push(sessionId, { prompt: request.prompt, response })
-          })
-          .catch(err => {
-            // TODO error format
-            this.logger.error({ err }, 'Failed to store stream response in history')
-            // TODO reply.status(500).send('...')
-          });
-
-        // Attach sessionId to the stream for the user
-        (responseStream as StreamResponse).sessionId = sessionId
-        return responseStream
+        await this.history.push(sessionId, { prompt: request.prompt, response: contentResponse.text }, this.options.limits.historyExpiration)
+        contentResponse.sessionId = sessionId
+      }
+    } catch (err: any) { // TODO fix type
+      // skip storage errors, update state if errors are one of:
+      if (err.code !== 'PROVIDER_RATE_LIMIT_ERROR' &&
+        err.code !== 'PROVIDER_REQUEST_TIMEOUT_ERROR' &&
+        err.code !== 'PROVIDER_REQUEST_STREAM_TIMEOUT_ERROR' &&
+        err.code !== 'PROVIDER_RESPONSE_ERROR' &&
+        err.code !== 'PROVIDER_RESPONSE_NO_CONTENT' &&
+        err.code !== 'PROVIDER_EXCEEDED_QUOTA_ERROR'
+      ) {
+        throw err
       }
 
-      return response
-    } else {
-      if (sessionId) {
-        await this.history.push(sessionId, { prompt: request.prompt, response: response.text })
-        // TODO options.limits.historyExpiration
-        response.sessionId = sessionId
-      }
-    }
+      selected.model.state.status = 'error'
+      selected.model.state.timestamp = Date.now()
+      selected.model.state.reason = err.code
 
-    // TODO update state on error, set model state to error
+      this.setModelState(selected.model.name, selected.provider, selected.model, operationTimestamp)
+      throw err
+    }
 
     return response
   }
@@ -268,18 +523,20 @@ export class Ai {
   // get history from storage if sessionId is a value
   // TODO lock with auth
 
-  async getHistory (history: ChatHistory | undefined, sessionId: string | boolean | undefined) {
+  async getHistory (history: ChatHistory | undefined, sessionId: string | boolean | undefined): Promise<{ history: ChatHistory | undefined, sessionId: string | undefined }> {
+    // TODO try/catch
     if (history) {
       return { history, sessionId: undefined }
     }
 
+    let sessionIdValue: string | undefined
     if (sessionId === true) {
-      sessionId = await this.createSessionId()
+      sessionIdValue = await this.createSessionId()
     } else if (sessionId) {
       history = await this.history.range(sessionId)
     }
 
-    return { history, sessionId }
+    return { history, sessionId: sessionIdValue }
   }
 
   // TODO add auth
@@ -287,14 +544,161 @@ export class Ai {
     return randomUUID()
   }
 
-  async updateModelState (modelName: string, providerState: ProviderState) {
-    // TODO try/catch
-    await providerState.models.set(`${providerState.provider.name}:${modelName}`, { name: modelName }) // TODO options, model state
+  async setModelState (modelName: string, providerState: ProviderState, modelState: ModelState, operationTimestamp: number) {
+    if (!modelState) {
+      throw new ModelStateError('Model state is required')
+    }
+
+    // updates could be concurrent, handle by state.timestamp
+    // TODO these ops should be atomic
+    const key = `${providerState.provider.name}:${modelName}`
+    const m = await providerState.models.get(key)
+
+    // update when:
+    // - the current state is older than the stored one
+    // - the state is not stored
+    // - the current state is in error and the operation don't override the error
+    if (!m || m.state.timestamp < operationTimestamp) {
+      await providerState.models.set(key, modelState)
+      return
+    }
+
+    if (modelState.state.status === 'ready' &&
+      m.state.status !== 'ready' &&
+      this.restoreModelState(m, this.modelSettings[modelName].restore)) {
+      await providerState.models.set(key, modelState)
+    }
   }
 
   async getModelState (modelName: string, provider: ProviderState): Promise<ModelState | undefined> {
-    // TODO try/catch
     return await provider.models.get(`${provider.provider.name}:${modelName}`)
+  }
+
+  /**
+   * Update only the rate limit for a model, not the whole state
+   * @param modelName - The name of the model
+   * @param providerState - The provider state
+   * @param rateLimitState - The rate limit state
+   * TODO use a different key to avoid to get and set the whole state
+   */
+  async updateModelStateRateLimit (modelName: string, providerState: ProviderState, rateLimitState: ModelState['rateLimit']) {
+    const key = `${providerState.provider.name}:${modelName}`
+    const m = await providerState.models.get(key)
+
+    m.rateLimit = rateLimitState
+    await providerState.models.set(key, m)
+  }
+
+  async checkRateLimit (model: ModeleSelection, rateLimit: { max: number, timeWindow: number }) {
+    const now = Date.now()
+    const windowMs = rateLimit.timeWindow
+    const modelState = model.model
+
+    // Check if we're still in the same time window
+    if (now - modelState.rateLimit.windowStart < windowMs) {
+      // Same window - check if we've exceeded the limit
+      if (modelState.rateLimit.count >= rateLimit.max) {
+        const resetTime = modelState.rateLimit.windowStart + windowMs
+        const waitTime = Math.ceil((resetTime - now) / 1000)
+        throw new ProviderRateLimitError(waitTime)
+      }
+
+      // Increment count
+      modelState.rateLimit.count++
+    } else {
+      // New window - reset counter
+      modelState.rateLimit = {
+        count: 1,
+        windowStart: now
+      }
+    }
+  }
+
+  async requestTimeout (promise: Promise<Response>, timeout: number, isStream?: boolean): Promise<Response> {
+    let timer: NodeJS.Timeout
+    if (isStream) {
+      // For streaming responses, we need to wrap the stream to handle timeout between chunks
+      const response = await Promise.race([
+        promise.then((response) => { timer && clearTimeout(timer); return response }),
+        new Promise<never>((_resolve, reject) => {
+          timer = setTimeout(() => { reject(new ProviderRequestStreamTimeoutError(timeout)) }, timeout).unref()
+        })
+      ])
+
+      if (response instanceof ReadableStream) {
+        return this.wrapStreamWithTimeout(response, timeout)
+      }
+
+      return response
+    } else {
+      // For non-streaming responses, use a simple timeout
+      return await Promise.race([
+        promise.then((response) => { timer && clearTimeout(timer); return response }),
+        new Promise<never>((_resolve, reject) => {
+          timer = setTimeout(() => reject(ProviderRequestTimeoutError(timeout)), timeout).unref()
+        })
+      ])
+    }
+  }
+
+  private wrapStreamWithTimeout (stream: ReadableStream, timeout: number): ReadableStream {
+    const reader = stream.getReader()
+    let timeoutId: NodeJS.Timeout | undefined
+
+    return new ReadableStream({
+      async start (controller) {
+        const resetTimeout = async () => {
+          if (timeoutId) {
+            clearTimeout(timeoutId)
+          }
+
+          timeoutId = setTimeout(() => {
+            controller.error(new ProviderRequestStreamTimeoutError(timeout))
+            reader.releaseLock()
+          }, timeout).unref()
+        }
+
+        await resetTimeout()
+
+        try {
+          while (true) {
+            const { done, value } = await reader.read()
+
+            if (done) {
+              if (timeoutId) {
+                clearTimeout(timeoutId)
+              }
+              controller.close()
+              break
+            }
+
+            // Reset timeout on each chunk
+            await resetTimeout()
+            controller.enqueue(value)
+          }
+        } catch (error) {
+          if (timeoutId) {
+            clearTimeout(timeoutId)
+          }
+          controller.error(error)
+        }
+      },
+
+      cancel (reason) {
+        if (timeoutId) {
+          clearTimeout(timeoutId)
+        }
+        return reader.cancel(reason)
+      }
+    })
+  }
+}
+
+function createModelState (modelName: string): ModelState {
+  return {
+    name: modelName,
+    rateLimit: { count: 0, windowStart: 0 },
+    state: { status: 'ready', timestamp: 0, reason: 'NONE' }
   }
 }
 
@@ -321,8 +725,8 @@ class History {
     this.storage = storage
   }
 
-  async push (key: string, value: any) {
-    return await this.storage.listPush(key, value)
+  async push (key: string, value: any, expiration: number) {
+    return await this.storage.listPush(key, value, expiration)
   }
 
   async range (key: string) {

@@ -1,5 +1,6 @@
 import { Redis } from 'iovalkey'
 import type { StorageOptions, Storage, ValkeyOptions } from './index.ts'
+import { StorageGetError, StorageListPushError, StorageListRangeError, StorageSetError } from '../errors.ts'
 
 const defaultValkeyOptions: ValkeyOptions = {
   host: 'localhost',
@@ -44,7 +45,7 @@ export class ValkeyStorage implements Storage {
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error)
-      throw new Error(`Failed to get value for key "${key}": ${errorMessage}`)
+      throw new StorageGetError(key, errorMessage)
     }
   }
 
@@ -54,16 +55,27 @@ export class ValkeyStorage implements Storage {
       await this.client.set(key, serializedValue)
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error)
-      throw new Error(`Failed to set value for key "${key}": ${errorMessage}`)
+      throw new StorageSetError(key, errorMessage)
     }
   }
 
-  async listPush (key: string, value: any) {
-    await this.client.lpush(key, JSON.stringify(value))
+  async listPush (key: string, value: any, expiration: number) {
+    try {
+      await this.client.lpush(key, JSON.stringify(value))
+      await this.client.expire(key, expiration / 1000)
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      throw new StorageListPushError(key, errorMessage)
+    }
   }
 
   async listRange (key: string) {
-    const list = await this.client.lrange(key, 0, -1)
-    return list.map(item => JSON.parse(item))
+    try {
+      const list = await this.client.lrange(key, 0, -1)
+      return list.map(item => JSON.parse(item))
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      throw new StorageListRangeError(key, errorMessage)
+    }
   }
 }

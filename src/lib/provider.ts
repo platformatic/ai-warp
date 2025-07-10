@@ -1,20 +1,21 @@
-import createError from '@fastify/error'
-import type { AiProvider, PlainResponse } from './ai.ts'
-import type { AiLimits } from '../plugins/ai.ts'
+import type { Logger } from 'pino'
+import type { AiProvider, ContentResponse } from './ai.ts'
 
 export type ChatHistory = {
   prompt: string
   response: string
 }[]
 
+export type SessionId = string | boolean
+
 export type ProviderRequestOptions = {
   context?: string
   history?: ChatHistory
-  sessionId?: string | boolean
+  sessionId?: SessionId
   temperature?: number
-  limits?: AiLimits
   stream?: boolean
   onStreamChunk?: (response: string) => Promise<string>
+  maxTokens?: number
 }
 
 export interface Provider {
@@ -22,17 +23,34 @@ export interface Provider {
   request: (model: string, prompt: string, options: ProviderRequestOptions) => Promise<ProviderResponse>
 }
 
-export interface ProviderClient {
-  // OpenAI client
-  chat: {
-    completions: {
-      create: (request: any) => Promise<any>
-    }
-  }
+export interface ProviderOptions {
+  logger: Logger
+  client?: ProviderClient
+  clientOptions?: ProviderClientOptions
 }
 
-export type ProviderResponse = PlainResponse | ReadableStream
+export interface ProviderClientOptions {
+  apiKey: string
+  baseUrl?: string
+}
+
+export type ProviderClientContext = {
+  logger: Logger
+}
+
+export type ProviderClientRequest = {
+  model: string
+  prompt: string
+  options: ProviderRequestOptions
+}
+
+export interface ProviderClient {
+  init: (options: ProviderClientOptions | undefined, context: ProviderClientContext) => Promise<any>
+  close: (api: any, context: ProviderClientContext) => Promise<void>
+  request: (api: any, request: any, context: ProviderClientContext) => Promise<any>
+  stream: (api: any, request: any, context: ProviderClientContext) => Promise<any>
+}
+
+export type ProviderResponse = ContentResponse | ReadableStream
 
 export type StreamChunkCallback = (response: string) => Promise<string>
-export const NoContentError = createError<[string]>('NO_CONTENT', '%s didn\'t return any content')
-export const InvalidTypeError = createError<string>('DESERIALIZING_ERROR', 'Deserializing error: %s', 500)
