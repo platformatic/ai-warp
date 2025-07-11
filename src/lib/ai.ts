@@ -11,7 +11,7 @@ import { AiOptionsError, HistoryGetError, ModelStateError, ProviderNoModelsAvail
 import { verifyJWT, type AuthOptions } from './auth.ts'
 
 // supported providers
-export type AiProvider = 'openai'
+export type AiProvider = 'openai' | 'deepseek'
 
 export const DEFAULT_STORAGE: StorageOptions = {
   type: 'memory'
@@ -64,7 +64,7 @@ type QueryModel = string | Model
 // TODO doc
 export type AiOptions = {
   logger: Logger
-  providers: Record<AiProvider, ProviderDefinitionOptions>
+  providers: { [key in AiProvider]?: ProviderDefinitionOptions }
   storage?: StorageOptions
   auth?: AuthOptions
   limits?: AiLimits
@@ -220,9 +220,9 @@ export class Ai {
       const p = provider as AiProvider
       const options: ProviderOptions = {
         logger: this.logger,
-        client: this.options.providers[p].client,
+        client: this.options.providers[p]?.client,
         clientOptions: {
-          apiKey: this.options.providers[p].apiKey
+          apiKey: this.options.providers[p]?.apiKey ?? ''
         }
       }
 
