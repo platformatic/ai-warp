@@ -50,7 +50,7 @@ export default fp(async (fastify, options: AiPluginOptions) => {
 
   fastify.decorate('ai', {
     request: async (request: FastifyAiRequest, reply: FastifyReply): Promise<FastifyAiResponse> => {
-      // TODO validate request params
+      // TODO validate request
       // sessionId and history are mutually exclusive
 
       const jwt = options.auth

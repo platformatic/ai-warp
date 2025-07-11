@@ -7,7 +7,7 @@ import { OpenAIProvider } from '../providers/openai.ts'
 import type { ChatHistory, Provider, ProviderClient, ProviderOptions, ProviderRequestOptions } from './provider.ts'
 import { createStorage, type Storage, type StorageOptions } from './storage/index.ts'
 import { parseTimeWindow, processStream } from './utils.ts'
-import { AiOptionsError, HistoryGetError, ModelStateError, ProviderNoModelsAvailableError, ProviderRateLimitError, ProviderRequestStreamTimeoutError, ProviderRequestTimeoutError } from './errors.ts'
+import { AiOptionsError, HistoryGetError, ModelStateError, OptionError, ProviderNoModelsAvailableError, ProviderRateLimitError, ProviderRequestStreamTimeoutError, ProviderRequestTimeoutError } from './errors.ts'
 import { verifyJWT, type AuthOptions } from './auth.ts'
 
 // supported providers
@@ -261,15 +261,15 @@ export class Ai {
           maxTokens: model.limits?.maxTokens,
           rate: {
             max: model.limits?.rate?.max ?? this.options.limits.rate.max,
-            timeWindow: parseTimeWindow(model.limits?.rate?.timeWindow ?? this.options.limits.rate.timeWindow)
+            timeWindow: parseTimeWindow(model.limits?.rate?.timeWindow ?? this.options.limits.rate.timeWindow, 'model.limits.rate.timeWindow')
           }
         },
         restore: {
-          rateLimit: parseTimeWindow(model.restore?.rateLimit ?? this.options.restore.rateLimit),
-          retry: parseTimeWindow(model.restore?.retry ?? this.options.restore.retry),
-          timeout: parseTimeWindow(model.restore?.timeout ?? this.options.restore.timeout),
-          providerCommunicationError: parseTimeWindow(model.restore?.providerCommunicationError ?? this.options.restore.providerCommunicationError),
-          providerExceededError: parseTimeWindow(model.restore?.providerExceededError ?? this.options.restore.providerExceededError)
+          rateLimit: parseTimeWindow(model.restore?.rateLimit ?? this.options.restore.rateLimit, 'model.restore.rateLimit'),
+          retry: parseTimeWindow(model.restore?.retry ?? this.options.restore.retry, 'model.restore.retry'),
+          timeout: parseTimeWindow(model.restore?.timeout ?? this.options.restore.timeout, 'model.restore.timeout'),
+          providerCommunicationError: parseTimeWindow(model.restore?.providerCommunicationError ?? this.options.restore.providerCommunicationError, 'model.restore.providerCommunicationError'),
+          providerExceededError: parseTimeWindow(model.restore?.providerExceededError ?? this.options.restore.providerExceededError, 'model.restore.providerExceededError')
         }
       }
       return models
@@ -285,34 +285,82 @@ export class Ai {
   }
 
   validateOptions (options: AiOptions): StrictAiOptions {
-    // TODO validate values
+    if (!options.logger) {
+      throw new OptionError('logger is required')
+    }
 
-    // warn missing max tokens
+    // no providers
+    if (!options.providers || Object.keys(options.providers).length === 0) {
+      throw new OptionError('at least one provider is required')
+    }
 
-    if (options.models && options.models.length < 1) {
-      throw new AiOptionsError('No models provided')
+    // no models
+    if (!options.models || options.models.length === 0) {
+      throw new OptionError('at least one model is required')
+    }
+
+    // no auth secret
+    if (options.auth && !options.auth.jwt) {
+      throw new OptionError('auth secret is required')
+    }
+
+    // no valid limits values
+    if (options.limits) {
+      if (options.limits.maxTokens && typeof options.limits.maxTokens !== 'number' && options.limits.maxTokens < 0) {
+        throw new OptionError('maxTokens must be a positive number')
+      }
+
+      if (options.limits.rate && typeof options.limits.rate.max !== 'number' && options.limits.rate.max < 0) {
+        throw new OptionError('rate.max must be a positive number')
+      }
+
+      if (options.limits.retry && typeof options.limits.retry.max !== 'number' && options.limits.retry.max < 0) {
+        throw new OptionError('retry.max must be a positive number')
+      }
+
+      if (options.limits.retry && typeof options.limits.retry.interval !== 'number' && options.limits.retry.interval < 0) {
+        throw new OptionError('retry.interval must be a positive number')
+      }
+    }
+
+    // models
+    for (const model of options.models) {
+      if (model.limits) {
+        if (model.limits.maxTokens && typeof model.limits.maxTokens !== 'number' && model.limits.maxTokens < 0) {
+          throw new OptionError('model.limits.maxTokens must be a positive number')
+        }
+
+        if (model.limits.rate && typeof model.limits.rate.max !== 'number' && model.limits.rate.max < 0) {
+          throw new OptionError('model.limits.rate.max must be a positive number')
+        }
+      }
+    }
+
+    // warn on missing max tokens in options
+    if (options.limits?.maxTokens) {
+      this.logger.warn('maxTokens is not set and will be ignored')
     }
 
     const limits = {
       maxTokens: options.limits?.maxTokens,
       rate: {
         max: options.limits?.rate?.max ?? DEFAULT_RATE_LIMIT_MAX,
-        timeWindow: parseTimeWindow(options.limits?.rate?.timeWindow ?? DEFAULT_RATE_LIMIT_TIME_WINDOW)
+        timeWindow: parseTimeWindow(options.limits?.rate?.timeWindow ?? DEFAULT_RATE_LIMIT_TIME_WINDOW, 'limits.rate.timeWindow')
       },
-      requestTimeout: parseTimeWindow(options.limits?.requestTimeout ?? DEFAULT_REQUEST_TIMEOUT),
+      requestTimeout: parseTimeWindow(options.limits?.requestTimeout ?? DEFAULT_REQUEST_TIMEOUT, 'limits.requestTimeout'),
       retry: {
         max: options.limits?.retry?.max ?? DEFAULT_MAX_RETRIES,
         interval: options.limits?.retry?.interval ?? DEFAULT_RETRY_INTERVAL
       },
-      historyExpiration: parseTimeWindow(options.limits?.historyExpiration ?? DEFAULT_HISTORY_EXPIRATION)
+      historyExpiration: parseTimeWindow(options.limits?.historyExpiration ?? DEFAULT_HISTORY_EXPIRATION, 'limits.historyExpiration')
     }
 
     const restore = {
-      rateLimit: parseTimeWindow(options.restore?.rateLimit ?? DEFAULT_RESTORE_RATE_LIMIT),
-      retry: parseTimeWindow(options.restore?.retry ?? DEFAULT_RESTORE_RETRY),
-      timeout: parseTimeWindow(options.restore?.timeout ?? DEFAULT_RESTORE_REQUEST_TIMEOUT),
-      providerCommunicationError: parseTimeWindow(options.restore?.providerCommunicationError ?? DEFAULT_RESTORE_PROVIDER_COMMUNICATION_ERROR),
-      providerExceededError: parseTimeWindow(options.restore?.providerExceededError ?? DEFAULT_RESTORE_PROVIDER_EXCEEDED_QUOTA_ERROR)
+      rateLimit: parseTimeWindow(options.restore?.rateLimit ?? DEFAULT_RESTORE_RATE_LIMIT, 'restore.rateLimit'),
+      retry: parseTimeWindow(options.restore?.retry ?? DEFAULT_RESTORE_RETRY, 'restore.retry'),
+      timeout: parseTimeWindow(options.restore?.timeout ?? DEFAULT_RESTORE_REQUEST_TIMEOUT, 'restore.timeout'),
+      providerCommunicationError: parseTimeWindow(options.restore?.providerCommunicationError ?? DEFAULT_RESTORE_PROVIDER_COMMUNICATION_ERROR, 'restore.providerCommunicationError'),
+      providerExceededError: parseTimeWindow(options.restore?.providerExceededError ?? DEFAULT_RESTORE_PROVIDER_EXCEEDED_QUOTA_ERROR, 'restore.providerExceededError')
     }
 
     return {
@@ -405,7 +453,8 @@ export class Ai {
   }
 
   async request (request: Request): Promise<Response> {
-    // TODO validate request: query models
+    // TODO validate request
+    // check query models are valid
 
     this.logger.debug({ request }, 'AI request')
 

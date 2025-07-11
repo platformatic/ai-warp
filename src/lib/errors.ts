@@ -23,7 +23,8 @@ export const StorageSetError = createError<string>('STORAGE_SET_ERROR', 'Failed 
 export const StorageListPushError = createError<string>('STORAGE_LIST_PUSH_ERROR', 'Failed to list push value for key "%s" : %s')
 export const StorageListRangeError = createError<string>('STORAGE_LIST_RANGE_ERROR', 'Failed to list range for key "%s" : %s')
 
-export const InvalidTimeWindowInputError = createError<string>('INVALID_TIME_WINDOW_INPUT_ERROR', 'Invalid time window %s')
+export const InvalidTimeWindowNumberInputError = createError<[string, number]>('INVALID_TIME_WINDOW_NUMBER_INPUT_ERROR', 'Invalid time window %s for %s')
+export const InvalidTimeWindowStringInputError = createError<[string, string]>('INVALID_TIME_WINDOW_STRING_INPUT_ERROR', 'Invalid time window %s for %s')
 export const InvalidTimeWindowUnitError = createError<string>('INVALID_TIME_WINDOW_UNIT_ERROR', 'Unsupported time unit %s')
 
 export const DeserializingInvalidTypeError = createError<string>('DESERIALIZING_INVALID_TYPE_ERROR', 'Deserializing error: %s', 500)
@@ -31,3 +32,5 @@ export const DeserializingInvalidTypeError = createError<string>('DESERIALIZING_
 export const AuthenticationRequiredError = createError<string>('AUTHENTICATION_REQUIRED_ERROR', 'Authentication is required', 401)
 export const AuthenticationInvalidTokenError = createError<string>('AUTHENTICATION_INVALID_TOKEN_ERROR', 'Invalid authentication token: %s', 401)
 export const AuthenticationTokenExpiredError = createError<string>('AUTHENTICATION_TOKEN_EXPIRED_ERROR', 'Authentication token has expired', 401)
+
+export const OptionError = createError<string>('OPTION_ERROR', 'Option error: %s')

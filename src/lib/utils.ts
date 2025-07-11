@@ -1,4 +1,4 @@
-import { InvalidTimeWindowInputError, InvalidTimeWindowUnitError } from './errors.ts'
+import { InvalidTimeWindowNumberInputError, InvalidTimeWindowStringInputError, InvalidTimeWindowUnitError } from './errors.ts'
 import { decodeEventStream } from './event.ts'
 
 /**
@@ -39,14 +39,18 @@ export async function processStream (stream: ReadableStream): Promise<string | u
   }
 }
 
-export function parseTimeWindow (timeWindow: number | string): number {
+export function parseTimeWindow (timeWindow: number | string, key: string): number {
   if (typeof timeWindow === 'number') {
+    if (timeWindow < 0) {
+      throw new InvalidTimeWindowNumberInputError(key, timeWindow)
+    }
+
     return timeWindow
   }
 
   const match = timeWindow.match(/^(\d+)(ms|[smhd])$/)
   if (!match) {
-    throw new InvalidTimeWindowInputError(timeWindow)
+    throw new InvalidTimeWindowStringInputError(key, timeWindow)
   }
 
   const value = parseInt(match[1], 10)
