@@ -39,10 +39,10 @@ export async function processStream (stream: ReadableStream): Promise<string | u
   }
 }
 
-export function parseTimeWindow (timeWindow: number | string, key: string): number {
+export function parseTimeWindow (timeWindow: number | string, key?: string): number {
   if (typeof timeWindow === 'number') {
     if (timeWindow < 0) {
-      throw new InvalidTimeWindowNumberInputError(key, timeWindow)
+      throw new InvalidTimeWindowNumberInputError(key ?? '', timeWindow)
     }
 
     return timeWindow
@@ -50,7 +50,7 @@ export function parseTimeWindow (timeWindow: number | string, key: string): numb
 
   const match = timeWindow.match(/^(\d+)(ms|[smhd])$/)
   if (!match) {
-    throw new InvalidTimeWindowStringInputError(key, timeWindow)
+    throw new InvalidTimeWindowStringInputError(key ?? '', timeWindow)
   }
 
   const value = parseInt(match[1], 10)

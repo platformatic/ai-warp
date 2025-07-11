@@ -7,7 +7,7 @@ import { OpenAIProvider } from '../providers/openai.ts'
 import type { ChatHistory, Provider, ProviderClient, ProviderOptions, ProviderRequestOptions } from './provider.ts'
 import { createStorage, type Storage, type StorageOptions } from './storage/index.ts'
 import { parseTimeWindow, processStream } from './utils.ts'
-import { AiOptionsError, HistoryGetError, ModelStateError, OptionError, ProviderNoModelsAvailableError, ProviderRateLimitError, ProviderRequestStreamTimeoutError, ProviderRequestTimeoutError } from './errors.ts'
+import { HistoryGetError, ModelStateError, OptionError, ProviderNoModelsAvailableError, ProviderRateLimitError, ProviderRequestStreamTimeoutError, ProviderRequestTimeoutError } from './errors.ts'
 import { verifyJWT, type AuthOptions } from './auth.ts'
 
 // supported providers
@@ -330,15 +330,27 @@ export class Ai {
           throw new OptionError('model.limits.maxTokens must be a positive number')
         }
 
-        if (model.limits.rate && typeof model.limits.rate.max !== 'number' && model.limits.rate.max < 0) {
-          throw new OptionError('model.limits.rate.max must be a positive number')
+        if (model.limits.rate) {
+          if (typeof model.limits.rate.max !== 'number' && model.limits.rate.max < 0) {
+            throw new OptionError('model.limits.rate.max must be a positive number')
+          }
+
+          parseTimeWindow(model.limits.rate.timeWindow, 'model.limits.rate.timeWindow')
+        }
+
+        if (model.restore) {
+          model.restore.rateLimit && parseTimeWindow(model.restore.rateLimit, 'model.restore.rateLimit')
+          model.restore.retry && parseTimeWindow(model.restore.retry, 'model.restore.retry')
+          model.restore.timeout && parseTimeWindow(model.restore.timeout, 'model.restore.timeout')
+          model.restore.providerCommunicationError && parseTimeWindow(model.restore.providerCommunicationError, 'model.restore.providerCommunicationError')
+          model.restore.providerExceededError && parseTimeWindow(model.restore.providerExceededError, 'model.restore.providerExceededError')
         }
       }
     }
 
     // warn on missing max tokens in options
     if (options.limits?.maxTokens) {
-      this.logger.warn('maxTokens is not set and will be ignored')
+      options.logger.warn('maxTokens is not set and will be ignored')
     }
 
     const limits = {
