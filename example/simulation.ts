@@ -1,6 +1,6 @@
 import undici from 'undici'
+import jwt from 'jsonwebtoken'
 import { app } from './service.ts'
-import type { FastifyAiResponse } from '../src/plugins/ai.ts'
 import { decodeEventStream } from '../src/lib/event.ts'
 import type { ChatHistory } from '../src/lib/provider.ts'
 import type { ContentResponse } from '../src/lib/ai.ts'
@@ -99,6 +99,12 @@ const headers = {
 }
 
 async function main() {
+
+  if (!process.env.AUTH_JWT_SECRET) {
+    console.log('missing AUTH_JWT_SECRET')
+    process.exit(-1)
+  }
+
   const server = await app({ start: true, logger: { level: 'debug', transport: { target: 'pino-pretty' } } })
 
   for (const set of prompts) {
@@ -115,7 +121,11 @@ async function main() {
 
       const response = await undici.request(url, {
         method: 'POST',
-        headers,
+        headers: {
+          ...headers,
+          'Authorization': 'Bearer ' + jwt.sign({ user: 'test', exp:  Math.floor(Date.now() / 1000) + (60 * 60) }, 
+            process.env.AUTH_JWT_SECRET, { algorithm: 'HS256' })
+        },
         body: JSON.stringify({ prompt, history, stream: set.stream, sessionId })
       })
 

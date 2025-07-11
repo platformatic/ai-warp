@@ -1,11 +1,9 @@
 import fastify, { type FastifyRequest } from 'fastify'
 import ai from '../src/plugins/ai.ts'
 import type { PinoLoggerOptions } from 'fastify/types/logger.js'
-import type { ChatHistory, ProviderClient, ProviderClientContext, ProviderClientOptions, ProviderClientRequest } from '../src/lib/provider.ts'
+import type { ChatHistory } from '../src/lib/provider.ts'
 import type { StorageOptions } from '../src/lib/storage/index.ts'
 import type { Logger } from 'pino'
-import OpenAI from 'openai'
-import type { OpenAIRequest, OpenAIResponse } from '../src/providers/openai.ts'
 
 interface AppOptions {
   start?: boolean
@@ -41,6 +39,10 @@ export async function app({ start = false, logger }: AppOptions) {
     throw new Error('OPENAI_API_KEY is not set')
   }
 
+  if (!process.env.AUTH_JWT_SECRET) {
+    throw new Error('AUTH_JWT_SECRET is not set')
+  }
+
   await app.register(ai, {
     logger: app.log as Logger,
     providers: {
@@ -50,6 +52,12 @@ export async function app({ start = false, logger }: AppOptions) {
       }
     },
     storage: valkeyStorage,
+    auth: {
+      jwt: {
+        secret: process.env.AUTH_JWT_SECRET,
+        algorithm: 'HS256'
+      }
+    },
     limits: {
       maxTokens: 500,
       rate: {
@@ -97,7 +105,6 @@ export async function app({ start = false, logger }: AppOptions) {
   // const { prompt, context, maxTokens, temperature, sessionId } = request.body
 
   app.post('/chat', async (request: FastifyRequest<{ Body: ChatRequestBody }>, reply) => {
-    // TODO auth
     const { prompt, stream, history, sessionId } = request.body
 
     const response = await app.ai.request({

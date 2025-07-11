@@ -2,11 +2,13 @@ import { randomUUID } from 'node:crypto'
 import { setTimeout as wait } from 'node:timers/promises'
 import type { Logger } from 'pino'
 import type { FastifyError } from 'fastify'
+
 import { OpenAIProvider } from '../providers/openai.ts'
 import type { ChatHistory, Provider, ProviderClient, ProviderOptions, ProviderRequestOptions } from './provider.ts'
 import { createStorage, type Storage, type StorageOptions } from './storage/index.ts'
 import { parseTimeWindow, processStream } from './utils.ts'
 import { AiOptionsError, HistoryGetError, ModelStateError, ProviderNoModelsAvailableError, ProviderRateLimitError, ProviderRequestStreamTimeoutError, ProviderRequestTimeoutError } from './errors.ts'
+import { verifyJWT, type AuthOptions } from './auth.ts'
 
 // supported providers
 export type AiProvider = 'openai'
@@ -64,6 +66,7 @@ export type AiOptions = {
   logger: Logger
   providers: Record<AiProvider, ProviderDefinitionOptions>
   storage?: StorageOptions
+  auth?: AuthOptions
   limits?: AiLimits
   restore?: AiRestore
   models?: Model[]
@@ -103,6 +106,7 @@ export type Request = {
 
   prompt: string
   options?: ProviderRequestOptions
+  auth?: { jwt?: string }
 }
 
 export type ResponseResult = 'COMPLETE' | 'INCOMPLETE_MAX_TOKENS' | 'INCOMPLETE_UNKNOWN'
@@ -315,6 +319,7 @@ export class Ai {
       logger: options.logger,
       providers: options.providers,
       storage: options.storage ?? DEFAULT_STORAGE,
+      auth: options.auth,
       limits,
       restore,
       models: options.models
@@ -403,6 +408,11 @@ export class Ai {
     // TODO validate request: query models
 
     this.logger.debug({ request }, 'AI request')
+
+    // Check authentication if configured
+    if (this.options.auth) {
+      await verifyJWT(request.auth?.jwt, this.options.auth)
+    }
 
     const models = request.models ?? this.options.models
     const skipModels: string[] = []
