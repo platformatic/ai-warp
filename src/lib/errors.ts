@@ -29,8 +29,4 @@ export const InvalidTimeWindowUnitError = createError<string>('INVALID_TIME_WIND
 
 export const DeserializingInvalidTypeError = createError<string>('DESERIALIZING_INVALID_TYPE_ERROR', 'Deserializing error: %s', 500)
 
-export const AuthenticationRequiredError = createError<string>('AUTHENTICATION_REQUIRED_ERROR', 'Authentication is required', 401)
-export const AuthenticationInvalidTokenError = createError<string>('AUTHENTICATION_INVALID_TOKEN_ERROR', 'Invalid authentication token: %s', 401)
-export const AuthenticationTokenExpiredError = createError<string>('AUTHENTICATION_TOKEN_EXPIRED_ERROR', 'Authentication token has expired', 401)
-
 export const OptionError = createError<string>('OPTION_ERROR', 'Option error: %s')

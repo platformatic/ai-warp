@@ -195,21 +195,6 @@ test('validateOptions - should throw error when models is empty array', () => {
   })
 })
 
-test('validateOptions - should throw error when auth is provided without jwt secret', () => {
-  assert.throws(() => {
-    const _ai = new Ai({
-      logger,
-      providers: { openai: { apiKey } },
-      models: [{ provider: 'openai', model: 'gpt-4o-mini' }],
-      // @ts-ignore - intentionally missing jwt
-      auth: {}
-    })
-  }, {
-    name: 'FastifyError',
-    message: 'Option error: auth secret is required'
-  })
-})
-
 test('validateOptions - should successfully validate options with negative limits (current behavior)', () => {
   // Note: Current validation logic allows negative values due to incorrect && conditions
   const ai = new Ai({
@@ -279,21 +264,6 @@ test('validateOptions - should successfully validate minimal valid options', () 
   assert.equal(ai.options.restore.timeout, 60000) // 1m in ms
   assert.equal(ai.options.restore.providerCommunicationError, 60000) // 1m in ms
   assert.equal(ai.options.restore.providerExceededError, 600000) // 10m in ms
-})
-
-test('validateOptions - should successfully validate options with auth', () => {
-  const ai = new Ai({
-    logger,
-    providers: { openai: { apiKey } },
-    models: [{ provider: 'openai', model: 'gpt-4o-mini' }],
-    auth: {
-      jwt: {
-        secret: 'secret'
-      }
-    }
-  })
-
-  assert.equal(ai.options.auth?.jwt.secret, 'secret')
 })
 
 test('validateOptions - should successfully validate options with custom storage', () => {

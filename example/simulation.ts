@@ -97,12 +97,6 @@ const headers = {
 }
 
 async function main() {
-
-  if (!process.env.AUTH_JWT_SECRET) {
-    console.log('missing AUTH_JWT_SECRET')
-    process.exit(-1)
-  }
-
   const server = await app({ start: true, logger: { level: 'debug', transport: { target: 'pino-pretty' } } })
 
   for (const set of prompts) {
@@ -121,8 +115,7 @@ async function main() {
         method: 'POST',
         headers: {
           ...headers,
-          'Authorization': 'Bearer ' + jwt.sign({ user: 'test', exp:  Math.floor(Date.now() / 1000) + (60 * 60) }, 
-            process.env.AUTH_JWT_SECRET, { algorithm: 'HS256' })
+          // 'Authorization': 'Bearer ...'
         },
         body: JSON.stringify({ prompt, history, stream: set.stream, sessionId })
       })

@@ -8,7 +8,6 @@ import type { ChatHistory, Provider, ProviderClient, ProviderOptions, ProviderRe
 import { createStorage, type Storage, type StorageOptions } from './storage/index.ts'
 import { parseTimeWindow, processStream } from './utils.ts'
 import { HistoryGetError, ModelStateError, OptionError, ProviderNoModelsAvailableError, ProviderRateLimitError, ProviderRequestStreamTimeoutError, ProviderRequestTimeoutError } from './errors.ts'
-import { verifyJWT, type AuthOptions } from './auth.ts'
 
 // supported providers
 export type AiProvider = 'openai' | 'deepseek'
@@ -66,7 +65,6 @@ export type AiOptions = {
   logger: Logger
   providers: { [key in AiProvider]?: ProviderDefinitionOptions }
   storage?: StorageOptions
-  auth?: AuthOptions
   limits?: AiLimits
   restore?: AiRestore
   models?: Model[]
@@ -106,7 +104,6 @@ export type Request = {
 
   prompt: string
   options?: ProviderRequestOptions
-  auth?: { jwt?: string }
 }
 
 export type ResponseResult = 'COMPLETE' | 'INCOMPLETE_MAX_TOKENS' | 'INCOMPLETE_UNKNOWN'
@@ -299,11 +296,6 @@ export class Ai {
       throw new OptionError('at least one model is required')
     }
 
-    // no auth secret
-    if (options.auth && !options.auth.jwt) {
-      throw new OptionError('auth secret is required')
-    }
-
     // no valid limits values
     if (options.limits) {
       if (options.limits.maxTokens && typeof options.limits.maxTokens !== 'number' && options.limits.maxTokens < 0) {
@@ -379,7 +371,6 @@ export class Ai {
       logger: options.logger,
       providers: options.providers,
       storage: options.storage ?? DEFAULT_STORAGE,
-      auth: options.auth,
       limits,
       restore,
       models: options.models
@@ -498,11 +489,6 @@ export class Ai {
     const requestOptions = await this.validateRequest(request)
 
     this.logger.debug({ request }, 'AI request')
-
-    // Check authentication if configured
-    if (this.options.auth) {
-      await verifyJWT(request.auth?.jwt, this.options.auth)
-    }
 
     const models = request.models ?? this.options.models
     const skipModels: string[] = []
@@ -646,7 +632,7 @@ export class Ai {
     return response
   }
 
-  // TODO add auth
+  // TODO user grants
   async createSessionId () {
     return randomUUID()
   }

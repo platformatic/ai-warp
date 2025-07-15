@@ -39,10 +39,6 @@ export async function app({ start = false, logger }: AppOptions) {
     throw new Error('OPENAI_API_KEY is not set')
   }
 
-  if (!process.env.AUTH_JWT_SECRET) {
-    throw new Error('AUTH_JWT_SECRET is not set')
-  }
-
   await app.register(ai, {
     logger: app.log as Logger,
     providers: {
@@ -52,12 +48,6 @@ export async function app({ start = false, logger }: AppOptions) {
       }
     },
     storage: valkeyStorage,
-    auth: {
-      jwt: {
-        secret: process.env.AUTH_JWT_SECRET,
-        algorithm: 'HS256'
-      }
-    },
     limits: {
       maxTokens: 500,
       rate: {
