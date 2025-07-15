@@ -1,6 +1,6 @@
 import { test, mock } from 'node:test'
 import assert from 'node:assert'
-import { Ai, type ContentResponse } from '../src/lib/ai.ts'
+import { Ai, type AiContentResponse } from '../src/lib/ai.ts'
 import { mockOpenAiStream, consumeStream, createDummyClient } from './helper/helper.ts'
 import pino from 'pino'
 
@@ -33,7 +33,7 @@ test('should be able to perform a basic prompt', async () => {
   const response = await ai.request({
     models: ['openai:gpt-4o-mini'],
     prompt: 'Hello, how are you?'
-  }) as ContentResponse
+  }) as AiContentResponse
 
   assert.equal((response).text, 'All good')
 })
@@ -69,7 +69,7 @@ test('should be able to perform a prompt with options', async () => {
       temperature: 0.5,
       maxTokens: 1000,
     }
-  }) as ContentResponse
+  }) as AiContentResponse
 
   // @ts-ignore
   assert.deepEqual(client.request.mock.calls[0].arguments[1], {
@@ -192,7 +192,7 @@ test('should be able to perform a prompt with history', async () => {
         }
       ]
     }
-  }) as ContentResponse
+  }) as AiContentResponse
 
   // @ts-ignore
   assert.deepEqual(client.request.mock.calls[0].arguments[1], {

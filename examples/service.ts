@@ -40,7 +40,6 @@ export async function app({ start = false, logger }: AppOptions) {
   }
 
   await app.register(ai, {
-    logger: app.log as Logger,
     providers: {
       openai: {
         apiKey: process.env.OPENAI_API_KEY,
@@ -86,6 +85,11 @@ export async function app({ start = false, logger }: AppOptions) {
           providerCommunicationError: '30s',
           providerExceededError: '5m'
         },        
+      },
+
+      {
+        provider: 'openai',
+        model: 'gpt-4o',
       }
     ]
   })

@@ -2,6 +2,7 @@
   "name": "@platformatic/warp-example",
   "private": true,
   "version": "0.0.1",
+  "type": "module",
   "license": "Apache-2.0",
   "scripts": {
     "simulation": "node --env-file=.env --experimental-strip-types simulation.ts "
