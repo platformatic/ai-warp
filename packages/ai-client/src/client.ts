@@ -108,13 +108,28 @@ function parseEvent (eventText: string): ParsedEvent | null {
 }
 
 function convertEventToMessage (event: ParsedEvent): StreamMessage | null {
-  if (!event.event || !event.data) {
+  if (!event.data) {
     return null
   }
 
-  try {
-    const data = JSON.parse(event.data)
+  let data: any
+  let isPlainText = false
 
+  try {
+    data = JSON.parse(event.data)
+  } catch {
+    isPlainText = true
+    data = event.data.trim()
+  }
+
+  if (isPlainText) {
+    return {
+      type: 'content',
+      content: data
+    }
+  }
+
+  if (event.event) {
     switch (event.event) {
       case 'content':
         return {
@@ -137,8 +152,30 @@ function convertEventToMessage (event: ParsedEvent): StreamMessage | null {
       default:
         return null
     }
-  } catch (error) {
-    console.error('Failed to parse event data:', event.data, error)
+  } else {
+    if (data.error || data.message) {
+      return {
+        type: 'error',
+        error: new Error(data.error || data.message || 'Unknown error')
+      }
+    } else if (data.response) {
+      if (typeof data.response === 'object' && (data.response.model || data.response.usage || data.response.sessionId)) {
+        return {
+          type: 'done',
+          response: data.response as AskResponse
+        }
+      } else {
+        return {
+          type: 'content',
+          content: typeof data.response === 'string' ? data.response : data.response.content || ''
+        }
+      }
+    } else if (data.content) {
+      return {
+        type: 'content',
+        content: data.content
+      }
+    }
     return null
   }
 }

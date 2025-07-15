@@ -6,7 +6,8 @@ A TypeScript client for streaming AI responses from Platformatic AI services.
 
 - 🚀 **Streaming support** - Real-time streaming of AI responses
 - 🔧 **TypeScript first** - Full TypeScript support with type safety
-- 📡 **Server-Sent Events** - Handles AI provider's SSE format
+- 📡 **Server-Sent Events** - Handles both event-based and data-only SSE messages
+- 📄 **Flexible parsing** - Supports JSON and plain text data formats
 - 🎯 **Simple API** - Easy to use with async/await and for-await-of
 - ⚡ **Node.js streams** - Built on robust Node.js streaming primitives
 - 🛠️ **Error handling** - Comprehensive error handling for network and parsing errors
@@ -142,6 +143,30 @@ The stream yields `StreamMessage` objects with the following types:
 ### `client.close()`
 
 Closes the client and cleans up resources.
+
+## Server-Sent Events Support
+
+The client supports various SSE message formats:
+
+### Event-based Messages
+```
+event: content
+data: {"response": "Hello world"}
+
+event: end
+data: {"response": {"content": "Complete", "model": "gpt-4"}}
+```
+
+### Data-only Messages
+```
+data: {"response": "JSON content"}
+
+data: {"content": "Alternative JSON format"}
+
+data: Plain text content
+```
+
+All formats are automatically detected and processed appropriately.
 
 ## Error Handling
 
