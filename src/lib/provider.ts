@@ -1,12 +1,12 @@
 import type { Logger } from 'pino'
-import type { AiProvider, ContentResponse } from './ai.ts'
+import type { AiProvider, ResponseResult } from './ai.ts'
 
 export type ChatHistory = {
   prompt: string
   response: string
 }[]
 
-export type SessionId = string | boolean
+export type SessionId = string
 
 export type ProviderRequestOptions = {
   context?: string
@@ -44,6 +44,11 @@ export type ProviderClientRequest = {
   options: ProviderRequestOptions
 }
 
+export type ProviderContentResponse = {
+  text: string
+  result: ResponseResult
+}
+
 export interface ProviderClient {
   init: (options: ProviderClientOptions | undefined, context: ProviderClientContext) => Promise<any>
   close: (api: any, context: ProviderClientContext) => Promise<void>
@@ -51,6 +56,6 @@ export interface ProviderClient {
   stream: (api: any, request: any, context: ProviderClientContext) => Promise<any>
 }
 
-export type ProviderResponse = ContentResponse | ReadableStream
+export type ProviderResponse = ProviderContentResponse | ReadableStream
 
 export type StreamChunkCallback = (response: string) => Promise<string>

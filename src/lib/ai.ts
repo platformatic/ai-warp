@@ -4,7 +4,7 @@ import type { Logger } from 'pino'
 import type { FastifyError } from 'fastify'
 
 import { OpenAIProvider } from '../providers/openai.ts'
-import type { ChatHistory, Provider, ProviderClient, ProviderOptions, ProviderRequestOptions } from './provider.ts'
+import type { ChatHistory, Provider, ProviderClient, ProviderOptions, ProviderRequestOptions, ProviderResponse, SessionId } from './provider.ts'
 import { createStorage, type Storage, type StorageOptions } from './storage/index.ts'
 import { parseTimeWindow, processStream } from './utils.ts'
 import { HistoryGetError, ModelStateError, OptionError, ProviderNoModelsAvailableError, ProviderRateLimitError, ProviderRequestStreamTimeoutError, ProviderRequestTimeoutError } from './errors.ts'
@@ -114,11 +114,11 @@ export type ResponseResult = 'COMPLETE' | 'INCOMPLETE_MAX_TOKENS' | 'INCOMPLETE_
 export type ContentResponse = {
   text: string
   result: ResponseResult
-  sessionId?: string
+  sessionId: SessionId
 }
 
 export type StreamResponse = ReadableStream & {
-  sessionId?: string
+  sessionId: SessionId
 }
 
 export type Response = ContentResponse | StreamResponse
@@ -464,9 +464,38 @@ export class Ai {
     return modelState.state.timestamp + wait < Date.now()
   }
 
+  // TODO check query models
+  async validateRequest (request: Request) {
+    if (request.options?.history && request.options?.sessionId) {
+      throw new OptionError('history and sessionId cannot be used together')
+    }
+
+    const options = {
+      ...(request.options ?? {}),
+      sessionId: request.options?.sessionId,
+      history: request.options?.history
+    }
+
+    if (request.options?.sessionId) {
+      try {
+        options.history = await this.history.range(request.options.sessionId)
+        if (!options.history || options.history.length < 1) {
+          throw new OptionError('sessionId does not exist')
+        }
+      } catch (err: any) {
+        if (err.code === 'OPTION_ERROR') {
+          throw err
+        }
+        this.logger.error({ err }, 'Failed to get history')
+        throw new HistoryGetError()
+      }
+    }
+
+    return options
+  }
+
   async request (request: Request): Promise<Response> {
-    // TODO validate request
-    // check query models are valid
+    const requestOptions = await this.validateRequest(request)
 
     this.logger.debug({ request }, 'AI request')
 
@@ -484,27 +513,19 @@ export class Ai {
       throw new ProviderNoModelsAvailableError(models)
     }
 
-    let r!: Response
+    let response!: Response
+    const history: ChatHistory | undefined = requestOptions.history
+    const sessionId: SessionId = requestOptions.sessionId ?? await this.createSessionId()
 
     while (selected) {
       this.logger.debug({ model: selected.model.name }, 'Selected model')
 
-      let history: ChatHistory | undefined, sessionId: string | undefined
-      try {
-        const h = await this.getHistory(request.options?.history, request.options?.sessionId)
-        history = h.history
-        sessionId = h.sessionId
-      } catch (err) {
-        this.logger.error({ err }, 'Failed to get history')
-        throw new HistoryGetError()
-      }
-
       const options = {
-        context: request.options?.context,
-        temperature: request.options?.temperature,
-        stream: request.options?.stream,
+        context: requestOptions?.context,
+        temperature: requestOptions?.temperature,
+        stream: requestOptions?.stream,
         history,
-        maxTokens: selected.settings.limits.maxTokens ?? request.options?.maxTokens ?? this.options.limits.maxTokens
+        maxTokens: selected.settings.limits.maxTokens ?? requestOptions?.maxTokens ?? this.options.limits.maxTokens
       }
 
       const rateLimit = {
@@ -513,7 +534,7 @@ export class Ai {
       }
       const operationTimestamp = Date.now()
 
-      let response!: Response
+      let providerResponse!: ProviderResponse
       let err: FastifyError | undefined
       try {
         await this.checkRateLimit(selected, rateLimit)
@@ -525,7 +546,7 @@ export class Ai {
         do {
           err = undefined
           try {
-            response = await this.requestTimeout(
+            providerResponse = await this.requestTimeout(
               selected.provider.provider.request(selected.model.name, request.prompt, options),
               this.options.limits.requestTimeout,
               options.stream
@@ -548,47 +569,38 @@ export class Ai {
             }
           }
         } while (retry && err)
+        response = providerResponse as Response
 
         if (err) {
           throw err
         }
 
         // @ts-ignore
-        if (typeof response.pipe === 'function' || response instanceof ReadableStream) {
-          if (sessionId) {
-            const streamResponse = response as ReadableStream
-            const [responseStream, historyStream] = streamResponse.tee()
+        if (typeof providerResponse.pipe === 'function' || providerResponse instanceof ReadableStream) {
+          const [responseStream, historyStream] = (providerResponse as StreamResponse).tee()
 
-            // Process the cloned stream in background to accumulate response for history
-            processStream(historyStream)
-              .then(response => {
-                if (!response) {
-                  this.logger.error({ err }, 'Failed to clone stream, skipping history store')
-                  return
-                }
-                this.history.push(sessionId as string, { prompt: request.prompt, response }, this.options.limits.historyExpiration)
-              })
-            // processStream should not throw
-              .catch(() => { });
+          // Process the cloned stream in background to accumulate response for history
+          processStream(historyStream)
+            .then(response => {
+              if (!response) {
+                this.logger.error({ err }, 'Failed to clone stream, skipping history store')
+                return
+              }
+              this.history.push(sessionId, { prompt: request.prompt, response }, this.options.limits.historyExpiration)
+            })
+          // processStream should not throw
+            .catch(() => { });
 
-            // Attach sessionId to the stream for the user
-            (responseStream as StreamResponse).sessionId = sessionId
-            return responseStream
-          }
-          return response as StreamResponse
+          // Attach sessionId to the stream for the user
+          (responseStream as StreamResponse).sessionId = sessionId
+          return responseStream as StreamResponse
         }
 
-        const contentResponse = response as ContentResponse
-        if (sessionId) {
-          await this.history.push(sessionId, { prompt: request.prompt, response: contentResponse.text }, this.options.limits.historyExpiration)
-          contentResponse.sessionId = sessionId
-          return contentResponse
-        }
+        const contentResponse: ContentResponse = response as ContentResponse
+        contentResponse.sessionId = sessionId
+        await this.history.push(sessionId, { prompt: request.prompt, response: contentResponse.text }, this.options.limits.historyExpiration)
 
-        // never happen, but makes typescript happy
-        r = response
-
-        return response
+        return contentResponse
       } catch (error: any) { // TODO fix type
       // skip storage errors, update state if errors are one of:
         if (error.code !== 'PROVIDER_RATE_LIMIT_ERROR' &&
@@ -631,30 +643,7 @@ export class Ai {
     }
 
     // never happen, but makes typescript happy
-    return r
-  }
-
-  /**
-   * get history from storage if sessionId is a value
-   * TODO lock with auth
-   * @param history
-   * @param sessionId
-   * @returns
-   */
-  async getHistory (history: ChatHistory | undefined, sessionId: string | boolean | undefined): Promise<{ history: ChatHistory | undefined, sessionId: string | undefined }> {
-    // TODO try/catch
-    if (history) {
-      return { history, sessionId: undefined }
-    }
-
-    let sessionIdValue: string | undefined
-    if (sessionId === true) {
-      sessionIdValue = await this.createSessionId()
-    } else if (sessionId) {
-      history = await this.history.range(sessionId)
-    }
-
-    return { history, sessionId: sessionIdValue }
+    return response
   }
 
   // TODO add auth
@@ -732,7 +721,7 @@ export class Ai {
     }
   }
 
-  async requestTimeout (promise: Promise<Response>, timeout: number, isStream?: boolean): Promise<Response> {
+  async requestTimeout (promise: Promise<ProviderResponse>, timeout: number, isStream?: boolean): Promise<ProviderResponse> {
     let timer: NodeJS.Timeout
     if (isStream) {
       // For streaming responses, we need to wrap the stream to handle timeout between chunks
@@ -744,7 +733,7 @@ export class Ai {
       ])
 
       if (response instanceof ReadableStream) {
-        return this.wrapStreamWithTimeout(response, timeout)
+        return this.wrapStreamWithTimeout(response, timeout) as StreamResponse
       }
 
       return response
@@ -755,7 +744,7 @@ export class Ai {
         new Promise<never>((_resolve, reject) => {
           timer = setTimeout(() => reject(ProviderRequestTimeoutError(timeout)), timeout).unref()
         })
-      ])
+      ]) as ContentResponse
     }
   }
 

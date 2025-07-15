@@ -9,7 +9,7 @@ const url = 'http://localhost:3000/chat'
 
 type Prompt = {
   stream?: boolean
-  sessionId?: string | boolean
+  sessionId?: string
   history?: ChatHistory
   prompts: string[]
 }
@@ -70,7 +70,6 @@ Italy is home to many beautiful seaside towns that are perfect for a family vaca
     },
 
     {
-      sessionId: true, // start new session
       prompts: [
         'Can you help me to schedule a trip?',
         "I'd like to go on a nice sea town with my family in Italy",
@@ -85,7 +84,6 @@ Italy is home to many beautiful seaside towns that are perfect for a family vaca
     },
 
     {
-      sessionId: true, // start new session
       stream: true,
       prompts: [
         'Can you help me to schedule a trip?',

@@ -1,21 +1,144 @@
 import { test } from 'node:test'
 import assert from 'node:assert'
-import { Ai, DEFAULT_STORAGE, DEFAULT_RATE_LIMIT_MAX, DEFAULT_REQUEST_TIMEOUT, DEFAULT_MAX_RETRIES, DEFAULT_RETRY_INTERVAL } from '../src/lib/ai.ts'
-import { createDummyClient } from './helper/helper.ts'
+import { Ai, DEFAULT_STORAGE, DEFAULT_RATE_LIMIT_MAX, DEFAULT_REQUEST_TIMEOUT, DEFAULT_MAX_RETRIES, DEFAULT_RETRY_INTERVAL, type ContentResponse, type StreamResponse } from '../src/lib/ai.ts'
+import { createDummyClient, mockOpenAiStream } from './helper/helper.ts'
 import pino from 'pino'
 
 const logger = pino({ level: 'silent' })
 const apiKey = 'test'
 
+test('request - should always generate a sessionId (no stream)', async () => {
+  const client = {
+    ...createDummyClient(),
+    request: async () => {
+      return {
+        choices: [{
+          message: {
+            content: 'Sure, I can help you with math.'
+          }
+        }]
+      }
+    }
+  }
+
+  const ai = new Ai({
+    logger,
+    providers: {
+      openai: {
+        apiKey,
+        client
+      }
+    },
+    models: [{
+      provider: 'openai',
+      model: 'gpt-4o-mini'
+    }],
+  })
+  await ai.init()
+
+  const response = await ai.request({
+    models: ['openai:gpt-4o-mini'],
+    prompt: 'Can you help me to with math?',
+    options: {
+      context: 'You are a nice helpful assistant.',
+    }
+  }) as ContentResponse
+
+  assert.match(response.sessionId, /[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}/)
+})
+
+test('request - should always generate a sessionId (stream)', async () => {
+  const client = {
+    ...createDummyClient(),
+    stream: async () => {
+      return mockOpenAiStream([
+        { choices: [{ delta: { content: 'Sure,' } }] },
+        { choices: [{ delta: { content: ' I can help you' } }] },
+        { choices: [{ delta: { content: ' with math.' }, finish_reason: 'stop' }] }
+      ])
+    }
+  }
+
+  const ai = new Ai({
+    logger,
+    providers: {
+      openai: {
+        apiKey,
+        client
+      }
+    },
+    models: [{
+      provider: 'openai',
+      model: 'gpt-4o-mini'
+    }],
+  })
+  await ai.init()
+
+  const response = await ai.request({
+    models: ['openai:gpt-4o-mini'],
+    prompt: 'Can you help me to with math?',
+    options: {
+      context: 'You are a nice helpful assistant.',
+      stream: true
+    }
+  }) as StreamResponse
+
+  assert.match(response.sessionId, /[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}/)
+})
+
+test('request - should get error when history and sessionId are used together', async () => {
+  const ai = new Ai({
+    logger,
+    providers: { openai: { apiKey, client: createDummyClient() } },
+    models: [{ provider: 'openai', model: 'gpt-4o-mini' }]
+  })
+  await ai.init()
+
+  assert.rejects(async () => await ai.request({
+    models: ['openai:gpt-4o-mini'],
+    prompt: 'Can you help me to with math?',
+    options: {
+      context: 'You are a nice helpful assistant.',
+      history: [{
+        prompt: 'Can you help me to with math?',
+        response: 'Sure, I can help you with math.'
+      }],
+      sessionId: 'existing-session-id'
+    }
+  }), {
+    code: 'OPTION_ERROR',
+    message: 'Option error: history and sessionId cannot be used together'
+  })
+})
+
+test('request - should get error on non existing sessionId', async () => {
+  const ai = new Ai({
+    logger,
+    providers: { openai: { apiKey, client: createDummyClient() } },
+    models: [{ provider: 'openai', model: 'gpt-4o-mini' }]
+  })
+  await ai.init()
+
+  assert.rejects(async () => await ai.request({
+    models: ['openai:gpt-4o-mini'],
+    prompt: 'Can you help me to with math?',
+    options: {
+      sessionId: 'non-existing-session-id'
+    }
+  }), {
+    code: 'OPTION_ERROR',
+    message: 'Option error: sessionId does not exist'
+  })
+})
+
 test('validateOptions - should throw error when logger is missing', () => {
   assert.throws(() => {
     // @ts-ignore - intentionally missing logger
-    new Ai({
+    const _ai = new Ai({
       providers: { openai: { apiKey } },
       models: [{ provider: 'openai', model: 'gpt-4o-mini' }]
     })
   }, {
-    name: 'FastifyError',
     message: 'Option error: logger is required'
   })
 })
@@ -23,7 +146,7 @@ test('validateOptions - should throw error when logger is missing', () => {
 test('validateOptions - should throw error when providers is missing', () => {
   assert.throws(() => {
     // @ts-ignore - intentionally missing providers
-    new Ai({
+    const _ai = new Ai({
       logger,
       models: [{ provider: 'openai', model: 'gpt-4o-mini' }]
     })
@@ -35,7 +158,7 @@ test('validateOptions - should throw error when providers is missing', () => {
 
 test('validateOptions - should throw error when providers is empty object', () => {
   assert.throws(() => {
-    new Ai({
+    const _ai = new Ai({
       logger,
       providers: {},
       models: [{ provider: 'openai', model: 'gpt-4o-mini' }]
@@ -49,7 +172,7 @@ test('validateOptions - should throw error when providers is empty object', () =
 test('validateOptions - should throw error when models is missing', () => {
   assert.throws(() => {
     // @ts-ignore - intentionally missing models
-    new Ai({
+    const _ai = new Ai({
       logger,
       providers: { openai: { apiKey } }
     })
@@ -61,7 +184,7 @@ test('validateOptions - should throw error when models is missing', () => {
 
 test('validateOptions - should throw error when models is empty array', () => {
   assert.throws(() => {
-    new Ai({
+    const _ai = new Ai({
       logger,
       providers: { openai: { apiKey } },
       models: []
@@ -74,7 +197,7 @@ test('validateOptions - should throw error when models is empty array', () => {
 
 test('validateOptions - should throw error when auth is provided without jwt secret', () => {
   assert.throws(() => {
-    new Ai({
+    const _ai = new Ai({
       logger,
       providers: { openai: { apiKey } },
       models: [{ provider: 'openai', model: 'gpt-4o-mini' }],

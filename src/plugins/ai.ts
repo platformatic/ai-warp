@@ -1,7 +1,7 @@
 import fp from 'fastify-plugin'
 import { Ai, type AiOptions, type Model, type ResponseResult } from '../lib/ai.ts'
 import type { FastifyReply, FastifyRequest } from 'fastify'
-import type { ChatHistory } from '../lib/provider.ts'
+import type { ChatHistory, SessionId } from '../lib/provider.ts'
 
 const DEFAULT_HEADER_SESSION_ID_NAME = 'x-session-id'
 
@@ -17,13 +17,13 @@ export type FastifyAiRequest = {
   models?: Model[]
   stream?: boolean
   history?: ChatHistory
-  sessionId?: string | boolean // TODO doc sessionId and history are mutually exclusive
+  sessionId?: SessionId // TODO doc sessionId and history are mutually exclusive
 }
 
 export type ContentResponse = {
   text: string
   result: ResponseResult
-  sessionId?: string
+  sessionId?: SessionId
 }
 
 export type FastifyAiResponse = ContentResponse | ReadableStream
@@ -32,7 +32,7 @@ declare module 'fastify' {
   interface FastifyInstance {
     ai: {
       request: (request: FastifyAiRequest, reply: FastifyReply) => Promise<FastifyAiResponse>
-      retrieveHistory: (sessionId: string) => Promise<ChatHistory>
+      retrieveHistory: (sessionId: SessionId) => Promise<ChatHistory>
     }
   }
 }

@@ -14,7 +14,7 @@ interface ChatRequestBody {
   prompt: string
   stream?: boolean
   history?: ChatHistory
-  sessionId?: string | boolean
+  sessionId?: string
 }
 
 const valkeyStorage: StorageOptions = {
@@ -120,8 +120,8 @@ export async function app({ start = false, logger }: AppOptions) {
     return response
   })
 
-  app.get('/history', async (request: FastifyRequest<{ Querystring: { sessionId: string } }>, reply) => {
-    const history = await app.ai.retrieveHistory(request.query.sessionId)
+  app.get('/history/:sessionId', async (request: FastifyRequest<{ Params: { sessionId: string } }>, reply) => {
+    const history = await app.ai.retrieveHistory(request.params.sessionId)
     return history
   })
 

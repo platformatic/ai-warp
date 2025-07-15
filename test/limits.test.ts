@@ -1,7 +1,7 @@
 import { mock, test } from 'node:test'
 import assert from 'node:assert'
 import { setTimeout as wait } from 'node:timers/promises'
-import { Ai, type ContentResponse } from '../src/lib/ai.ts'
+import { Ai, type StreamResponse, type ContentResponse } from '../src/lib/ai.ts'
 import pino from 'pino'
 import { consumeStream, createDummyClient, mockOpenAiStream } from './helper/helper.ts'
 
@@ -638,9 +638,6 @@ test('should store history with expiration', async () => {
   const response1 = await ai.request({
     models: ['openai:gpt-4o-mini'],
     prompt: 'First message',
-    options: {
-      sessionId: true,
-    }
   }) as ContentResponse
 
   assert.ok(response1.sessionId)
@@ -692,14 +689,11 @@ test('should work with streaming responses and history expiration', async () => 
   const response = await ai.request({
     models: ['openai:gpt-4o-mini'],
     prompt: 'Streaming request',
-    options: {
-      sessionId: true,
-      stream: true,
-    }
+    options: { stream: true }
   })
 
   assert.ok(response instanceof ReadableStream)
-  const sessionId = (response as any).sessionId
+  const sessionId = (response as StreamResponse).sessionId
   assert.ok(sessionId)
 
   // Consume the stream

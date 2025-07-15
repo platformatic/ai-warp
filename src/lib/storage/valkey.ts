@@ -76,6 +76,7 @@ export class ValkeyStorage implements Storage {
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error)
       throw new StorageListRangeError(key, errorMessage)
+      // TODO return [] if key does not exists
     }
   }
 }

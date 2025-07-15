@@ -152,7 +152,6 @@ test('should be able to perform a prompt with stream', async () => {
 
 test('should be able to perform a prompt with history', async () => {
   const client = {
-
     ...createDummyClient(),
     request: mock.fn(async () => {
       return {
@@ -223,7 +222,7 @@ test('should be able to perform a prompt with history', async () => {
   assert.equal((response).text, 'Sure, I can help you with math.')
 })
 
-test('should be able to perform a prompt with session and stream (cloning stream)', async () => {
+test('should be able to perform a prompt with stream (cloning stream)', async () => {
   const client = {
     ...createDummyClient(),
     stream: mock.fn(async () => {
@@ -256,8 +255,7 @@ test('should be able to perform a prompt with session and stream (cloning stream
     options: {
       context: 'You are a nice helpful assistant.',
       temperature: 0.5,
-      stream: true,
-      sessionId: true
+      stream: true
     }
   }) as ReadableStream
 
