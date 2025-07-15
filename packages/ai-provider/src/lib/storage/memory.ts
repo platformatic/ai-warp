@@ -1,10 +1,10 @@
-import type { StorageOptions, Storage } from './index.ts'
+import type { AiStorageOptions, Storage } from './index.ts'
 
 export class MemoryStorage implements Storage {
   values: KeyValueStorage
   list: ListStorage
 
-  constructor (_options: StorageOptions) {
+  constructor (_options: AiStorageOptions) {
     this.values = new KeyValueStorage()
     this.list = new ListStorage()
   }

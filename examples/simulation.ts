@@ -1,16 +1,15 @@
 import undici from 'undici'
-import jwt from 'jsonwebtoken'
+import { decodeEventStream } from '@platformatic/ai-provider'
+import type { AiChatHistory } from '@platformatic/ai-provider'
+import type { AiContentResponse } from '@platformatic/ai-provider'
 import { app } from './service.ts'
-import { decodeEventStream } from '../src/lib/event.ts'
-import type { ChatHistory } from '../src/lib/provider.ts'
-import type { ContentResponse } from '../src/lib/ai.ts'
 
 const url = 'http://localhost:3000/chat'
 
 type Prompt = {
   stream?: boolean
   sessionId?: string
-  history?: ChatHistory
+  history?: AiChatHistory
   prompts: string[]
 }
 
@@ -153,7 +152,7 @@ async function main() {
           history.push({ prompt, response: content })
         }
       } else {
-        const responseData = await response.body.json() as ContentResponse
+        const responseData = await response.body.json() as AiContentResponse
         console.log('<<<', responseData.text)
 
         if (history) {

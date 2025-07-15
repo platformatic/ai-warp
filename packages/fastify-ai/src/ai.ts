@@ -1,7 +1,7 @@
-import fp from 'fastify-plugin'
-import { Ai, type AiOptions, type Model, type ResponseResult } from '../lib/ai.ts'
 import type { FastifyReply, FastifyRequest } from 'fastify'
-import type { ChatHistory, SessionId } from '../lib/provider.ts'
+import fp from 'fastify-plugin'
+import { Ai, type AiOptions, type AiModel, type AiResponseResult } from '@platformatic/ai-provider'
+import type { AiChatHistory, AiSessionId } from '@platformatic/ai-provider'
 
 const DEFAULT_HEADER_SESSION_ID_NAME = 'x-session-id'
 
@@ -14,16 +14,16 @@ export type FastifyAiRequest = {
   prompt: string
   context?: string
   temperature?: number
-  models?: Model[]
+  models?: AiModel[]
   stream?: boolean
-  history?: ChatHistory
-  sessionId?: SessionId // TODO doc sessionId and history are mutually exclusive
+  history?: AiChatHistory
+  sessionId?: AiSessionId
 }
 
 export type ContentResponse = {
   text: string
-  result: ResponseResult
-  sessionId?: SessionId
+  result: AiResponseResult
+  sessionId?: AiSessionId
 }
 
 export type FastifyAiResponse = ContentResponse | ReadableStream
@@ -32,7 +32,7 @@ declare module 'fastify' {
   interface FastifyInstance {
     ai: {
       request: (request: FastifyAiRequest, reply: FastifyReply) => Promise<FastifyAiResponse>
-      retrieveHistory: (sessionId: SessionId) => Promise<ChatHistory>
+      retrieveHistory: (sessionId: AiSessionId) => Promise<AiChatHistory>
     }
   }
 }

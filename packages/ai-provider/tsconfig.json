@@ -1,0 +1,32 @@
+{
+  "exclude": ["node_modules", "dist", "test", "benchmarks"],
+  "compilerOptions": {
+    "moduleResolution": "NodeNext",
+    "lib": [
+      "esnext"
+    ],
+    "sourceMap": true,
+    "pretty": true,
+    "noEmit": true,
+    "noEmitOnError": true,
+    "incremental": true,
+    "strict": true,
+    "outDir": "dist",
+    "target": "esnext",
+    "module": "nodenext",
+    "allowImportingTsExtensions": true,
+    "rewriteRelativeImportExtensions": true,
+    "verbatimModuleSyntax": true,
+    "erasableSyntaxOnly": true
+  },
+  "watchOptions": {
+    "watchFile": "fixedPollingInterval",
+    "watchDirectory": "fixedPollingInterval",
+    "fallbackPolling": "dynamicPriority",
+    "synchronousWatchDirectory": true,
+    "excludeDirectories": [
+      "**/node_modules",
+      "dist"
+    ]
+  }
+}

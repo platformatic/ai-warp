@@ -1,17 +1,17 @@
 import type { Logger } from 'pino'
-import type { AiProvider, ResponseResult } from './ai.ts'
+import type { AiProvider, AiResponseResult } from './ai.ts'
 
-export type ChatHistory = {
+export type AiChatHistory = {
   prompt: string
   response: string
 }[]
 
-export type SessionId = string
+export type AiSessionId = string
 
 export type ProviderRequestOptions = {
   context?: string
-  history?: ChatHistory
-  sessionId?: SessionId
+  history?: AiChatHistory
+  sessionId?: AiSessionId
   temperature?: number
   stream?: boolean
   onStreamChunk?: (response: string) => Promise<string>
@@ -46,7 +46,7 @@ export type ProviderClientRequest = {
 
 export type ProviderContentResponse = {
   text: string
-  result: ResponseResult
+  result: AiResponseResult
 }
 
 export interface ProviderClient {

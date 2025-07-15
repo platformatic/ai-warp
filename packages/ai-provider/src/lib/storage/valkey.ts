@@ -1,5 +1,5 @@
 import { Redis } from 'iovalkey'
-import type { StorageOptions, Storage, ValkeyOptions } from './index.ts'
+import type { AiStorageOptions, Storage, ValkeyOptions } from './index.ts'
 import { StorageGetError, StorageListPushError, StorageListRangeError, StorageSetError } from '../errors.ts'
 
 const defaultValkeyOptions: ValkeyOptions = {
@@ -11,7 +11,7 @@ const defaultValkeyOptions: ValkeyOptions = {
 export class ValkeyStorage implements Storage {
   private client: Redis
 
-  constructor (options: StorageOptions) {
+  constructor (options: AiStorageOptions) {
     // TODO validate options
 
     const valkeyOptions = options.valkey || {} // TODO when validated

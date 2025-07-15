@@ -1,4 +1,3 @@
-import jwt from 'jsonwebtoken'
 import { Ai, createModelState, type AiProvider, type ModelStateErrorReason, type ModelStatus, type ProviderState } from '../../src/lib/ai.ts'
 
 export function createDummyClient () {
@@ -109,8 +108,4 @@ export async function setModelState ({
   restoredModelState.state.timestamp = timestamp || Date.now()
   restoredModelState.rateLimit = rateLimit ?? { count: 0, windowStart: 0 }
   await ai.setModelState(model, providerState, restoredModelState, timestamp || Date.now())
-}
-
-export function createJWT (payload: any, secret: string): string {
-  return jwt.sign(payload, secret, { algorithm: 'HS256' })
 }

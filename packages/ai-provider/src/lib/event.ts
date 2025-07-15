@@ -1,6 +1,6 @@
 import type { FastifyError } from '@fastify/error'
 import fastJson from 'fast-json-stringify'
-import type { ResponseResult } from './ai.ts'
+import type { AiResponseResult } from './ai.ts'
 
 const stringifyEventData = fastJson({
   title: 'Stream Event Data',
@@ -19,7 +19,7 @@ export interface AiStreamEventContent {
 }
 
 export interface AiStreamEventEnd {
-  response: ResponseResult
+  response: AiResponseResult
 }
 
 export type AiStreamEvent = {

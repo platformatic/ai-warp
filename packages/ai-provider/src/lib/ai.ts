@@ -1,18 +1,18 @@
 import { randomUUID } from 'node:crypto'
 import { setTimeout as wait } from 'node:timers/promises'
 import type { Logger } from 'pino'
-import type { FastifyError } from 'fastify'
+import type { FastifyError } from '@fastify/error'
 
 import { OpenAIProvider } from '../providers/openai.ts'
-import type { ChatHistory, Provider, ProviderClient, ProviderOptions, ProviderRequestOptions, ProviderResponse, SessionId } from './provider.ts'
-import { createStorage, type Storage, type StorageOptions } from './storage/index.ts'
+import type { AiChatHistory, Provider, ProviderClient, ProviderOptions, ProviderRequestOptions, ProviderResponse, AiSessionId } from './provider.ts'
+import { createStorage, type Storage, type AiStorageOptions } from './storage/index.ts'
 import { parseTimeWindow, processStream } from './utils.ts'
 import { HistoryGetError, ModelStateError, OptionError, ProviderNoModelsAvailableError, ProviderRateLimitError, ProviderRequestStreamTimeoutError, ProviderRequestTimeoutError } from './errors.ts'
 
 // supported providers
 export type AiProvider = 'openai' | 'deepseek'
 
-export const DEFAULT_STORAGE: StorageOptions = {
+export const DEFAULT_STORAGE: AiStorageOptions = {
   type: 'memory'
 }
 
@@ -29,7 +29,7 @@ export const DEFAULT_RESTORE_REQUEST_TIMEOUT = '1m'
 export const DEFAULT_RESTORE_PROVIDER_COMMUNICATION_ERROR = '1m'
 export const DEFAULT_RESTORE_PROVIDER_EXCEEDED_QUOTA_ERROR = '10m'
 
-export type Model = {
+export type AiModel = {
   provider: AiProvider
   model: string
   limits?: {
@@ -58,23 +58,23 @@ type ModelSettings = {
   restore: ModelRestore
 }
 
-type QueryModel = string | Model
+type QueryModel = string | AiModel
 
 // TODO doc
 export type AiOptions = {
   logger: Logger
   providers: { [key in AiProvider]?: ProviderDefinitionOptions }
-  storage?: StorageOptions
+  storage?: AiStorageOptions
   limits?: AiLimits
   restore?: AiRestore
-  models?: Model[]
+  models?: AiModel[]
 }
 
 type StrictAiOptions = AiOptions & {
-  storage: StorageOptions
+  storage: AiStorageOptions
   limits: StrictAiLimits
   restore: StrictAiRestore
-  models: Model[]
+  models: AiModel[]
 }
 
 export type ProviderDefinitionOptions = {
@@ -106,19 +106,19 @@ export type Request = {
   options?: ProviderRequestOptions
 }
 
-export type ResponseResult = 'COMPLETE' | 'INCOMPLETE_MAX_TOKENS' | 'INCOMPLETE_UNKNOWN'
+export type AiResponseResult = 'COMPLETE' | 'INCOMPLETE_MAX_TOKENS' | 'INCOMPLETE_UNKNOWN'
 
-export type ContentResponse = {
+export type AiContentResponse = {
   text: string
-  result: ResponseResult
-  sessionId: SessionId
+  result: AiResponseResult
+  sessionId: AiSessionId
 }
 
-export type StreamResponse = ReadableStream & {
-  sessionId: SessionId
+export type AiStreamResponse = ReadableStream & {
+  sessionId: AiSessionId
 }
 
-export type Response = ContentResponse | StreamResponse
+export type Response = AiContentResponse | AiStreamResponse
 
 export type ProviderState = {
   provider: Provider
@@ -500,8 +500,8 @@ export class Ai {
     }
 
     let response!: Response
-    const history: ChatHistory | undefined = requestOptions.history
-    const sessionId: SessionId = requestOptions.sessionId ?? await this.createSessionId()
+    const history: AiChatHistory | undefined = requestOptions.history
+    const sessionId: AiSessionId = requestOptions.sessionId ?? await this.createSessionId()
 
     while (selected) {
       this.logger.debug({ model: selected.model.name }, 'Selected model')
@@ -563,7 +563,7 @@ export class Ai {
 
         // @ts-ignore
         if (typeof providerResponse.pipe === 'function' || providerResponse instanceof ReadableStream) {
-          const [responseStream, historyStream] = (providerResponse as StreamResponse).tee()
+          const [responseStream, historyStream] = (providerResponse as AiStreamResponse).tee()
 
           // Process the cloned stream in background to accumulate response for history
           processStream(historyStream)
@@ -578,11 +578,11 @@ export class Ai {
             .catch(() => { });
 
           // Attach sessionId to the stream for the user
-          (responseStream as StreamResponse).sessionId = sessionId
-          return responseStream as StreamResponse
+          (responseStream as AiStreamResponse).sessionId = sessionId
+          return responseStream as AiStreamResponse
         }
 
-        const contentResponse: ContentResponse = response as ContentResponse
+        const contentResponse: AiContentResponse = response as AiContentResponse
         contentResponse.sessionId = sessionId
         await this.history.push(sessionId, { prompt: request.prompt, response: contentResponse.text }, this.options.limits.historyExpiration)
 
@@ -719,7 +719,7 @@ export class Ai {
       ])
 
       if (response instanceof ReadableStream) {
-        return this.wrapStreamWithTimeout(response, timeout) as StreamResponse
+        return this.wrapStreamWithTimeout(response, timeout) as AiStreamResponse
       }
 
       return response
@@ -730,7 +730,7 @@ export class Ai {
         new Promise<never>((_resolve, reject) => {
           timer = setTimeout(() => reject(ProviderRequestTimeoutError(timeout)), timeout).unref()
         })
-      ]) as ContentResponse
+      ]) as AiContentResponse
     }
   }
 

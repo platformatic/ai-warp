@@ -1,7 +1,7 @@
 import { ReadableStream, type UnderlyingByteSource } from 'node:stream/web'
 import undici from 'undici'
-import type { AiProvider, ResponseResult } from '../lib/ai.ts'
-import { type ChatHistory, type ProviderClient, type ProviderClientContext, type ProviderClientOptions, type ProviderOptions, type ProviderRequestOptions, type ProviderResponse, type StreamChunkCallback } from '../lib/provider.ts'
+import type { AiProvider, AiResponseResult } from '../lib/ai.ts'
+import { type AiChatHistory, type ProviderClient, type ProviderClientContext, type ProviderClientOptions, type ProviderOptions, type ProviderRequestOptions, type ProviderResponse, type StreamChunkCallback } from '../lib/provider.ts'
 import { encodeEvent, parseEventStream, type AiStreamEvent } from '../lib/event.ts'
 import { ProviderExceededQuotaError, ProviderResponseError, ProviderResponseNoContentError } from '../lib/errors.ts'
 import { BaseProvider } from './base.ts'
@@ -153,7 +153,7 @@ export class OpenAIProvider extends BaseProvider {
     }
   }
 
-  private chatHistoryToMessages (chatHistory?: ChatHistory): OpenAIMessage[] {
+  private chatHistoryToMessages (chatHistory?: AiChatHistory): OpenAIMessage[] {
     if (chatHistory === undefined) {
       return []
     }
@@ -230,7 +230,7 @@ class OpenAiByteSource implements UnderlyingByteSource {
   }
 }
 
-function mapResponseResult (result: string | undefined): ResponseResult {
+function mapResponseResult (result: string | undefined): AiResponseResult {
   // response is complete
   if (result === 'stop') {
     return 'COMPLETE'

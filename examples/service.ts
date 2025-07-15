@@ -1,9 +1,9 @@
 import fastify, { type FastifyRequest } from 'fastify'
-import ai from '../src/plugins/ai.ts'
 import type { PinoLoggerOptions } from 'fastify/types/logger.js'
-import type { ChatHistory } from '../src/lib/provider.ts'
-import type { StorageOptions } from '../src/lib/storage/index.ts'
 import type { Logger } from 'pino'
+import type { AiChatHistory } from '@platformatic/ai-provider'
+import type { AiStorageOptions } from '@platformatic/ai-provider'
+import { ai } from '@platformatic/fastify-ai'
 
 interface AppOptions {
   start?: boolean
@@ -13,11 +13,11 @@ interface AppOptions {
 interface ChatRequestBody {
   prompt: string
   stream?: boolean
-  history?: ChatHistory
+  history?: AiChatHistory
   sessionId?: string
 }
 
-const valkeyStorage: StorageOptions = {
+const valkeyStorage: AiStorageOptions = {
   type: 'valkey',
   valkey: {
     host: 'localhost',

@@ -11,7 +11,7 @@ export type ValkeyOptions = {
   database?: number
 }
 
-export type StorageOptions = {
+export type AiStorageOptions = {
   type: StorageType
   valkey?: ValkeyOptions
 }
@@ -23,11 +23,11 @@ export type Storage = {
   listRange: (key: string) => Promise<any[]>
 }
 
-const defaultStorageOptions: StorageOptions = {
+const defaultStorageOptions: AiStorageOptions = {
   type: 'memory'
 }
 
-export async function createStorage (options?: StorageOptions): Promise<Storage> {
+export async function createStorage (options?: AiStorageOptions): Promise<Storage> {
   // TODO validate options
   const storageOptions = options ? { ...defaultStorageOptions, ...options } : defaultStorageOptions
 
