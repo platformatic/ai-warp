@@ -11,19 +11,31 @@ type Prompt = {
   sessionId?: string
   history?: AiChatHistory
   prompts: string[]
+  models?: string[]
 }
 
 let lastSessionId: string | undefined
 const prompts: Prompt[] =
   [
     {
-      stream: true,
+      stream: false,
       prompts: [
         'Can you help me to prepare a dinner?',
         "I'd like to prepare a dinner for my 2 kids, they love fish and potatoes",
         "Oh I forgot, they don't like garlic. Also, I don't think the cheese is a good idea to put on top of fish. Since you suggest to use the oven, add some tomatoes",
         'Sounds delicious! Thank you'
       ]
+    },
+
+    {
+      stream: false,
+      prompts: [
+        'Can you help me to prepare a dinner?',
+        "I'd like to prepare a dinner for my 2 kids, they love fish and potatoes",
+        "Oh I forgot, they don't like garlic. Also, I don't think the cheese is a good idea to put on top of fish. Since you suggest to use the oven, add some tomatoes",
+        'Sounds delicious! Thank you'
+      ],
+      models: ['deepseek:deepseek-chat']
     },
 
     {
@@ -116,7 +128,7 @@ async function main() {
           ...headers,
           // 'Authorization': 'Bearer ...'
         },
-        body: JSON.stringify({ prompt, history, stream: set.stream, sessionId })
+        body: JSON.stringify({ prompt, history, stream: set.stream, sessionId, models: set.models })
       })
 
       if (response.headers['x-session-id']) {

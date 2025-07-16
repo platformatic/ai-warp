@@ -1,6 +1,6 @@
 import type { Logger } from 'pino'
-import type { AiProvider } from '../lib/ai.ts'
-import { type ProviderClient, type ProviderClientContext, type ProviderOptions, type ProviderRequestOptions, type ProviderResponse } from '../lib/provider.ts'
+import type { AiProvider } from '../../lib/ai.ts'
+import type { ProviderClient, ProviderClientContext, ProviderOptions, ProviderRequestOptions, ProviderResponse } from '../../lib/provider.ts'
 
 export class BaseProvider {
   // @ts-expect-error

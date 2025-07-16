@@ -1,6 +1,5 @@
 import fastify, { type FastifyRequest } from 'fastify'
 import type { PinoLoggerOptions } from 'fastify/types/logger.js'
-import type { Logger } from 'pino'
 import type { AiChatHistory } from '@platformatic/ai-provider'
 import type { AiStorageOptions } from '@platformatic/ai-provider'
 import { ai } from '@platformatic/fastify-ai'
@@ -15,6 +14,7 @@ interface ChatRequestBody {
   stream?: boolean
   history?: AiChatHistory
   sessionId?: string
+  models?: string[]
 }
 
 const valkeyStorage: AiStorageOptions = {
@@ -38,13 +38,14 @@ export async function app({ start = false, logger }: AppOptions) {
   if (!process.env.OPENAI_API_KEY) {
     throw new Error('OPENAI_API_KEY is not set')
   }
+  if (!process.env.DEEPSEEK_API_KEY) {
+    throw new Error('DEEPSEEK_API_KEY is not set')
+  }
 
   await app.register(ai, {
     providers: {
-      openai: {
-        apiKey: process.env.OPENAI_API_KEY,
-        // client: TODO custom client
-      }
+      openai: { apiKey: process.env.OPENAI_API_KEY },
+      deepseek: { apiKey: process.env.DEEPSEEK_API_KEY }
     },
     storage: valkeyStorage,
     limits: {
@@ -53,7 +54,7 @@ export async function app({ start = false, logger }: AppOptions) {
         max: 10,
         timeWindow: '1m',
       },
-      requestTimeout: 10_000,
+      requestTimeout: 60_000,
       historyExpiration: '1d',
       retry: {
         max: 1,
@@ -65,7 +66,7 @@ export async function app({ start = false, logger }: AppOptions) {
       retry: '1m',
       timeout: '1m',
       providerCommunicationError: '1m',
-      providerExceededError: '10m'
+      providerExceededError: '1m'
     },
     models: [
       {
@@ -86,10 +87,18 @@ export async function app({ start = false, logger }: AppOptions) {
           providerExceededError: '5m'
         },        
       },
-
       {
         provider: 'openai',
         model: 'gpt-4o',
+      },
+
+      {
+        provider: 'deepseek',
+        model: 'deepseek-chat',
+        restore: {
+          providerExceededError: '10s',
+          timeout: '10s'
+        }
       }
     ]
   })
@@ -99,7 +108,7 @@ export async function app({ start = false, logger }: AppOptions) {
   // const { prompt, context, maxTokens, temperature, sessionId } = request.body
 
   app.post('/chat', async (request: FastifyRequest<{ Body: ChatRequestBody }>, reply) => {
-    const { prompt, stream, history, sessionId } = request.body
+    const { prompt, stream, history, sessionId, models } = request.body
 
     const response = await app.ai.request({
       context: 'You are a nice helpful assistant.',
@@ -109,6 +118,13 @@ export async function app({ start = false, logger }: AppOptions) {
       stream,
       history,
       sessionId,
+      models: models?.map(model => {
+        const [provider, modelName] = model.split(':')
+        if (provider !== 'openai' && provider !== 'deepseek') {
+          throw new Error(`Provider "${provider}" not supported`)
+        }
+        return { provider, model: modelName }
+      })
     }, reply)
 
     return response

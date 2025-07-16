@@ -1,5 +1,9 @@
 import type { Logger } from 'pino'
 import type { AiProvider, AiResponseResult } from './ai.ts'
+import type { Pool } from 'undici'
+import { OpenAIProvider } from '../providers/openai.ts'
+import { OptionError } from './errors.ts'
+import { DeepSeekProvider } from '../providers/deepseek.ts'
 
 export type AiChatHistory = {
   prompt: string
@@ -32,6 +36,9 @@ export interface ProviderOptions {
 export interface ProviderClientOptions {
   apiKey: string
   baseUrl?: string
+  apiPath?: string
+  userAgent?: string
+  undiciOptions?: Pool.Options
 }
 
 export type ProviderClientContext = {
@@ -59,3 +66,15 @@ export interface ProviderClient {
 export type ProviderResponse = ProviderContentResponse | ReadableStream
 
 export type StreamChunkCallback = (response: string) => Promise<string>
+
+export function createAiProvider (provider: AiProvider, options: ProviderOptions, client?: ProviderClient) {
+  if (provider === 'openai') {
+    return new OpenAIProvider(options, client)
+  }
+
+  if (provider === 'deepseek') {
+    return new DeepSeekProvider(options, client)
+  }
+
+  throw new OptionError(`Provider "${provider}" not supported`)
+}
