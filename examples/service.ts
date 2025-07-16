@@ -1,8 +1,8 @@
 import fastify, { type FastifyRequest } from 'fastify'
 import type { PinoLoggerOptions } from 'fastify/types/logger.js'
-import type { AiChatHistory } from '@platformatic/ai-provider'
-import type { AiStorageOptions } from '@platformatic/ai-provider'
-import { ai } from '@platformatic/fastify-ai'
+import type { AiChatHistory } from '@platformatic/ai-provider-dev'
+import type { AiStorageOptions } from '@platformatic/ai-provider-dev'
+import { ai } from '@platformatic/fastify-ai-dev'
 
 interface AppOptions {
   start?: boolean
@@ -78,7 +78,7 @@ export async function app({ start = false, logger }: AppOptions) {
         provider: 'gemini',
         model: 'gemini-2.5-flash',
         limits: { maxTokens: 1500 }
-      }
+      },
 
       {
         provider: 'openai',

@@ -1,7 +1,7 @@
 import undici from 'undici'
-import { decodeEventStream } from '@platformatic/ai-provider'
-import type { AiChatHistory } from '@platformatic/ai-provider'
-import type { AiContentResponse } from '@platformatic/ai-provider'
+import { decodeEventStream } from '@platformatic/ai-provider-dev'
+import type { AiChatHistory } from '@platformatic/ai-provider-dev'
+import type { AiContentResponse } from '@platformatic/ai-provider-dev'
 import { app } from './service.ts'
 
 const url = 'http://localhost:3000/chat'

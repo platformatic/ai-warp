@@ -1,6 +1,5 @@
 {
   "name": "@platformatic/ai-provider-dev",
-  "private": true,
   "type": "module",
   "version": "0.0.1-dev.1",
   "description": "The Platformatic AI provider interface",

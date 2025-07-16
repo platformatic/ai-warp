@@ -4,7 +4,7 @@ import type { Logger } from 'pino'
 import { createError } from '@fastify/error'
 import { Type } from '@fastify/type-provider-typebox'
 
-import { Ai, type AiOptions, type AiModel, type AiResponseResult, type AiChatHistory, type AiSessionId } from '@platformatic/ai-provider'
+import { Ai, type AiOptions, type AiModel, type AiResponseResult, type AiChatHistory, type AiSessionId } from '@platformatic/ai-provider-dev'
 
 const DEFAULT_HEADER_SESSION_ID_NAME = 'x-session-id'
 const DEFAULT_PROMPT_PATH = '/api/v1/prompt'
@@ -102,6 +102,8 @@ export default fp(async (fastify, options: AiPluginOptions) => {
     }
   })
 
+  // TODO move routes to ai-warp service
+
   const bodySchema = Type.Object({
     context: Type.Optional(Type.String()),
     temperature: Type.Optional(Type.Number()),
@@ -191,10 +193,11 @@ export default fp(async (fastify, options: AiPluginOptions) => {
     }
   })
 
-  // TODO auth with @platformatic/fastify-user
+  // TODO auth with @platformatic/fastify-user on ai-warp service
+
   // await fastify.register(fastifyUser as any, config.auth)
 
-  // TODO client rate limit with @fastify/rate-limit
+  // TODO client rate limit with @fastify/rate-limit on ai-warp service
 
   fastify.addHook('onClose', async () => {
     await ai.close()

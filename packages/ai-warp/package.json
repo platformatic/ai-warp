@@ -1,10 +1,28 @@
 {
   "name": "@platformatic/ai-warp-dev",
-  "private": true,
-  "version": "0.6.0-dev.1",
+  "version": "0.6.0-dev.3",
   "type": "module",
   "description": "The Platformatic warp AI service",
   "license": "Apache-2.0",
+
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts",
+      "require": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "bin": {
+    "create-ai-warp": "./dist/cli/create.js",
+    "start-ai-warp": "./dist/cli/start.js"
+  },
+
   "scripts": {
     "service-create": "pnpm build && node ./dist/cli/create.js",
     "service-start": "pnpm build && node ./dist/cli/start.js -c ./ai-warp-app/platformatic.json",
