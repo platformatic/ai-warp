@@ -37,7 +37,28 @@ class AiWarpGenerator extends ServiceGenerator {
   getConfigFieldsDefinitions(): BaseGenerator.ConfigFieldDefinition[] {
     const serviceConfigFieldsDefs = super.getConfigFieldsDefinitions()
     return [
-      ...serviceConfigFieldsDefs
+      ...serviceConfigFieldsDefs,
+      {
+        var: 'PLT_OPENAI_API_KEY',
+        label: 'What is your OpenAI API key?',
+        default: PLACEHOLDER_API_KEY,
+        type: 'string',
+        configValue: 'aiOpenaiApiKey'
+      },
+      {
+        var: 'PLT_DEEPSEEK_API_KEY',
+        label: 'What is your DeepSeek API key?',
+        default: PLACEHOLDER_API_KEY,
+        type: 'string',
+        configValue: 'aiDeepseekApiKey'
+      },
+      {
+        var: 'PLT_GEMINI_API_KEY',
+        label: 'What is your Gemini API key?',
+        default: PLACEHOLDER_API_KEY,
+        type: 'string',
+        configValue: 'aiGeminiApiKey'
+      }
     ]
   }
 
@@ -53,7 +74,7 @@ class AiWarpGenerator extends ServiceGenerator {
 
     if (this.config.aiProviders?.includes('openai')) {
       // @ts-ignore
-      aiConfig.providers.openai = { apiKey: '{PLT_OPENAI_API_KEY}' }
+      aiConfig.providers.openai = { apiKey: `{${this.getEnvVarName('PLT_OPENAI_API_KEY')}}` }
       // @ts-ignore
       aiConfig.models.push({ provider: 'openai', model: 'gpt-4o-mini' })
       // @ts-ignore
@@ -61,13 +82,13 @@ class AiWarpGenerator extends ServiceGenerator {
     }
     if (this.config.aiProviders?.includes('deepseek')) {
       // @ts-ignore
-      aiConfig.providers.deepseek = { apiKey: '{PLT_DEEPSEEK_API_KEY}' }
+      aiConfig.providers.deepseek = { apiKey: `{${this.getEnvVarName('PLT_DEEPSEEK_API_KEY')}}` }
       // @ts-ignore
       aiConfig.models.push({ provider: 'deepseek', model: 'deepseek-chat' })
     }
     if (this.config.aiProviders?.includes('gemini')) {
       // @ts-ignore
-      aiConfig.providers.gemini = { apiKey: '{PLT_GEMINI_API_KEY}' }
+      aiConfig.providers.gemini = { apiKey: `{${this.getEnvVarName('PLT_GEMINI_API_KEY')}}` }
       // @ts-ignore
       aiConfig.models.push({ provider: 'gemini', model: 'gemini-2.5-flash' })
     }
@@ -164,10 +185,7 @@ class AiWarpGenerator extends ServiceGenerator {
     this.questions.push({
       type: 'password',
       name: 'aiOpenaiApiKey',
-      when: (answers: Record<string, string>) => {
-        console.log(answers.aiProviders)
-        return answers.aiProviders.includes('openai')
-      },
+      when: (answers: Record<string, string>) => answers.aiProviders.includes('openai'),
       message: 'What is your OpenAI API key?',
       default: PLACEHOLDER_API_KEY,
       configValue: 'aiOpenaiApiKey'
