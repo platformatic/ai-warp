@@ -192,6 +192,8 @@ export default fp(async (fastify, options: AiPluginOptions) => {
   })
 
   // TODO auth with @platformatic/fastify-user
+  // await fastify.register(fastifyUser as any, config.auth)
+
   // TODO client rate limit with @fastify/rate-limit
 
   fastify.addHook('onClose', async () => {
