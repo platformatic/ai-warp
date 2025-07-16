@@ -2,11 +2,14 @@ import type { AIClient, AskOptions, ClientOptions, StreamMessage, AskResponse } 
 import { pipeline } from 'node:stream/promises'
 import { Transform, Readable } from 'node:stream'
 import split2 from 'split2'
+import { pino } from 'pino'
+import type { BaseLogger, LoggerOptions } from 'pino'
 
 export class Client implements AIClient {
   private url: string
   private headers: Record<string, string>
   private timeout: number
+  private logger: BaseLogger
 
   constructor (options: ClientOptions) {
     this.url = options.url.endsWith('/') ? options.url.slice(0, -1) : options.url
@@ -15,10 +18,22 @@ export class Client implements AIClient {
       ...options.headers
     }
     this.timeout = options.timeout ?? 60000
+    this.logger = this.getLogger(options.logger, options.loggerOptions)
+  }
+
+  private getLogger (logger?: BaseLogger, loggerOptions?: LoggerOptions): BaseLogger {
+    if (logger) {
+      return logger
+    }
+
+    const defaultOptions = { name: 'ai-client' }
+    return pino({ ...defaultOptions, ...loggerOptions })
   }
 
   async ask (options: AskOptions): Promise<AsyncIterable<StreamMessage>> {
     const endpoint = `${this.url}/ai`
+
+    this.logger.debug('Making AI request', { endpoint, prompt: options.prompt, sessionId: options.sessionId, model: options.model })
 
     try {
       const response = await fetch(endpoint, {
@@ -41,8 +56,11 @@ export class Client implements AIClient {
 
       if (!response.ok) {
         const errorBody = await response.text()
+        this.logger.error('AI request failed', { status: response.status, statusText: response.statusText, body: errorBody })
         throw new Error(`HTTP ${response.status}: ${errorBody}`)
       }
+
+      this.logger.info('AI request successful', { status: response.status })
 
       if (!response.body) {
         throw new Error('Response body is null')
@@ -52,15 +70,20 @@ export class Client implements AIClient {
     } catch (error) {
       if (error instanceof Error) {
         if (error.name === 'TimeoutError') {
+          this.logger.warn('AI request timed out', { timeout: this.timeout })
           throw new Error('Request timeout')
         }
+        this.logger.error('AI request error', { error: error.message, stack: error.stack })
         throw error
       }
+      this.logger.error('Unknown AI request error', { error })
       throw new Error('Unknown error occurred')
     }
   }
 
   private createStreamFromResponse (body: ReadableStream<Uint8Array>): AsyncIterable<StreamMessage> {
+    const logger = this.logger
+
     async function * parseAIMessages (source: AsyncIterable<string>): AsyncGenerator<StreamMessage> {
       for await (const eventText of source) {
         if (eventText.trim()) {
@@ -77,7 +100,7 @@ export class Client implements AIClient {
     const nodeReadable = Readable.fromWeb(body)
 
     pipeline(nodeReadable, split2('\n\n'), streamTransform).catch(err => {
-      console.error('Pipeline error:', err)
+      logger.error('Pipeline error:', err)
     })
 
     return streamTransform

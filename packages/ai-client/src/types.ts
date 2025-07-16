@@ -1,7 +1,11 @@
+import type { BaseLogger, LoggerOptions } from 'pino'
+
 export interface ClientOptions {
   url: string
   headers?: Record<string, string>
   timeout?: number
+  logger?: BaseLogger
+  loggerOptions?: LoggerOptions
 }
 
 export interface AskOptions {

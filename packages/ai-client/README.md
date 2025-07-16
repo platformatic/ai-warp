@@ -27,6 +27,9 @@ const client = buildClient({
   headers: {
     Authorization: "Bearer your-api-key",
   },
+  timeout: 30000, // optional timeout in ms (default: 60000)
+  logger: customLogger, // optional Pino logger instance
+  loggerOptions: { level: 'debug' }, // optional Pino options (used when no logger provided)
 });
 
 try {
@@ -76,6 +79,44 @@ Creates a new AI client instance.
 - `url` (string): The AI service URL
 - `headers` (object, optional): HTTP headers to include with requests
 - `timeout` (number, optional): Request timeout in milliseconds (default: 60000)
+- `logger` (BaseLogger, optional): Pino logger instance
+- `loggerOptions` (LoggerOptions, optional): Pino options for creating default logger
+
+#### Logger Support
+
+You can configure logging in two ways:
+
+1. **Provide a logger instance**:
+```typescript
+import { pino } from 'pino'
+
+const customLogger = pino({
+  level: 'info',
+  transport: {
+    target: 'pino-pretty'
+  }
+})
+
+const client = buildClient({
+  url: "http://localhost:3000",
+  logger: customLogger
+})
+```
+
+2. **Provide logger options** (used only when no logger is provided):
+```typescript
+const client = buildClient({
+  url: "http://localhost:3000",
+  loggerOptions: {
+    level: 'debug',
+    transport: {
+      target: 'pino-pretty'
+    }
+  }
+})
+```
+
+If neither `logger` nor `loggerOptions` are provided, a default Pino logger will be created with `{ name: 'ai-client' }`.
 
 #### Returns
 

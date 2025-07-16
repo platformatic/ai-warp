@@ -4,10 +4,15 @@ import { createServer } from 'node:http'
 import { buildClient } from '../src/index.ts'
 import { once } from 'node:events'
 import type { AddressInfo } from 'node:net'
+import { pino } from 'pino'
+
+// Silent logger for tests
+const silentLogger = pino({ level: 'silent' })
 
 test('buildClient creates a client with ask method', (_) => {
   const client = buildClient({
-    url: 'http://localhost:3000'
+    url: 'http://localhost:3000',
+    logger: silentLogger
   })
 
   ok(typeof client.ask === 'function')
@@ -46,7 +51,8 @@ test('client.ask sends correct request and handles streaming response', async (_
 
   const client = buildClient({
     url: `http://localhost:${port}`,
-    headers: { Authorization: 'Bearer test' }
+    headers: { Authorization: 'Bearer test' },
+    logger: silentLogger
   })
 
   const stream = await client.ask({
@@ -127,7 +133,8 @@ test('client handles timeout', async (_) => {
 
   const client = buildClient({
     url: `http://localhost:${port}`,
-    timeout: 100
+    timeout: 100,
+    logger: silentLogger
   })
 
   try {
@@ -533,6 +540,130 @@ test('client handles unknown event types', async (_) => {
   // Only the known event should be processed
   strictEqual(messages.length, 1)
   deepStrictEqual(messages[0], { type: 'content', content: 'Valid event' })
+
+  server.close()
+  await once(server, 'close')
+})
+
+test('client uses provided logger', async (_) => {
+  const logs: Array<{ level: number; message: string; data?: any }> = []
+
+  // Create a proper Pino logger with a custom stream to capture logs
+  const mockLogger = pino({
+    name: 'test-logger',
+    level: 'debug'
+  }, {
+    write: (chunk: string) => {
+      const logEntry = JSON.parse(chunk)
+      logs.push({ level: logEntry.level, message: logEntry.msg, data: logEntry })
+    }
+  })
+
+  const server = createServer((req, res) => {
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      Connection: 'keep-alive'
+    })
+
+    res.write('data: {"response": "Test message"}\n\n')
+    res.end()
+  })
+
+  server.listen(0)
+  await once(server, 'listening')
+  const port = (server.address() as any).port
+
+  const client = buildClient({
+    url: `http://localhost:${port}`,
+    logger: mockLogger
+  })
+
+  const stream = await client.ask({ prompt: 'Hello' })
+  const messages = []
+  for await (const message of stream) {
+    messages.push(message)
+  }
+
+  strictEqual(messages.length, 1)
+  deepStrictEqual(messages[0], { type: 'content', content: 'Test message' })
+
+  // Verify logger was used
+  ok(logs.length > 0, 'Logger should have been called')
+  ok(logs.some(log => log.level === 20 && log.message === 'Making AI request'), 'Should log debug message for request')
+  ok(logs.some(log => log.level === 30 && log.message === 'AI request successful'), 'Should log info message for success')
+
+  server.close()
+  await once(server, 'close')
+})
+
+test('client uses default logger when none provided', async (_) => {
+  const server = createServer((req, res) => {
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      Connection: 'keep-alive'
+    })
+
+    res.write('data: {"response": "Test message"}\n\n')
+    res.end()
+  })
+
+  server.listen(0)
+  await once(server, 'listening')
+  const port = (server.address() as any).port
+
+  // Test without providing logger - should create default
+  const client = buildClient({
+    url: `http://localhost:${port}`
+    // No logger provided - should use default
+  })
+
+  const stream = await client.ask({ prompt: 'Hello' })
+  const messages = []
+  for await (const message of stream) {
+    messages.push(message)
+  }
+
+  strictEqual(messages.length, 1)
+  deepStrictEqual(messages[0], { type: 'content', content: 'Test message' })
+
+  server.close()
+  await once(server, 'close')
+})
+
+test('client uses loggerOptions when no logger provided', async (_) => {
+  const server = createServer((req, res) => {
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      Connection: 'keep-alive'
+    })
+
+    res.write('data: {"response": "Test message"}\n\n')
+    res.end()
+  })
+
+  server.listen(0)
+  await once(server, 'listening')
+  const port = (server.address() as any).port
+
+  // Test with loggerOptions but no logger - should create logger with options
+  const client = buildClient({
+    url: `http://localhost:${port}`,
+    loggerOptions: {
+      level: 'silent' // This should create a silent pino logger
+    }
+  })
+
+  const stream = await client.ask({ prompt: 'Hello' })
+  const messages = []
+  for await (const message of stream) {
+    messages.push(message)
+  }
+
+  strictEqual(messages.length, 1)
+  deepStrictEqual(messages[0], { type: 'content', content: 'Test message' })
 
   server.close()
   await once(server, 'close')
