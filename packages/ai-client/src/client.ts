@@ -181,7 +181,7 @@ function convertEventToMessage (event: ParsedEvent): StreamMessage | null {
         error: new Error(data.error || data.message || 'Unknown error')
       }
     } else if (data.response) {
-      if (typeof data.response === 'object' && (data.response.model || data.response.usage || data.response.sessionId)) {
+      if (typeof data.response === 'object' && (data.response.model || data.response.sessionId)) {
         return {
           type: 'done',
           response: data.response as AskResponse

@@ -94,7 +94,6 @@ try {
 
   console.log("Response:", response.content);
   console.log("Model:", response.model);
-  console.log("Usage:", response.usage);
 } catch (error) {
   console.error("Request failed:", error);
 }
@@ -231,11 +230,6 @@ Makes a request to the AI service, returning either a stream or a complete respo
   content: string          // The AI's response content
   model?: string          // The model used to generate the response
   sessionId?: string      // Session ID if provided
-  usage?: {              // Token usage information
-    promptTokens: number
-    completionTokens: number
-    totalTokens: number
-  }
 }
 ```
 
@@ -270,11 +264,6 @@ The Readable stream yields `StreamMessage` objects with the following types:
     content: string
     model?: string
     sessionId?: string
-    usage?: {
-      promptTokens: number
-      completionTokens: number
-      totalTokens: number
-    }
   }
 }
 ```

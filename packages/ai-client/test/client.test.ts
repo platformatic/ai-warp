@@ -45,7 +45,7 @@ test('client.ask sends correct request and handles streaming response', async (_
 
       res.write('event: content\ndata: {"response": "Hello "}\n\n')
       res.write('event: content\ndata: {"response": "world!"}\n\n')
-      res.write('event: end\ndata: {"response": {"content": "Hello world!", "model": "test", "sessionId": "123", "usage": {"totalTokens": 10}}}\n\n')
+      res.write('event: end\ndata: {"response": {"content": "Hello world!", "model": "test", "sessionId": "123"}}\n\n')
       res.end()
     })
   })
@@ -92,8 +92,7 @@ test('client.ask sends correct request and handles streaming response', async (_
     response: {
       content: 'Hello world!',
       model: 'test',
-      sessionId: '123',
-      usage: { totalTokens: 10 }
+      sessionId: '123'
     }
   })
 
@@ -347,7 +346,7 @@ test('client handles data-only SSE messages (no event field)', async (_) => {
     res.write('data: {"response": "First message"}\n\n')
     res.write('data: {"response": "Second message"}\n\n')
     res.write('data: {"content": "Third message with different structure"}\n\n')
-    res.write('data: {"response": {"content": "Final", "model": "test-model", "usage": {"totalTokens": 10}}}\n\n')
+    res.write('data: {"response": {"content": "Final", "model": "test-model"}}\n\n')
     res.end()
   })
 
@@ -373,8 +372,7 @@ test('client handles data-only SSE messages (no event field)', async (_) => {
     type: 'done',
     response: {
       content: 'Final',
-      model: 'test-model',
-      usage: { totalTokens: 10 }
+      model: 'test-model'
     }
   })
 
@@ -790,12 +788,7 @@ test('client handles non-streaming response', async (_) => {
       res.end(JSON.stringify({
         content: 'Hello world!',
         model: 'gpt-4',
-        sessionId: 'user-123',
-        usage: {
-          promptTokens: 10,
-          completionTokens: 15,
-          totalTokens: 25
-        }
+        sessionId: 'user-123'
       }))
     })
   })
@@ -824,12 +817,7 @@ test('client handles non-streaming response', async (_) => {
   deepStrictEqual(response, {
     content: 'Hello world!',
     model: 'gpt-4',
-    sessionId: 'user-123',
-    usage: {
-      promptTokens: 10,
-      completionTokens: 15,
-      totalTokens: 25
-    }
+    sessionId: 'user-123'
   })
 
   server.close()

@@ -31,11 +31,6 @@ export interface AskResponse {
   model?: string
   sessionId?: AiSessionId
   result?: AiResponseResult
-  usage?: {
-    promptTokens: number
-    completionTokens: number
-    totalTokens: number
-  }
 }
 
 export interface StreamMessage {
