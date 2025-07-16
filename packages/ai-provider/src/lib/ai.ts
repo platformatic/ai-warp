@@ -10,7 +10,7 @@ import { HistoryGetError, ModelStateError, OptionError, ProviderNoModelsAvailabl
 import { DEFAULT_HISTORY_EXPIRATION, DEFAULT_MAX_RETRIES, DEFAULT_RATE_LIMIT_MAX, DEFAULT_RATE_LIMIT_TIME_WINDOW, DEFAULT_REQUEST_TIMEOUT, DEFAULT_RESTORE_PROVIDER_COMMUNICATION_ERROR, DEFAULT_RESTORE_PROVIDER_EXCEEDED_QUOTA_ERROR, DEFAULT_RESTORE_RATE_LIMIT, DEFAULT_RESTORE_REQUEST_TIMEOUT, DEFAULT_RESTORE_RETRY, DEFAULT_RETRY_INTERVAL, DEFAULT_STORAGE } from './config.ts'
 
 // supported providers
-export type AiProvider = 'openai' | 'deepseek'
+export type AiProvider = 'openai' | 'deepseek' | 'gemini'
 
 export type AiModel = {
   provider: AiProvider
@@ -87,6 +87,12 @@ export type Request = {
 
   prompt: string
   options?: ProviderRequestOptions
+}
+
+type ValidatedRequest = {
+  models: QueryModel[]
+  prompt: string
+  options: ProviderRequestOptions
 }
 
 export type AiResponseResult = 'COMPLETE' | 'INCOMPLETE_MAX_TOKENS' | 'INCOMPLETE_UNKNOWN'
@@ -431,28 +437,32 @@ export class Ai {
     } else if (modelState.state.reason === 'PROVIDER_EXCEEDED_QUOTA_ERROR') {
       wait = restore.providerExceededError
     } else {
+      // no PROVIDER_RESPONSE_MAX_TOKENS_ERROR because it depends by options
       return false
     }
 
     return modelState.state.timestamp + wait < Date.now()
   }
 
-  // TODO check query models
-  async validateRequest (request: Request) {
+  async validateRequest (request: Request): Promise<ValidatedRequest> {
     if (request.options?.history && request.options?.sessionId) {
       throw new OptionError('history and sessionId cannot be used together')
     }
 
-    const options = {
-      ...(request.options ?? {}),
-      sessionId: request.options?.sessionId,
-      history: request.options?.history
+    const validatedRequest: ValidatedRequest = {
+      models: [],
+      prompt: request.prompt,
+      options: {
+        ...(request.options ?? {}),
+        sessionId: request.options?.sessionId,
+        history: request.options?.history
+      },
     }
 
     if (request.options?.sessionId) {
       try {
-        options.history = await this.history.range(request.options.sessionId)
-        if (!options.history || options.history.length < 1) {
+        validatedRequest.options.history = await this.history.range(request.options.sessionId)
+        if (!validatedRequest.options.history || validatedRequest.options.history.length < 1) {
           throw new OptionError('sessionId does not exist')
         }
       } catch (err: any) {
@@ -464,15 +474,32 @@ export class Ai {
       }
     }
 
-    return options
+    if (request.models) {
+      for (const model of request.models) {
+        if (typeof model === 'string') {
+          if (!this.options.models.some(m => `${m.provider}:${m.model}` === model)) {
+            throw new OptionError(`Request model ${model} not defined`)
+          }
+        } else {
+          if (!this.options.models.some(m => m.model === model.model && m.provider === model.provider)) {
+            throw new OptionError(`Request model ${model.model} not defined for provider ${model.provider}`)
+          }
+        }
+      }
+      validatedRequest.models = request.models
+    } else {
+      validatedRequest.models = this.options.models
+    }
+
+    return validatedRequest
   }
 
   async request (request: Request): Promise<Response> {
-    const requestOptions = await this.validateRequest(request)
+    const req = await this.validateRequest(request)
 
     this.logger.debug({ request }, 'AI request')
 
-    const models = request.models ?? this.options.models
+    const models: QueryModel[] = req.models
     const skipModels: string[] = []
 
     let selected = await this.selectModel(models)
@@ -482,18 +509,18 @@ export class Ai {
     }
 
     let response!: Response
-    const history: AiChatHistory | undefined = requestOptions.history
-    const sessionId: AiSessionId = requestOptions.sessionId ?? await this.createSessionId()
+    const history: AiChatHistory | undefined = req.options.history
+    const sessionId: AiSessionId = req.options.sessionId ?? await this.createSessionId()
 
     while (selected) {
       this.logger.debug({ model: selected.model.name }, 'Selected model')
 
       const options = {
-        context: requestOptions?.context,
-        temperature: requestOptions?.temperature,
-        stream: requestOptions?.stream,
+        context: req.options.context,
+        temperature: req.options.temperature,
+        stream: req.options.stream,
         history,
-        maxTokens: selected.settings.limits.maxTokens ?? requestOptions?.maxTokens ?? this.options.limits.maxTokens
+        maxTokens: selected.settings.limits.maxTokens ?? req.options.maxTokens ?? this.options.limits.maxTokens
       }
 
       const rateLimit = {
@@ -523,8 +550,10 @@ export class Ai {
           } catch (error: any) { // TODO fix type
             err = error
 
-            // do not retry on timeout errors
-            if (error.code && (error.code === 'PROVIDER_REQUEST_TIMEOUT_ERROR' || error.code === 'PROVIDER_REQUEST_STREAM_TIMEOUT_ERROR')) {
+            // do not retry on timeout errors and empty response
+            if (error.code && (error.code === 'PROVIDER_REQUEST_TIMEOUT_ERROR' ||
+              error.code === 'PROVIDER_REQUEST_STREAM_TIMEOUT_ERROR' ||
+              error.code === 'PROVIDER_RESPONSE_MAX_TOKENS_ERROR')) {
               break
             }
 
@@ -570,7 +599,10 @@ export class Ai {
 
         return contentResponse
       } catch (error: any) { // TODO fix type
-      // skip storage errors, update state if errors are one of:
+      // skip:
+      // - storage errors
+      // - PROVIDER_RESPONSE_MAX_TOKENS_ERROR (options error)
+      // update state if errors are one of:
         if (error.code !== 'PROVIDER_RATE_LIMIT_ERROR' &&
         error.code !== 'PROVIDER_REQUEST_TIMEOUT_ERROR' &&
         error.code !== 'PROVIDER_REQUEST_STREAM_TIMEOUT_ERROR' &&

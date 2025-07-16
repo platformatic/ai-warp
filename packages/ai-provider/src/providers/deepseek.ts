@@ -1,9 +1,9 @@
 import type { AiProvider } from '../lib/ai.ts'
 import { DEEPSEEK_DEFAULT_API_PATH, DEEPSEEK_DEFAULT_BASE_URL, DEEPSEEK_PROVIDER_NAME, DEFAULT_UNDICI_POOL_OPTIONS, UNDICI_USER_AGENT } from '../lib/config.ts'
 import { ProviderExceededQuotaError, ProviderResponseError } from '../lib/errors.ts'
-import type { ProviderClient, ProviderClientContext } from '../lib/provider.ts'
+import type { ProviderClient, ProviderClientContext, ProviderOptions } from '../lib/provider.ts'
 import { createOpenAiClient } from './lib/openai-undici-client.ts'
-import { OpenAIProvider, type OpenAIOptions } from './openai.ts'
+import { OpenAIProvider } from './openai.ts'
 
 // DeepSeek implementation is based on the OpenAI implementation
 
@@ -19,7 +19,7 @@ export class DeepSeekProvider extends OpenAIProvider {
   name: AiProvider = 'deepseek'
   providerName: string = DEEPSEEK_PROVIDER_NAME
 
-  constructor (options: OpenAIOptions, client?: ProviderClient) {
+  constructor (options: ProviderOptions, client?: ProviderClient) {
     super(options, client ?? createOpenAiClient({
       providerName: DEEPSEEK_PROVIDER_NAME,
       baseUrl: options.clientOptions?.baseUrl ?? DEEPSEEK_DEFAULT_BASE_URL,

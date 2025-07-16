@@ -17,7 +17,7 @@ async function checkResponse (response: any, context: ProviderClientContext, pro
 export function createOpenAiClient (options: OpenAiClientOptions) {
   // TODO validate options
   if (!options.apiKey) {
-    throw new OptionError('apiKey is required')
+    throw new OptionError(`${options.providerName} apiKey is required`)
   }
 
   const { providerName, baseUrl, apiKey, userAgent, apiPath, undiciOptions } = options

@@ -133,6 +133,22 @@ test('request - should get error on non existing sessionId', async () => {
   })
 })
 
+test('request - should throw error when model is not found', async () => {
+  const ai = new Ai({
+    logger,
+    providers: { openai: { apiKey, client: createDummyClient() } },
+    models: [{ provider: 'openai', model: 'gpt-4o-mini' }]
+  })
+
+  assert.rejects(async () => await ai.request({
+    models: ['deepseek:deepseek-chat'],
+    prompt: 'Can you help me to with math?',
+  }), {
+    code: 'OPTION_ERROR',
+    message: 'Option error: Request model deepseek:deepseek-chat not defined'
+  })
+})
+
 test('validateOptions - should throw error when logger is missing', () => {
   assert.throws(() => {
     // @ts-ignore - intentionally missing logger

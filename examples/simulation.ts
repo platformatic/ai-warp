@@ -35,7 +35,7 @@ const prompts: Prompt[] =
         "Oh I forgot, they don't like garlic. Also, I don't think the cheese is a good idea to put on top of fish. Since you suggest to use the oven, add some tomatoes",
         'Sounds delicious! Thank you'
       ],
-      models: ['deepseek:deepseek-chat']
+      // models: ['deepseek:deepseek-chat']
     },
 
     {
@@ -151,7 +151,7 @@ async function main() {
                 content += event.data.response
               }
             } else if (event.event === 'end') {
-              console.log('<<< END', event.data.response)
+              console.log(`<<< END: "${event.data.response}"`)
             } else if (event.event === 'error') {
               console.error('Error:', event.data.message)
             }
