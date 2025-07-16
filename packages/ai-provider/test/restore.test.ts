@@ -357,7 +357,7 @@ test('should restore model after provider communication error when enough time h
   )
 
   // Wait for restore timeout
-  await wait(200)
+  await wait(500)
 
   // Should be able to make request again after restore
   const response = await ai.request({

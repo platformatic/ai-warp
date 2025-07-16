@@ -1,9 +1,10 @@
 import type { Logger } from 'pino'
 import type { AiProvider, AiResponseResult } from './ai.ts'
 import type { Pool } from 'undici'
-import { OpenAIProvider } from '../providers/openai.ts'
 import { OptionError } from './errors.ts'
+import { OpenAIProvider } from '../providers/openai.ts'
 import { DeepSeekProvider } from '../providers/deepseek.ts'
+import { GeminiProvider } from '../providers/gemini.ts'
 
 export type AiChatHistory = {
   prompt: string
@@ -74,6 +75,10 @@ export function createAiProvider (provider: AiProvider, options: ProviderOptions
 
   if (provider === 'deepseek') {
     return new DeepSeekProvider(options, client)
+  }
+
+  if (provider === 'gemini') {
+    return new GeminiProvider(options, client)
   }
 
   throw new OptionError(`Provider "${provider}" not supported`)

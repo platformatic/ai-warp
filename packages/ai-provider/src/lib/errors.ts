@@ -15,6 +15,7 @@ export const ProviderRequestTimeoutError = createError<string>('PROVIDER_REQUEST
 export const ProviderRequestStreamTimeoutError = createError<string>('PROVIDER_REQUEST_STREAM_TIMEOUT_ERROR', 'Stream timeout after %s ms of inactivity')
 
 export const ProviderResponseNoContentError = createError<[string]>('PROVIDER_RESPONSE_NO_CONTENT', '%s didn\'t return any content')
+export const ProviderResponseMaxTokensError = createError<[string]>('PROVIDER_RESPONSE_MAX_TOKENS_ERROR', '%s returned empty response because max tokens reached')
 
 export const StreamError = createError<string>('STREAM_ERROR', 'Received error on stream: %s')
 

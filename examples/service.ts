@@ -41,11 +41,16 @@ export async function app({ start = false, logger }: AppOptions) {
   if (!process.env.DEEPSEEK_API_KEY) {
     throw new Error('DEEPSEEK_API_KEY is not set')
   }
+  if (!process.env.GEMINI_API_KEY) {
+    throw new Error('GEMINI_API_KEY is not set')
+  }
+
 
   await app.register(ai, {
     providers: {
       openai: { apiKey: process.env.OPENAI_API_KEY },
-      deepseek: { apiKey: process.env.DEEPSEEK_API_KEY }
+      deepseek: { apiKey: process.env.DEEPSEEK_API_KEY },
+      gemini: { apiKey: process.env.GEMINI_API_KEY }
     },
     storage: valkeyStorage,
     limits: {
@@ -70,6 +75,12 @@ export async function app({ start = false, logger }: AppOptions) {
     },
     models: [
       {
+        provider: 'gemini',
+        model: 'gemini-2.5-flash',
+        limits: { maxTokens: 1500 }
+      }
+
+      {
         provider: 'openai',
         model: 'gpt-4o-mini',
         limits: {
@@ -87,9 +98,10 @@ export async function app({ start = false, logger }: AppOptions) {
           providerExceededError: '5m'
         },        
       },
+
       {
-        provider: 'openai',
-        model: 'gpt-4o',
+        provider: 'gemini',
+        model: 'gemini-2.0-flash-001'
       },
 
       {
@@ -99,6 +111,11 @@ export async function app({ start = false, logger }: AppOptions) {
           providerExceededError: '10s',
           timeout: '10s'
         }
+      },
+
+      {
+        provider: 'openai',
+        model: 'gpt-4o',
       }
     ]
   })

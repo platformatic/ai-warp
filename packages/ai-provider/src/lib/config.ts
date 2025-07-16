@@ -25,10 +25,14 @@ export const DEFAULT_RESTORE_REQUEST_TIMEOUT = '1m'
 export const DEFAULT_RESTORE_PROVIDER_COMMUNICATION_ERROR = '1m'
 export const DEFAULT_RESTORE_PROVIDER_EXCEEDED_QUOTA_ERROR = '10m'
 
+export const OPENAI_PROVIDER_NAME = 'OpenAI'
+export const OPENAI_DEFAULT_BASE_URL = 'https://api.openai.com'
+export const OPENAI_DEFAULT_API_PATH = '/v1/chat/completions'
+
 export const DEEPSEEK_PROVIDER_NAME = 'DeepSeek'
 export const DEEPSEEK_DEFAULT_BASE_URL = 'https://api.deepseek.com'
 export const DEEPSEEK_DEFAULT_API_PATH = '/chat/completions'
 
-export const OPENAI_PROVIDER_NAME = 'OpenAI'
-export const OPENAI_DEFAULT_BASE_URL = 'https://api.openai.com'
-export const OPENAI_DEFAULT_API_PATH = '/v1/chat/completions'
+export const GEMINI_PROVIDER_NAME = 'Gemini'
+export const GEMINI_DEFAULT_BASE_URL = 'https://generativelanguage.googleapis.com'
+export const GEMINI_DEFAULT_API_PATH = '/v1beta/openai/chat/completions'

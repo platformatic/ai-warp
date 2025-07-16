@@ -73,7 +73,7 @@ export default fp(async (fastify, options: AiPluginOptions) => {
   fastify.decorate('ai', {
     request: async (request: FastifyAiRequest, reply: FastifyReply): Promise<FastifyAiResponse> => {
       const response = await ai.request({
-        models: request.models ?? options.models,
+        models: request.models,
         prompt: request.prompt,
         options: {
           context: request.context,
