@@ -9,8 +9,6 @@ A TypeScript client for streaming AI responses from Platformatic AI services.
 - 📡 **Server-Sent Events** - Handles both event-based and data-only SSE messages
 - 📄 **Flexible parsing** - Supports JSON and plain text data formats
 - 🎯 **Simple API** - Easy to use with async/await and for-await-of
-- ⚡ **Node.js streams** - Built on robust Node.js streaming primitives
-- 🛠️ **Error handling** - Comprehensive error handling for network and parsing errors
 
 ## Installation
 
@@ -21,51 +19,51 @@ npm install @platformatic/ai-client
 ## Usage
 
 ```typescript
-import { buildClient } from '@platformatic/ai-client'
+import { buildClient } from "@platformatic/ai-client";
 
 // Create client instance
 const client = buildClient({
-  url: 'http://localhost:3000',
+  url: "http://localhost:3000",
   headers: {
-    Authorization: 'Bearer your-api-key'
-  }
-})
+    Authorization: "Bearer your-api-key",
+  },
+});
 
 try {
   // Make a request to the AI service
   const stream = await client.ask({
-    prompt: 'Hello AI, how are you today?',
-    sessionId: 'user-123',
+    prompt: "Hello AI, how are you today?",
+    sessionId: "user-123",
     temperature: 0.7,
-    model: 'gpt-4'
-  })
+    model: "gpt-4",
+  });
 
   // Read the streaming response
-  let fullResponse = ''
+  let fullResponse = "";
 
   for await (const message of stream) {
     switch (message.type) {
-      case 'content':
+      case "content":
         // Accumulate content chunks
-        fullResponse += message.content
-        console.log('Chunk:', message.content)
-        break
-      case 'error':
-        console.error('Error:', message.error)
-        break
-      case 'done':
+        fullResponse += message.content;
+        console.log("Chunk:", message.content);
+        break;
+      case "error":
+        console.error("Error:", message.error);
+        break;
+      case "done":
         if (message.response) {
-          console.log('Final response:', message.response)
+          console.log("Final response:", message.response);
         }
-        break
+        break;
     }
   }
 
-  console.log('Full response:', fullResponse)
+  console.log("Full response:", fullResponse);
 } catch (error) {
-  console.error('Request failed:', error)
+  console.error("Request failed:", error);
 } finally {
-  await client.close()
+  await client.close();
 }
 ```
 
@@ -108,6 +106,7 @@ A `Promise<AsyncIterable<StreamMessage>>` that resolves to a stream of messages.
 The stream yields `StreamMessage` objects with the following types:
 
 #### Content Message
+
 ```typescript
 {
   type: 'content',
@@ -116,6 +115,7 @@ The stream yields `StreamMessage` objects with the following types:
 ```
 
 #### Error Message
+
 ```typescript
 {
   type: 'error',
@@ -124,6 +124,7 @@ The stream yields `StreamMessage` objects with the following types:
 ```
 
 #### Done Message
+
 ```typescript
 {
   type: 'done',
@@ -149,6 +150,7 @@ Closes the client and cleans up resources.
 The client supports various SSE message formats:
 
 ### Event-based Messages
+
 ```
 event: content
 data: {"response": "Hello world"}
@@ -158,6 +160,7 @@ data: {"response": {"content": "Complete", "model": "gpt-4"}}
 ```
 
 ### Data-only Messages
+
 ```
 data: {"response": "JSON content"}
 
@@ -165,25 +168,3 @@ data: {"content": "Alternative JSON format"}
 
 data: Plain text content
 ```
-
-All formats are automatically detected and processed appropriately.
-
-## Error Handling
-
-The client handles various error conditions:
-
-- **Network errors**: Connection failures, timeouts
-- **HTTP errors**: Non-2xx status codes
-- **Parsing errors**: Invalid Server-Sent Events format
-- **Service errors**: AI service-specific errors
-
-All errors are properly typed and can be caught with standard try/catch blocks.
-
-## Requirements
-
-- Node.js 22.16.0 or later
-- TypeScript 5.8.2 or later (for TypeScript projects)
-
-## License
-
-Apache-2.0
