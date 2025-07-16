@@ -30,7 +30,7 @@ export class Client implements AIClient {
     return pino({ ...defaultOptions, ...loggerOptions })
   }
 
-  async ask (options: AskOptions): Promise<AsyncIterable<StreamMessage>> {
+  async ask (options: AskOptions): Promise<Readable> {
     const endpoint = `${this.url}/ai`
 
     this.logger.debug('Making AI request', { endpoint, prompt: options.prompt, sessionId: options.sessionId, model: options.model })
@@ -81,30 +81,32 @@ export class Client implements AIClient {
     }
   }
 
-  private createStreamFromResponse (body: ReadableStream<Uint8Array>): AsyncIterable<StreamMessage> {
+  private createStreamFromResponse (body: ReadableStream<Uint8Array>): Transform {
     const logger = this.logger
 
-    async function * parseAIMessages (source: AsyncIterable<string>): AsyncGenerator<StreamMessage> {
-      for await (const eventText of source) {
-        if (eventText.trim()) {
-          const event = parseEvent(eventText)
+    const parseAIMessages = new Transform({
+      objectMode: true,
+      transform (chunk: string, _encoding, callback) {
+        if (chunk.trim()) {
+          const event = parseEvent(chunk)
           if (event) {
             const message = convertEventToMessage(event)
-            if (message) yield message
+            if (message) {
+              this.push(message)
+            }
           }
         }
+        callback()
       }
-    }
-
-    const outputStream = Transform.from(parseAIMessages)
-    const nodeReadable = Readable.fromWeb(body)
-
-    pipeline(nodeReadable, split2('\n\n'), outputStream).catch(err => {
-      logger.error('Pipeline error:', err)
-      outputStream.destroy(err)
     })
 
-    return outputStream
+    const nodeReadable = Readable.fromWeb(body)
+
+    pipeline(nodeReadable, split2('\n\n'), parseAIMessages).catch((error) => {
+      logger.error({ error: error.message, stack: error.stack }, 'Error in AI message parsing pipeline')
+      parseAIMessages.emit('error', error)
+    })
+    return parseAIMessages
   }
 }
 

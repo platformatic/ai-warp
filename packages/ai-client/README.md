@@ -68,6 +68,35 @@ try {
 }
 ```
 
+### Error Handling
+
+The client provides multiple ways to handle errors:
+
+```typescript
+try {
+  const stream = await client.ask({
+    prompt: "Hello AI",
+    sessionId: "user-123"
+  });
+
+  // Handle stream errors (connection issues, parsing errors, etc.)
+  stream.on('error', (err) => {
+    console.error('Stream error:', err);
+  });
+
+  for await (const message of stream) {
+    if (message.type === 'error') {
+      // Handle AI service errors
+      console.error('AI service error:', message.error);
+    }
+    // ... handle other message types
+  }
+} catch (error) {
+  // Handle request-level errors (HTTP errors, timeouts, etc.)
+  console.error("Request failed:", error);
+}
+```
+
 ## API Reference
 
 ### `buildClient(options)`
@@ -138,11 +167,11 @@ Makes a streaming request to the AI service.
 
 #### Returns
 
-A `Promise<AsyncIterable<StreamMessage>>` that resolves to a stream of messages.
+A `Promise<Readable>` that resolves to a Node.js Readable stream of messages.
 
 ### Stream Messages
 
-The stream yields `StreamMessage` objects with the following types:
+The Readable stream yields `StreamMessage` objects with the following types:
 
 #### Content Message
 

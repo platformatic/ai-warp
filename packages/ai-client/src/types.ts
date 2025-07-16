@@ -1,4 +1,5 @@
 import type { BaseLogger, LoggerOptions } from 'pino'
+import type { Readable } from 'node:stream'
 
 export interface ClientOptions {
   url: string
@@ -37,5 +38,5 @@ export interface StreamMessage {
 }
 
 export interface AIClient {
-  ask(options: AskOptions): Promise<AsyncIterable<StreamMessage>>
+  ask(options: AskOptions): Promise<Readable>
 }
