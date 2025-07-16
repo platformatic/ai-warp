@@ -1,15 +1,17 @@
-import type { AIClient, AskOptions, ClientOptions, StreamMessage, AskResponse } from './types.ts'
+import type { AIClient, AskOptions, ClientOptions, StreamMessage, AskResponse, Logger } from './types.ts'
+import type { AiModel } from '@platformatic/ai-provider'
 import { pipeline } from 'node:stream/promises'
 import { Transform, Readable } from 'node:stream'
 import split2 from 'split2'
-import { pino } from 'pino'
-import type { BaseLogger, LoggerOptions } from 'pino'
+
+// @ts-ignore
+import abstractLogging from 'abstract-logging'
 
 export class Client implements AIClient {
   private url: string
   private headers: Record<string, string>
   private timeout: number
-  private logger: BaseLogger
+  private logger: Logger
 
   constructor (options: ClientOptions) {
     this.url = options.url.endsWith('/') ? options.url.slice(0, -1) : options.url
@@ -18,22 +20,34 @@ export class Client implements AIClient {
       ...options.headers
     }
     this.timeout = options.timeout ?? 60000
-    this.logger = this.getLogger(options.logger, options.loggerOptions)
+    this.logger = options.logger ?? abstractLogging
   }
 
-  private getLogger (logger?: BaseLogger, loggerOptions?: LoggerOptions): BaseLogger {
-    if (logger) {
-      return logger
+  private normalizeModels (models?: (string | AiModel)[]): AiModel[] | undefined {
+    if (!models || models.length === 0) {
+      return undefined
     }
 
-    const defaultOptions = { name: 'ai-client' }
-    return pino({ ...defaultOptions, ...loggerOptions })
+    return models.map(model => {
+      if (typeof model === 'string') {
+        const parts = model.split(':')
+        if (parts.length === 2) {
+          return {
+            provider: parts[0] as any,
+            model: parts[1]
+          }
+        }
+        throw new Error(`Invalid models format: ${model}. Expected format: "provider:model"`)
+      }
+      return model
+    })
   }
 
   async ask (options: AskOptions): Promise<Readable> {
     const endpoint = `${this.url}/ai`
+    const normalizedModels = this.normalizeModels(options.models)
 
-    this.logger.debug('Making AI request', { endpoint, prompt: options.prompt, sessionId: options.sessionId, model: options.model })
+    this.logger.debug('Making AI request', { endpoint, prompt: options.prompt, sessionId: options.sessionId, models: normalizedModels })
 
     try {
       const response = await fetch(endpoint, {
@@ -47,8 +61,8 @@ export class Client implements AIClient {
           sessionId: options.sessionId,
           context: options.context,
           temperature: options.temperature,
-          model: options.model,
-          messages: options.messages,
+          models: normalizedModels,
+          history: options.history,
           stream: options.stream !== false
         }),
         signal: AbortSignal.timeout(this.timeout)

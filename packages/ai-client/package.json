@@ -16,7 +16,8 @@
   },
   "author": "Platformatic Inc. <oss@platformatic.dev> (https://platformatic.dev)",
   "dependencies": {
-    "pino": "^9.7.0",
+    "@platformatic/ai-provider": "workspace:*",
+    "abstract-logging": "^2.0.1",
     "split2": "^4.2.0"
   },
   "devDependencies": {

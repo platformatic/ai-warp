@@ -10,5 +10,6 @@ export type {
   AskOptions,
   AskResponse,
   StreamMessage,
-  AIClient
+  AIClient,
+  Logger
 } from './types.ts'

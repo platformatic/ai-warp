@@ -38,7 +38,7 @@ try {
     prompt: "Hello AI, how are you today?",
     sessionId: "user-123",
     temperature: 0.7,
-    model: "gpt-4",
+    models: ["openai:gpt-4"],
   });
 
   // Read the streaming response
@@ -97,6 +97,50 @@ try {
 }
 ```
 
+## Model Configuration
+
+The client supports two formats for specifying AI models:
+
+### String Format
+
+```typescript
+const stream = await client.ask({
+  prompt: "Hello AI",
+  models: ["openai:gpt-4"]
+});
+```
+
+### Object Format
+
+```typescript
+const stream = await client.ask({
+  prompt: "Hello AI",
+  models: [{
+    provider: "openai",
+    model: "gpt-4"
+  }]
+});
+```
+
+Both formats are equivalent and will be normalized internally to the object format.
+
+### Multiple Models for Fallback
+
+You can specify multiple models for fallback scenarios:
+
+```typescript
+const stream = await client.ask({
+  prompt: "Hello AI",
+  models: [
+    "openai:gpt-4",
+    "openai:gpt-3.5-turbo", 
+    { provider: "deepseek", model: "deepseek-chat" }
+  ]
+});
+```
+
+The AI service will try each model in order until one succeeds.
+
 ## API Reference
 
 ### `buildClient(options)`
@@ -108,23 +152,27 @@ Creates a new AI client instance.
 - `url` (string): The AI service URL
 - `headers` (object, optional): HTTP headers to include with requests
 - `timeout` (number, optional): Request timeout in milliseconds (default: 60000)
-- `logger` (BaseLogger, optional): Pino logger instance
-- `loggerOptions` (LoggerOptions, optional): Pino options for creating default logger
+- `logger` (Logger, optional): Logger instance (uses abstract-logging if not provided)
 
 #### Logger Support
 
-You can configure logging in two ways:
+You can configure logging by providing a logger instance:
 
-1. **Provide a logger instance**:
 ```typescript
-import { pino } from 'pino'
+import type { Logger } from '@platformatic/ai-client'
 
-const customLogger = pino({
-  level: 'info',
-  transport: {
-    target: 'pino-pretty'
+const customLogger: Logger = {
+  debug: (message: string, data?: any) => console.log('DEBUG:', message, data),
+  info: (message: string, data?: any) => console.log('INFO:', message, data),
+  warn: (message: string, data?: any) => console.warn('WARN:', message, data),
+  error: (messageOrData: string | any, messageWhenData?: string) => {
+    if (typeof messageOrData === 'string') {
+      console.error('ERROR:', messageOrData, messageWhenData)
+    } else {
+      console.error('ERROR:', messageWhenData || 'Error', messageOrData)
+    }
   }
-})
+}
 
 const client = buildClient({
   url: "http://localhost:3000",
@@ -132,20 +180,7 @@ const client = buildClient({
 })
 ```
 
-2. **Provide logger options** (used only when no logger is provided):
-```typescript
-const client = buildClient({
-  url: "http://localhost:3000",
-  loggerOptions: {
-    level: 'debug',
-    transport: {
-      target: 'pino-pretty'
-    }
-  }
-})
-```
-
-If neither `logger` nor `loggerOptions` are provided, a default Pino logger will be created with `{ name: 'ai-client' }`.
+If no `logger` is provided, the client will use `abstract-logging` (a no-op logger that is API-compatible with the Logger interface).
 
 #### Returns
 
@@ -161,8 +196,8 @@ Makes a streaming request to the AI service.
 - `sessionId` (string, optional): Session ID for conversation context
 - `context` (string, optional): Additional context for the request
 - `temperature` (number, optional): AI temperature parameter
-- `model` (string, optional): AI model to use
-- `messages` (array, optional): Previous conversation messages
+- `models` (array, optional): Array of AI models to use, supports both "provider:model" strings and `AiModel` objects from `@platformatic/ai-provider`
+- `history` (array, optional): Previous conversation history as `AiChatHistory` from `@platformatic/ai-provider`
 - `stream` (boolean, optional): Enable streaming (default: true)
 
 #### Returns

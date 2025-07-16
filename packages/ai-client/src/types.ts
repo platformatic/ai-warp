@@ -1,28 +1,36 @@
-import type { BaseLogger, LoggerOptions } from 'pino'
 import type { Readable } from 'node:stream'
+import type { AiModel, AiResponseResult, AiChatHistory, AiSessionId } from '@platformatic/ai-provider'
+
+export interface Logger {
+  debug(message: string, data?: any): void
+  info(message: string, data?: any): void
+  warn(message: string, data?: any): void
+  error(message: string, data?: any): void
+  error(data: any, message?: string): void
+}
 
 export interface ClientOptions {
   url: string
   headers?: Record<string, string>
   timeout?: number
-  logger?: BaseLogger
-  loggerOptions?: LoggerOptions
+  logger?: Logger
 }
 
 export interface AskOptions {
   prompt: string
-  sessionId?: string
+  sessionId?: AiSessionId
   context?: string | Record<string, any> | any[]
   temperature?: number
-  model?: string
-  messages?: Array<{ role: 'system' | 'user' | 'assistant' | string; content: string }>
+  models?: (string | AiModel)[]
+  history?: AiChatHistory
   stream?: boolean
 }
 
 export interface AskResponse {
   content: string
   model?: string
-  sessionId?: string
+  sessionId?: AiSessionId
+  result?: AiResponseResult
   usage?: {
     promptTokens: number
     completionTokens: number
