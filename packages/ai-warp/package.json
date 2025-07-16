@@ -1,6 +1,6 @@
 {
   "name": "@platformatic/ai-warp-dev",
-  "version": "0.6.0-dev.9",
+  "version": "0.6.0-dev.10",
   "type": "module",
   "description": "The Platformatic warp AI service",
   "license": "Apache-2.0",

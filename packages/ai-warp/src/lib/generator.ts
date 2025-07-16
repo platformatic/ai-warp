@@ -106,14 +106,8 @@ class AiWarpGenerator extends ServiceGenerator {
     await super._beforePrepare()
 
     this.addEnvVars({
-      PLT_OPENAI_API_KEY: this.config.aiOpenaiApiKey ?? PLACEHOLDER_API_KEY
-    }, { overwrite: false })
-
-    this.addEnvVars({
-      PLT_DEEPSEEK_API_KEY: this.config.aiDeepseekApiKey ?? PLACEHOLDER_API_KEY
-    }, { overwrite: false })
-
-    this.addEnvVars({
+      PLT_OPENAI_API_KEY: this.config.aiOpenaiApiKey ?? PLACEHOLDER_API_KEY,
+      PLT_DEEPSEEK_API_KEY: this.config.aiDeepseekApiKey ?? PLACEHOLDER_API_KEY,
       PLT_GEMINI_API_KEY: this.config.aiGeminiApiKey ?? PLACEHOLDER_API_KEY
     }, { overwrite: false })
 
@@ -178,8 +172,7 @@ class AiWarpGenerator extends ServiceGenerator {
         { name: 'OpenAI', value: 'openai' },
         { name: 'DeepSeek', value: 'deepseek' },
         { name: 'Gemini', value: 'gemini' }
-      ],
-      configValue: 'aiProviders'
+      ]
     })
 
     this.questions.push({
@@ -187,8 +180,7 @@ class AiWarpGenerator extends ServiceGenerator {
       name: 'aiOpenaiApiKey',
       when: (answers: Record<string, string>) => answers.aiProviders.includes('openai'),
       message: 'What is your OpenAI API key?',
-      default: PLACEHOLDER_API_KEY,
-      configValue: 'aiOpenaiApiKey'
+      default: PLACEHOLDER_API_KEY
     })
 
     this.questions.push({
@@ -196,8 +188,7 @@ class AiWarpGenerator extends ServiceGenerator {
       name: 'aiDeepseekApiKey',
       when: (answers: Record<string, string>) => answers.aiProviders.includes('deepseek'),
       message: 'What is your DeepSeek API key?',
-      default: PLACEHOLDER_API_KEY,
-      configValue: 'aiDeepseekApiKey'
+      default: PLACEHOLDER_API_KEY
     })
 
     this.questions.push({
@@ -205,8 +196,7 @@ class AiWarpGenerator extends ServiceGenerator {
       name: 'aiGeminiApiKey',
       when: (answers: Record<string, string>) => answers.aiProviders.includes('gemini'),
       message: 'What is your Gemini API key?',
-      default: PLACEHOLDER_API_KEY,
-      configValue: 'aiGeminiApiKey'
+      default: PLACEHOLDER_API_KEY
     })
   }
 }
