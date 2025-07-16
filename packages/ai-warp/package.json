@@ -39,7 +39,7 @@
   "packageManager": "pnpm@10.13.1",
   "dependencies": {
     "@platformatic/config": "^2.71.0",
-    "@platformatic/fastify-ai": "workspace:*",
+    "@platformatic/fastify-ai-dev": "workspace:*",
     "@platformatic/generators": "^2.71.0",
     "@platformatic/service": "^2.71.0"
   }
