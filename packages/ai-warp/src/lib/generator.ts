@@ -84,23 +84,17 @@ class AiWarpGenerator extends ServiceGenerator {
   async _beforePrepare(): Promise<void> {
     await super._beforePrepare()
 
-    if (this.config.aiProviders?.includes('openai')) {
-      this.addEnvVars({
-        PLT_OPENAI_API_KEY: this.config.aiOpenaiApiKey ?? PLACEHOLDER_API_KEY
-      }, { overwrite: false })
-    }
+    this.addEnvVars({
+      PLT_OPENAI_API_KEY: this.config.aiOpenaiApiKey ?? PLACEHOLDER_API_KEY
+    }, { overwrite: false })
 
-    if (this.config.aiProviders?.includes('deepseek')) {
-      this.addEnvVars({
-        PLT_DEEPSEEK_API_KEY: this.config.aiDeepseekApiKey ?? PLACEHOLDER_API_KEY
-      }, { overwrite: false })
-    }
+    this.addEnvVars({
+      PLT_DEEPSEEK_API_KEY: this.config.aiDeepseekApiKey ?? PLACEHOLDER_API_KEY
+    }, { overwrite: false })
 
-    if (this.config.aiProviders?.includes('gemini')) {
-      this.addEnvVars({
-        PLT_GEMINI_API_KEY: this.config.aiGeminiApiKey ?? PLACEHOLDER_API_KEY
-      }, { overwrite: false })
-    }
+    this.addEnvVars({
+      PLT_GEMINI_API_KEY: this.config.aiGeminiApiKey ?? PLACEHOLDER_API_KEY
+    }, { overwrite: false })
 
     const packageJson = await this.getStackablePackageJson()
 
@@ -169,8 +163,11 @@ class AiWarpGenerator extends ServiceGenerator {
 
     this.questions.push({
       type: 'password',
-      name: 'aiApiKey',
-      when: (answers: Record<string, string>) => answers.aiProviders.includes('openai'),
+      name: 'aiOpenaiApiKey',
+      when: (answers: Record<string, string>) => {
+        console.log(answers.aiProviders)
+        return answers.aiProviders.includes('openai')
+      },
       message: 'What is your OpenAI API key?',
       default: PLACEHOLDER_API_KEY,
       configValue: 'aiOpenaiApiKey'
@@ -178,7 +175,7 @@ class AiWarpGenerator extends ServiceGenerator {
 
     this.questions.push({
       type: 'password',
-      name: 'aiApiKey',
+      name: 'aiDeepseekApiKey',
       when: (answers: Record<string, string>) => answers.aiProviders.includes('deepseek'),
       message: 'What is your DeepSeek API key?',
       default: PLACEHOLDER_API_KEY,
@@ -187,7 +184,7 @@ class AiWarpGenerator extends ServiceGenerator {
 
     this.questions.push({
       type: 'password',
-      name: 'aiApiKey',
+      name: 'aiGeminiApiKey',
       when: (answers: Record<string, string>) => answers.aiProviders.includes('gemini'),
       message: 'What is your Gemini API key?',
       default: PLACEHOLDER_API_KEY,
