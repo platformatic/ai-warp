@@ -65,7 +65,8 @@ test('client.ask sends correct request and handles streaming response', async (_
     sessionId: 'user-123',
     temperature: 0.7,
     models: [{ provider: 'openai', model: 'gpt-4' }],
-    context: { key: 'value' }
+    context: { key: 'value' },
+    stream: true
   })
 
   const messages = []
@@ -134,7 +135,8 @@ test('client handles models as object format', async (_) => {
 
   const stream = await client.ask({
     prompt: 'Hello AI',
-    models: [{ provider: 'openai', model: 'gpt-4' }]
+    models: [{ provider: 'openai', model: 'gpt-4' }],
+    stream: true
   })
 
   const messages = []
@@ -187,7 +189,8 @@ test('client handles multiple models', async (_) => {
       { provider: 'openai', model: 'gpt-4' },
       { provider: 'openai', model: 'gpt-3.5-turbo' },
       { provider: 'deepseek', model: 'deepseek-chat' }
-    ]
+    ],
+    stream: true
   })
 
   const messages = []
@@ -221,7 +224,7 @@ test('client handles HTTP errors', async (_) => {
   })
 
   try {
-    await client.ask({ prompt: 'Hello' })
+    await client.ask({ prompt: 'Hello', stream: true })
     throw new Error('Should have thrown an error')
   } catch (error) {
     ok(error instanceof Error)
@@ -248,7 +251,7 @@ test('client handles timeout', async (_) => {
   })
 
   try {
-    await client.ask({ prompt: 'Hello' })
+    await client.ask({ prompt: 'Hello', stream: true })
     throw new Error('Should have thrown an error')
   } catch (error: any) {
     ok(error instanceof Error)
@@ -281,7 +284,7 @@ test('client handles mixed JSON and plain text SSE data', async (_) => {
     url: `http://localhost:${port}`
   })
 
-  const stream = await client.ask({ prompt: 'Hello' })
+  const stream = await client.ask({ prompt: 'Hello', stream: true })
   const messages = []
   for await (const message of stream) {
     messages.push(message)
@@ -318,7 +321,7 @@ test('client handles AI provider Server-Sent Events', async (_) => {
     url: `http://localhost:${port}`
   })
 
-  const stream = await client.ask({ prompt: 'Hello' })
+  const stream = await client.ask({ prompt: 'Hello', stream: true })
   const messages = []
   for await (const message of stream) {
     messages.push(message)
@@ -356,7 +359,7 @@ test('client handles data-only SSE messages (no event field)', async (_) => {
     url: `http://localhost:${port}`
   })
 
-  const stream = await client.ask({ prompt: 'Hello' })
+  const stream = await client.ask({ prompt: 'Hello', stream: true })
   const messages = []
   for await (const message of stream) {
     messages.push(message)
@@ -404,7 +407,7 @@ test('client handles mixed event and data-only SSE messages', async (_) => {
     url: `http://localhost:${port}`
   })
 
-  const stream = await client.ask({ prompt: 'Hello' })
+  const stream = await client.ask({ prompt: 'Hello', stream: true })
   const messages = []
   for await (const message of stream) {
     messages.push(message)
@@ -445,7 +448,7 @@ test('client handles data-only messages with various formats', async (_) => {
     url: `http://localhost:${port}`
   })
 
-  const stream = await client.ask({ prompt: 'Hello' })
+  const stream = await client.ask({ prompt: 'Hello', stream: true })
   const messages = []
   for await (const message of stream) {
     messages.push(message)
@@ -483,7 +486,7 @@ test('client handles plain text data-only messages', async (_) => {
     url: `http://localhost:${port}`
   })
 
-  const stream = await client.ask({ prompt: 'Hello' })
+  const stream = await client.ask({ prompt: 'Hello', stream: true })
   const messages = []
   for await (const message of stream) {
     messages.push(message)
@@ -527,7 +530,7 @@ test('client handles null response body', async (_) => {
   })
 
   try {
-    await client.ask({ prompt: 'Hello' })
+    await client.ask({ prompt: 'Hello', stream: true })
     throw new Error('Should have thrown an error')
   } catch (error: any) {
     ok(error instanceof Error)
@@ -561,7 +564,7 @@ test('client handles unknown error type', async (_) => {
   })
 
   try {
-    await client.ask({ prompt: 'Hello' })
+    await client.ask({ prompt: 'Hello', stream: true })
     throw new Error('Should have thrown an error')
   } catch (error: any) {
     ok(error instanceof Error)
@@ -596,7 +599,7 @@ test('client handles events with no data field', async (_) => {
     url: `http://localhost:${port}`
   })
 
-  const stream = await client.ask({ prompt: 'Hello' })
+  const stream = await client.ask({ prompt: 'Hello', stream: true })
   const messages = []
   for await (const message of stream) {
     messages.push(message)
@@ -631,7 +634,7 @@ test('client handles unknown event types', async (_) => {
     url: `http://localhost:${port}`
   })
 
-  const stream = await client.ask({ prompt: 'Hello' })
+  const stream = await client.ask({ prompt: 'Hello', stream: true })
   const messages = []
   for await (const message of stream) {
     messages.push(message)
@@ -686,7 +689,7 @@ test('client uses provided logger', async (_) => {
     logger: mockLogger
   })
 
-  const stream = await client.ask({ prompt: 'Hello' })
+  const stream = await client.ask({ prompt: 'Hello', stream: true })
   const messages = []
   for await (const message of stream) {
     messages.push(message)
@@ -723,7 +726,7 @@ test('client uses default logger when none provided', async (_) => {
     url: `http://localhost:${port}`
   })
 
-  const stream = await client.ask({ prompt: 'Hello' })
+  const stream = await client.ask({ prompt: 'Hello', stream: true })
   const messages = []
   for await (const message of stream) {
     messages.push(message)
@@ -756,7 +759,7 @@ test('client uses abstract-logging when no logger provided', async (_) => {
     url: `http://localhost:${port}`
   })
 
-  const stream = await client.ask({ prompt: 'Hello' })
+  const stream = await client.ask({ prompt: 'Hello', stream: true })
   const messages = []
   for await (const message of stream) {
     messages.push(message)
@@ -764,6 +767,143 @@ test('client uses abstract-logging when no logger provided', async (_) => {
 
   strictEqual(messages.length, 1)
   deepStrictEqual(messages[0], { type: 'content', content: 'Test message' })
+
+  server.close()
+  await once(server, 'close')
+})
+
+test('client handles non-streaming response', async (_) => {
+  let capturedRequestBody: any = null
+
+  const server = createServer((req, res) => {
+    let body = ''
+    req.on('data', chunk => {
+      body += chunk.toString()
+    })
+    req.on('end', () => {
+      capturedRequestBody = JSON.parse(body)
+
+      res.writeHead(200, {
+        'Content-Type': 'application/json'
+      })
+
+      res.end(JSON.stringify({
+        content: 'Hello world!',
+        model: 'gpt-4',
+        sessionId: 'user-123',
+        usage: {
+          promptTokens: 10,
+          completionTokens: 15,
+          totalTokens: 25
+        }
+      }))
+    })
+  })
+
+  server.listen(0)
+  await once(server, 'listening')
+  const port = (server.address() as AddressInfo).port
+
+  const client = buildClient({
+    url: `http://localhost:${port}`,
+    logger: silentLogger
+  })
+
+  const response = await client.ask({
+    prompt: 'Hello AI',
+    sessionId: 'user-123',
+    models: [{ provider: 'openai', model: 'gpt-4' }],
+    stream: false
+  })
+
+  strictEqual(capturedRequestBody?.prompt, 'Hello AI')
+  strictEqual(capturedRequestBody?.sessionId, 'user-123')
+  strictEqual(capturedRequestBody?.stream, false)
+  deepStrictEqual(capturedRequestBody?.models, [{ provider: 'openai', model: 'gpt-4' }])
+
+  deepStrictEqual(response, {
+    content: 'Hello world!',
+    model: 'gpt-4',
+    sessionId: 'user-123',
+    usage: {
+      promptTokens: 10,
+      completionTokens: 15,
+      totalTokens: 25
+    }
+  })
+
+  server.close()
+  await once(server, 'close')
+})
+
+test('client handles non-streaming response with error', async (_) => {
+  const server = createServer((req, res) => {
+    res.writeHead(500, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ error: 'Internal server error' }))
+  })
+
+  server.listen(0)
+  await once(server, 'listening')
+  const port = (server.address() as any).port
+
+  const client = buildClient({
+    url: `http://localhost:${port}`,
+    logger: silentLogger
+  })
+
+  try {
+    await client.ask({
+      prompt: 'Hello AI',
+      stream: false
+    })
+    throw new Error('Should have thrown an error')
+  } catch (error) {
+    ok(error instanceof Error)
+    ok(error.message.includes('HTTP 500'))
+  }
+
+  server.close()
+  await once(server, 'close')
+})
+
+test('client defaults to streaming when stream option not specified', async (_) => {
+  let capturedRequestBody: any = null
+
+  const server = createServer((req, res) => {
+    let body = ''
+    req.on('data', chunk => {
+      body += chunk.toString()
+    })
+    req.on('end', () => {
+      capturedRequestBody = JSON.parse(body)
+
+      res.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        Connection: 'keep-alive'
+      })
+
+      res.write('event: content\ndata: {"response": "Hello"}\n\n')
+      res.write('event: end\ndata: {"response": {"content": "Hello", "model": "gpt-4"}}\n\n')
+      res.end()
+    })
+  })
+
+  server.listen(0)
+  await once(server, 'listening')
+  const port = (server.address() as AddressInfo).port
+
+  const client = buildClient({
+    url: `http://localhost:${port}`,
+    logger: silentLogger
+  })
+
+  const stream = await client.ask({
+    prompt: 'Hello AI'
+  })
+
+  strictEqual(capturedRequestBody?.stream, true)
+  ok(stream && typeof (stream as any).on === 'function', 'Should return a stream')
 
   server.close()
   await once(server, 'close')
@@ -792,7 +932,7 @@ test('client stream handles error events', async (_) => {
     logger: silentLogger
   })
 
-  const stream = await client.ask({ prompt: 'Hello' })
+  const stream = await client.ask({ prompt: 'Hello', stream: true })
   const messages = []
   let streamError: Error | null = null
 

@@ -18,6 +18,8 @@ npm install @platformatic/ai-client
 
 ## Usage
 
+### Streaming Response (default)
+
 ```typescript
 import { buildClient } from "@platformatic/ai-client";
 
@@ -32,12 +34,13 @@ const client = buildClient({
 });
 
 try {
-  // Make a request to the AI service
+  // Make a streaming request to the AI service
   const stream = await client.ask({
     prompt: "Hello AI, how are you today?",
     sessionId: "user-123",
     temperature: 0.7,
     models: [{ provider: "openai", model: "gpt-4" }],
+    stream: true // optional, defaults to true
   });
 
   // Read the streaming response
@@ -62,6 +65,36 @@ try {
   }
 
   console.log("Full response:", fullResponse);
+} catch (error) {
+  console.error("Request failed:", error);
+}
+```
+
+### Non-Streaming Response
+
+```typescript
+import { buildClient } from "@platformatic/ai-client";
+
+const client = buildClient({
+  url: "http://localhost:3000",
+  headers: {
+    Authorization: "Bearer your-api-key",
+  },
+});
+
+try {
+  // Make a non-streaming request to the AI service
+  const response = await client.ask({
+    prompt: "Hello AI, how are you today?",
+    sessionId: "user-123",
+    temperature: 0.7,
+    models: [{ provider: "openai", model: "gpt-4" }],
+    stream: false
+  });
+
+  console.log("Response:", response.content);
+  console.log("Model:", response.model);
+  console.log("Usage:", response.usage);
 } catch (error) {
   console.error("Request failed:", error);
 }
@@ -174,7 +207,7 @@ An `AIClient` instance.
 
 ### `client.ask(options)`
 
-Makes a streaming request to the AI service.
+Makes a request to the AI service, returning either a stream or a complete response.
 
 #### Options
 
@@ -188,7 +221,23 @@ Makes a streaming request to the AI service.
 
 #### Returns
 
-A `Promise<Readable>` that resolves to a Node.js Readable stream of messages.
+- When `stream: true` (default): `Promise<Readable>` - A Node.js Readable stream of messages
+- When `stream: false`: `Promise<AskResponse>` - A complete response object
+
+#### Response Object (Non-streaming)
+
+```typescript
+{
+  content: string          // The AI's response content
+  model?: string          // The model used to generate the response
+  sessionId?: string      // Session ID if provided
+  usage?: {              // Token usage information
+    promptTokens: number
+    completionTokens: number
+    totalTokens: number
+  }
+}
+```
 
 ### Stream Messages
 

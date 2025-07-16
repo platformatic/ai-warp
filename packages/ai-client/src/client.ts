@@ -22,17 +22,20 @@ export class Client implements AIClient {
     this.logger = options.logger ?? abstractLogging
   }
 
-  async ask (options: AskOptions): Promise<Readable> {
+  async ask (options: AskOptions & { stream: true }): Promise<Readable>
+  async ask (options: AskOptions & { stream?: false }): Promise<AskResponse>
+  async ask (options: AskOptions): Promise<Readable | AskResponse> {
     const endpoint = `${this.url}/ai`
+    const isStreaming = options.stream !== false
 
-    this.logger.debug('Making AI request', { endpoint, prompt: options.prompt, sessionId: options.sessionId, models: options.models })
+    this.logger.debug('Making AI request', { endpoint, prompt: options.prompt, sessionId: options.sessionId, models: options.models, stream: isStreaming })
 
     try {
       const response = await fetch(endpoint, {
         method: 'POST',
         headers: {
           ...this.headers,
-          Accept: 'text/event-stream'
+          Accept: isStreaming ? 'text/event-stream' : 'application/json'
         },
         body: JSON.stringify({
           prompt: options.prompt,
@@ -41,7 +44,7 @@ export class Client implements AIClient {
           temperature: options.temperature,
           models: options.models,
           history: options.history,
-          stream: options.stream !== false
+          stream: isStreaming
         }),
         signal: AbortSignal.timeout(this.timeout)
       })
@@ -54,11 +57,15 @@ export class Client implements AIClient {
 
       this.logger.info('AI request successful', { status: response.status })
 
-      if (!response.body) {
-        throw new Error('Response body is null')
+      if (isStreaming) {
+        if (!response.body) {
+          throw new Error('Response body is null')
+        }
+        return this.createStreamFromResponse(response.body)
+      } else {
+        const jsonResponse = await response.json()
+        return jsonResponse as AskResponse
       }
-
-      return this.createStreamFromResponse(response.body)
     } catch (error) {
       if (error instanceof Error) {
         if (error.name === 'TimeoutError') {

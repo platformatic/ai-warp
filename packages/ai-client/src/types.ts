@@ -46,5 +46,6 @@ export interface StreamMessage {
 }
 
 export interface AIClient {
-  ask(options: AskOptions): Promise<Readable>
+  ask(options: AskOptions & { stream: true }): Promise<Readable>
+  ask(options: AskOptions & { stream?: false }): Promise<AskResponse>
 }
