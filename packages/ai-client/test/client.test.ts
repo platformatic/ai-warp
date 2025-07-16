@@ -270,7 +270,7 @@ test('client handles mixed JSON and plain text SSE data', async (_) => {
     })
 
     res.write('event: content\ndata: {"response": "Valid"}\n\n')
-    res.write('event: content\ndata: invalid-json\n\n')  // Plain text treated as content
+    res.write('event: content\ndata: invalid-json\n\n')
     res.write('event: content\ndata: {"response": "After error"}\n\n')
     res.end()
   })
@@ -892,6 +892,214 @@ test('client defaults to streaming when stream option not specified', async (_) 
 
   strictEqual(capturedRequestBody?.stream, true)
   ok(stream && typeof (stream as any).on === 'function', 'Should return a stream')
+
+  server.close()
+  await once(server, 'close')
+})
+
+test('client handles URL without trailing slash', async (_) => {
+  const server = createServer((req, res) => {
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      Connection: 'keep-alive'
+    })
+    res.write('event: content\ndata: {"response": "Hello"}\n\n')
+    res.end()
+  })
+
+  server.listen(0)
+  await once(server, 'listening')
+  const port = (server.address() as AddressInfo).port
+
+  const client = buildClient({
+    url: `http://localhost:${port}`,
+    logger: silentLogger
+  })
+
+  const stream = await client.ask({
+    prompt: 'Hello AI',
+    stream: true
+  })
+
+  const messages = []
+  for await (const message of stream) {
+    messages.push(message)
+  }
+
+  strictEqual(messages.length, 1)
+  deepStrictEqual(messages[0], { type: 'content', content: 'Hello' })
+
+  server.close()
+  await once(server, 'close')
+})
+
+test('client handles data with error field instead of message', async (_) => {
+  const server = createServer((req, res) => {
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      Connection: 'keep-alive'
+    })
+
+    res.write('data: {"error": "Something went wrong"}\n\n')
+    res.end()
+  })
+
+  server.listen(0)
+  await once(server, 'listening')
+  const port = (server.address() as any).port
+
+  const client = buildClient({
+    url: `http://localhost:${port}`,
+    logger: silentLogger
+  })
+
+  const stream = await client.ask({ prompt: 'Hello', stream: true })
+  const messages = []
+  for await (const message of stream) {
+    messages.push(message)
+  }
+
+  strictEqual(messages.length, 1)
+  deepStrictEqual(messages[0], { type: 'error', error: new Error('Something went wrong') })
+
+  server.close()
+  await once(server, 'close')
+})
+
+test('client handles response object with content property', async (_) => {
+  const server = createServer((req, res) => {
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      Connection: 'keep-alive'
+    })
+
+    res.write('data: {"response": {"content": "Hello from content"}}\n\n')
+    res.end()
+  })
+
+  server.listen(0)
+  await once(server, 'listening')
+  const port = (server.address() as any).port
+
+  const client = buildClient({
+    url: `http://localhost:${port}`,
+    logger: silentLogger
+  })
+
+  const stream = await client.ask({ prompt: 'Hello', stream: true })
+  const messages = []
+  for await (const message of stream) {
+    messages.push(message)
+  }
+
+  strictEqual(messages.length, 1)
+  deepStrictEqual(messages[0], { type: 'content', content: 'Hello from content' })
+
+  server.close()
+  await once(server, 'close')
+})
+
+test('client handles response object without model or sessionId', async (_) => {
+  const server = createServer((req, res) => {
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      Connection: 'keep-alive'
+    })
+
+    res.write('data: {"response": {"content": "Just content"}}\n\n')
+    res.end()
+  })
+
+  server.listen(0)
+  await once(server, 'listening')
+  const port = (server.address() as any).port
+
+  const client = buildClient({
+    url: `http://localhost:${port}`,
+    logger: silentLogger
+  })
+
+  const stream = await client.ask({ prompt: 'Hello', stream: true })
+  const messages = []
+  for await (const message of stream) {
+    messages.push(message)
+  }
+
+  strictEqual(messages.length, 1)
+  deepStrictEqual(messages[0], { type: 'content', content: 'Just content' })
+
+  server.close()
+  await once(server, 'close')
+})
+
+test('client handles empty chunks in stream', async (_) => {
+  const server = createServer((req, res) => {
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      Connection: 'keep-alive'
+    })
+
+    res.write('\n\n')
+    res.write('data: {"response": "Hello"}\n\n')
+    res.write('   \n\n')
+    res.end()
+  })
+
+  server.listen(0)
+  await once(server, 'listening')
+  const port = (server.address() as any).port
+
+  const client = buildClient({
+    url: `http://localhost:${port}`,
+    logger: silentLogger
+  })
+
+  const stream = await client.ask({ prompt: 'Hello', stream: true })
+  const messages = []
+  for await (const message of stream) {
+    messages.push(message)
+  }
+
+  strictEqual(messages.length, 1)
+  deepStrictEqual(messages[0], { type: 'content', content: 'Hello' })
+
+  server.close()
+  await once(server, 'close')
+})
+
+test('client handles response with unknown structure', async (_) => {
+  const server = createServer((req, res) => {
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      Connection: 'keep-alive'
+    })
+
+    res.write('data: {"unknown": "structure"}\n\n')
+    res.end()
+  })
+
+  server.listen(0)
+  await once(server, 'listening')
+  const port = (server.address() as any).port
+
+  const client = buildClient({
+    url: `http://localhost:${port}`,
+    logger: silentLogger
+  })
+
+  const stream = await client.ask({ prompt: 'Hello', stream: true })
+  const messages = []
+  for await (const message of stream) {
+    messages.push(message)
+  }
+
+  strictEqual(messages.length, 0)
 
   server.close()
   await once(server, 'close')
