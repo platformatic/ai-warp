@@ -96,14 +96,15 @@ export class Client implements AIClient {
       }
     }
 
-    const streamTransform = Transform.from(parseAIMessages)
+    const outputStream = Transform.from(parseAIMessages)
     const nodeReadable = Readable.fromWeb(body)
 
-    pipeline(nodeReadable, split2('\n\n'), streamTransform).catch(err => {
+    pipeline(nodeReadable, split2('\n\n'), outputStream).catch(err => {
       logger.error('Pipeline error:', err)
+      outputStream.destroy(err)
     })
 
-    return streamTransform
+    return outputStream
   }
 }
 
