@@ -1,22 +1,20 @@
+import { Pool } from 'undici'
 import { ReadableStream, type UnderlyingByteSource } from 'node:stream/web'
-import undici from 'undici'
 import type { AiProvider, AiResponseResult } from '../lib/ai.ts'
 import { type AiChatHistory, type ProviderClient, type ProviderClientContext, type ProviderClientOptions, type ProviderOptions, type ProviderRequestOptions, type ProviderResponse, type StreamChunkCallback } from '../lib/provider.ts'
 import { encodeEvent, parseEventStream, type AiStreamEvent } from '../lib/event.ts'
-import { ProviderExceededQuotaError, ProviderResponseError, ProviderResponseNoContentError } from '../lib/errors.ts'
-import { BaseProvider } from './base.ts'
+import { ProviderResponseNoContentError } from '../lib/errors.ts'
+import { BaseProvider } from './lib/base.ts'
+import { DEFAULT_UNDICI_POOL_OPTIONS, OPENAI_DEFAULT_API_PATH, OPENAI_DEFAULT_BASE_URL, OPENAI_PROVIDER_NAME, UNDICI_USER_AGENT } from '../lib/config.ts'
+import { createOpenAiClient } from './lib/openai-undici-client.ts'
 
 // @see https://github.com/openai/openai-node
 // @see https://platform.openai.com/docs/api-reference/chat/create
 
-const DEFAULT_BASE_URL = 'https://api.openai.com'
-const UNDICI_USER_AGENT = 'warp-dev/1.0.0'
-const OPENAI_PATH = '/v1/chat/completions'
-
 export type OpenAIOptions = ProviderOptions
 export type OpenAIResponse = any // TODO fix types
 
-type OpenAIMessage = {
+export type OpenAIMessage = {
   role: 'system' | 'user' | 'assistant'
   content: string
 }
@@ -29,93 +27,30 @@ export type OpenAIRequest = {
   stream?: boolean
 }
 
-const openaiUndiciClient: ProviderClient = {
-  init: async (options: ProviderClientOptions | undefined, _context: ProviderClientContext): Promise<any> => {
-    return {
-      pool: new undici.Pool(options?.baseUrl ?? DEFAULT_BASE_URL, {
-        pipelining: 2,
-        // TODO undici client options
-        // bodyTimeout
-        // headersTimeout
-      }),
-      headers: {
-        Authorization: `Bearer ${options?.apiKey}`,
-        'Content-Type': 'application/json',
-        'User-Agent': UNDICI_USER_AGENT
-      }
-    }
-  },
-  close: async (client, _context: ProviderClientContext): Promise<void> => {
-    client.pool.close()
-  },
-  request: async (client, request: OpenAIRequest, context: ProviderClientContext): Promise<any> => {
-    context.logger.debug({ path: OPENAI_PATH, request }, 'OpenAI undici request')
+export type OpenAiClientOptions = ProviderClientOptions & {
+  baseUrl: string
+  apiPath: string
+  apiKey: string
+  userAgent: string
+  providerName: string
+  undiciOptions?: Pool.Options
 
-    const response = await client.pool.request({
-      path: OPENAI_PATH,
-      method: 'POST',
-      headers: client.headers,
-      blocking: false,
-      body: JSON.stringify({
-        model: request.model,
-        messages: request.messages,
-        max_tokens: request.max_tokens,
-        temperature: request.temperature,
-        stream: false,
-        n: 1,
-      })
-    })
-
-    if (response.statusCode !== 200) {
-      const errorText = await response.body.text()
-      context.logger.error({ statusCode: response.statusCode, error: errorText }, 'OpenAI API response error')
-      if (response.statusCode === 429) {
-        throw new ProviderExceededQuotaError(`OpenAI Response: ${response.statusCode} - ${errorText}`)
-      }
-      throw new ProviderResponseError(`OpenAI Response: ${response.statusCode} - ${errorText}`)
-    }
-
-    const responseData = await response.body.json()
-    context.logger.debug({ responseData }, 'OpenAI response received')
-
-    return responseData
-  },
-  stream: async (client, request: OpenAIRequest, context: ProviderClientContext): Promise<ReadableStream> => { // TODO types
-    context.logger.debug({ path: OPENAI_PATH, request }, 'OpenAI undici stream request')
-
-    const response = await client.pool.request({
-      path: OPENAI_PATH,
-      method: 'POST',
-      headers: client.headers,
-      opaque: new ReadableStream(),
-      body: JSON.stringify({
-        model: request.model,
-        messages: request.messages,
-        max_tokens: request.max_tokens,
-        temperature: request.temperature,
-        stream: true,
-        n: 1,
-      })
-    })
-
-    if (response.statusCode !== 200) {
-      const errorText = await response.body.text()
-      context.logger.error({ statusCode: response.statusCode, error: errorText }, 'OpenAI API error')
-      if (response.statusCode === 429) {
-        throw new ProviderExceededQuotaError(`OpenAI Response: ${response.statusCode} - ${errorText}`)
-      }
-      throw new ProviderResponseError(`OpenAI Response: ${response.statusCode} - ${errorText}`)
-    }
-
-    return response.body as ReadableStream
-  }
+  checkResponseFn?: (response: any, context: ProviderClientContext, providerName: string) => Promise<void>
 }
 
 export class OpenAIProvider extends BaseProvider {
   name: AiProvider = 'openai'
+  providerName: string = OPENAI_PROVIDER_NAME
 
   constructor (options: OpenAIOptions, client?: ProviderClient) {
-    super(options, client ?? openaiUndiciClient)
+    super(options, client ?? createOpenAiClient({
+      providerName: OPENAI_PROVIDER_NAME,
+      baseUrl: options.clientOptions?.baseUrl ?? OPENAI_DEFAULT_BASE_URL,
+      apiPath: options.clientOptions?.apiPath ?? OPENAI_DEFAULT_API_PATH,
+      apiKey: options.clientOptions?.apiKey ?? '',
+      userAgent: options.clientOptions?.userAgent ?? UNDICI_USER_AGENT,
+      undiciOptions: options.clientOptions?.undiciOptions ?? DEFAULT_UNDICI_POOL_OPTIONS,
+    }))
   }
 
   async request (model: string, prompt: string, options: ProviderRequestOptions): Promise<ProviderResponse> {
@@ -134,17 +69,17 @@ export class OpenAIProvider extends BaseProvider {
     if (options.stream) {
       const response = await this.client.stream(this.api, request, this.context)
 
-      return new ReadableStream(new OpenAiByteSource(response, options.onStreamChunk))
+      return new ReadableStream(new OpenAiByteSource(this.providerName, response, options.onStreamChunk))
     }
 
-    this.logger.debug({ request }, 'OpenaAI request')
+    this.logger.debug({ request }, `${this.providerName} request`)
     const response = await this.client.request(this.api, request, this.context)
 
-    this.logger.debug({ response }, 'openai full response (no stream)')
+    this.logger.debug({ response }, `${this.providerName} full response (no stream)`)
 
     const text = response.choices?.[0]?.message?.content
     if (!text) {
-      throw new ProviderResponseNoContentError('OpenAI')
+      throw new ProviderResponseNoContentError(this.providerName)
     }
 
     return {
@@ -170,10 +105,12 @@ export class OpenAIProvider extends BaseProvider {
 
 class OpenAiByteSource implements UnderlyingByteSource {
   type: 'bytes' = 'bytes'
+  providerName: string
   readable: ReadableStream
   chunkCallback?: StreamChunkCallback
 
-  constructor (readable: ReadableStream, chunkCallback?: StreamChunkCallback) {
+  constructor (providerName: string, readable: ReadableStream, chunkCallback?: StreamChunkCallback) {
+    this.providerName = providerName
     this.readable = readable
     this.chunkCallback = chunkCallback
   }
@@ -183,7 +120,7 @@ class OpenAiByteSource implements UnderlyingByteSource {
       const events = parseEventStream(chunk.toString('utf8'))
       for (const event of events) {
         if (event.event === 'error') {
-          const error = new ProviderResponseNoContentError('OpenAI stream')
+          const error = new ProviderResponseNoContentError(`${this.providerName} stream`)
 
           const eventData: AiStreamEvent = {
             event: 'error',

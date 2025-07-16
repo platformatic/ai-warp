@@ -3,31 +3,14 @@ import { setTimeout as wait } from 'node:timers/promises'
 import type { Logger } from 'pino'
 import type { FastifyError } from '@fastify/error'
 
-import { OpenAIProvider } from '../providers/openai.ts'
-import type { AiChatHistory, Provider, ProviderClient, ProviderOptions, ProviderRequestOptions, ProviderResponse, AiSessionId } from './provider.ts'
+import { type AiChatHistory, type Provider, type ProviderClient, type ProviderOptions, type ProviderRequestOptions, type ProviderResponse, type AiSessionId, createAiProvider } from './provider.ts'
 import { createStorage, type Storage, type AiStorageOptions } from './storage/index.ts'
 import { parseTimeWindow, processStream } from './utils.ts'
 import { HistoryGetError, ModelStateError, OptionError, ProviderNoModelsAvailableError, ProviderRateLimitError, ProviderRequestStreamTimeoutError, ProviderRequestTimeoutError } from './errors.ts'
+import { DEFAULT_HISTORY_EXPIRATION, DEFAULT_MAX_RETRIES, DEFAULT_RATE_LIMIT_MAX, DEFAULT_RATE_LIMIT_TIME_WINDOW, DEFAULT_REQUEST_TIMEOUT, DEFAULT_RESTORE_PROVIDER_COMMUNICATION_ERROR, DEFAULT_RESTORE_PROVIDER_EXCEEDED_QUOTA_ERROR, DEFAULT_RESTORE_RATE_LIMIT, DEFAULT_RESTORE_REQUEST_TIMEOUT, DEFAULT_RESTORE_RETRY, DEFAULT_RETRY_INTERVAL, DEFAULT_STORAGE } from './config.ts'
 
 // supported providers
 export type AiProvider = 'openai' | 'deepseek'
-
-export const DEFAULT_STORAGE: AiStorageOptions = {
-  type: 'memory'
-}
-
-export const DEFAULT_RATE_LIMIT_MAX = 200
-export const DEFAULT_RATE_LIMIT_TIME_WINDOW = '30s'
-export const DEFAULT_REQUEST_TIMEOUT = 30_000
-export const DEFAULT_HISTORY_EXPIRATION = '1d'
-export const DEFAULT_MAX_RETRIES = 1
-export const DEFAULT_RETRY_INTERVAL = 1_000
-
-export const DEFAULT_RESTORE_RATE_LIMIT = '1m'
-export const DEFAULT_RESTORE_RETRY = '1m'
-export const DEFAULT_RESTORE_REQUEST_TIMEOUT = '1m'
-export const DEFAULT_RESTORE_PROVIDER_COMMUNICATION_ERROR = '1m'
-export const DEFAULT_RESTORE_PROVIDER_EXCEEDED_QUOTA_ERROR = '10m'
 
 export type AiModel = {
   provider: AiProvider
@@ -214,18 +197,17 @@ export class Ai {
     this.providers = new Map()
 
     for (const provider of Object.keys(this.options.providers)) {
-      const p = provider as AiProvider
+      const providerId = provider as AiProvider
       const options: ProviderOptions = {
         logger: this.logger,
-        client: this.options.providers[p]?.client,
+        client: this.options.providers[providerId]?.client,
         clientOptions: {
-          apiKey: this.options.providers[p]?.apiKey ?? ''
+          apiKey: this.options.providers[providerId]?.apiKey ?? ''
         }
       }
 
       const providerState = {
-        // TODO generic provider
-        provider: new OpenAIProvider(options, options.client),
+        provider: createAiProvider(providerId, options, options.client),
         models: new Models(this.storage)
       }
 
@@ -239,7 +221,7 @@ export class Ai {
       const writes = []
       // TODO batch ops
       // Init models if not present
-      for (const model of this.options.models.filter(m => m.provider === p)) {
+      for (const model of this.options.models.filter(m => m.provider === providerId)) {
         const modelName = typeof model === 'string' ? model : model.model
         const modelState = await this.getModelState(modelName, providerState)
         if (!modelState) {
@@ -249,13 +231,13 @@ export class Ai {
       }
       await Promise.all(writes)
 
-      this.providers.set(p, providerState)
+      this.providers.set(providerId, providerState)
     }
 
     this.modelSettings = this.options.models.reduce((models: Record<string, ModelSettings>, model) => {
       models[model.model] = {
         limits: {
-          maxTokens: model.limits?.maxTokens,
+          maxTokens: model.limits?.maxTokens ?? this.options.limits.maxTokens,
           rate: {
             max: model.limits?.rate?.max ?? this.options.limits.rate.max,
             timeWindow: parseTimeWindow(model.limits?.rate?.timeWindow ?? this.options.limits.rate.timeWindow, 'model.limits.rate.timeWindow')
@@ -341,7 +323,7 @@ export class Ai {
     }
 
     // warn on missing max tokens in options
-    if (options.limits?.maxTokens) {
+    if (!options.limits?.maxTokens) {
       options.logger.warn('maxTokens is not set and will be ignored')
     }
 
@@ -496,7 +478,7 @@ export class Ai {
     let selected = await this.selectModel(models)
     if (!selected) {
       this.logger.warn({ models }, 'No models available')
-      throw new ProviderNoModelsAvailableError(models)
+      throw new ProviderNoModelsAvailableError(models.map(m => typeof m === 'string' ? m : `${m.provider}:${m.model}`).join(', '))
     }
 
     let response!: Response

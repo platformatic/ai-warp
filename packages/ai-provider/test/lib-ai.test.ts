@@ -1,8 +1,10 @@
 import { test } from 'node:test'
 import assert from 'node:assert'
-import { Ai, DEFAULT_STORAGE, DEFAULT_RATE_LIMIT_MAX, DEFAULT_REQUEST_TIMEOUT, DEFAULT_MAX_RETRIES, DEFAULT_RETRY_INTERVAL, type ContentResponse, type StreamResponse } from '../src/lib/ai.ts'
+import { Ai, type AiContentResponse, type AiStreamResponse } from '../src/lib/ai.ts'
 import { createDummyClient, mockOpenAiStream } from './helper/helper.ts'
 import pino from 'pino'
+import { DEFAULT_HISTORY_EXPIRATION, DEFAULT_MAX_RETRIES, DEFAULT_RATE_LIMIT_MAX, DEFAULT_REQUEST_TIMEOUT, DEFAULT_RESTORE_RATE_LIMIT, DEFAULT_RETRY_INTERVAL, DEFAULT_STORAGE, DEFAULT_RESTORE_REQUEST_TIMEOUT, DEFAULT_RESTORE_RETRY, DEFAULT_RATE_LIMIT_TIME_WINDOW, DEFAULT_RESTORE_PROVIDER_COMMUNICATION_ERROR, DEFAULT_RESTORE_PROVIDER_EXCEEDED_QUOTA_ERROR } from '../src/lib/config.ts'
+import { parseTimeWindow } from '../src/lib/utils.ts'
 
 const logger = pino({ level: 'silent' })
 const apiKey = 'test'
@@ -42,7 +44,7 @@ test('request - should always generate a sessionId (no stream)', async () => {
     options: {
       context: 'You are a nice helpful assistant.',
     }
-  }) as ContentResponse
+  }) as AiContentResponse
 
   assert.match(response.sessionId, /[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}/)
 })
@@ -81,7 +83,7 @@ test('request - should always generate a sessionId (stream)', async () => {
       context: 'You are a nice helpful assistant.',
       stream: true
     }
-  }) as StreamResponse
+  }) as AiStreamResponse
 
   assert.match(response.sessionId, /[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}/)
 })
@@ -254,16 +256,16 @@ test('validateOptions - should successfully validate minimal valid options', () 
   // Check that default values are applied
   assert.deepEqual(ai.options.storage, DEFAULT_STORAGE)
   assert.equal(ai.options.limits.rate.max, DEFAULT_RATE_LIMIT_MAX)
-  assert.equal(ai.options.limits.rate.timeWindow, 30000) // 30s in ms
+  assert.equal(ai.options.limits.rate.timeWindow, parseTimeWindow(DEFAULT_RATE_LIMIT_TIME_WINDOW))
   assert.equal(ai.options.limits.requestTimeout, DEFAULT_REQUEST_TIMEOUT)
   assert.equal(ai.options.limits.retry.max, DEFAULT_MAX_RETRIES)
   assert.equal(ai.options.limits.retry.interval, DEFAULT_RETRY_INTERVAL)
-  assert.equal(ai.options.limits.historyExpiration, 86400000) // 1d in ms
-  assert.equal(ai.options.restore.rateLimit, 60000) // 1m in ms
-  assert.equal(ai.options.restore.retry, 60000) // 1m in ms
-  assert.equal(ai.options.restore.timeout, 60000) // 1m in ms
-  assert.equal(ai.options.restore.providerCommunicationError, 60000) // 1m in ms
-  assert.equal(ai.options.restore.providerExceededError, 600000) // 10m in ms
+  assert.equal(ai.options.limits.historyExpiration, parseTimeWindow(DEFAULT_HISTORY_EXPIRATION))
+  assert.equal(ai.options.restore.rateLimit, parseTimeWindow(DEFAULT_RESTORE_RATE_LIMIT))
+  assert.equal(ai.options.restore.retry, parseTimeWindow(DEFAULT_RESTORE_RETRY))
+  assert.equal(ai.options.restore.timeout, parseTimeWindow(DEFAULT_RESTORE_REQUEST_TIMEOUT))
+  assert.equal(ai.options.restore.providerCommunicationError, parseTimeWindow(DEFAULT_RESTORE_PROVIDER_COMMUNICATION_ERROR))
+  assert.equal(ai.options.restore.providerExceededError, parseTimeWindow(DEFAULT_RESTORE_PROVIDER_EXCEEDED_QUOTA_ERROR))
 })
 
 test('validateOptions - should successfully validate options with custom storage', () => {
