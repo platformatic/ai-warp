@@ -7,10 +7,10 @@ export interface ClientOptions {
 export interface AskOptions {
   prompt: string
   sessionId?: string
-  context?: string
+  context?: string | Record<string, any> | any[]
   temperature?: number
   model?: string
-  messages?: Array<{ role: string; content: string }>
+  messages?: Array<{ role: 'system' | 'user' | 'assistant' | string; content: string }>
   stream?: boolean
 }
 
@@ -34,5 +34,4 @@ export interface StreamMessage {
 
 export interface AIClient {
   ask(options: AskOptions): Promise<AsyncIterable<StreamMessage>>
-  close(): Promise<void>
 }

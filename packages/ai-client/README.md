@@ -62,8 +62,6 @@ try {
   console.log("Full response:", fullResponse);
 } catch (error) {
   console.error("Request failed:", error);
-} finally {
-  await client.close();
 }
 ```
 
@@ -140,10 +138,6 @@ The stream yields `StreamMessage` objects with the following types:
   }
 }
 ```
-
-### `client.close()`
-
-Closes the client and cleans up resources.
 
 ## Server-Sent Events Support
 

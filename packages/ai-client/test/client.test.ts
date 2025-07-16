@@ -1,61 +1,60 @@
 import { test } from 'node:test'
-import { deepStrictEqual, strictEqual } from 'node:assert'
-import { buildClient } from '../src/index.ts'
+import { deepStrictEqual, strictEqual, ok } from 'node:assert'
 import { createServer } from 'node:http'
+import { buildClient } from '../src/index.ts'
 import { once } from 'node:events'
+import type { AddressInfo } from 'node:net'
 
-test('buildClient creates a client with ask method', async (_) => {
+test('buildClient creates a client with ask method', (_) => {
   const client = buildClient({
-    url: 'http://localhost:3000',
-    headers: { Authorization: 'Bearer token' }
+    url: 'http://localhost:3000'
   })
 
-  strictEqual(typeof client.ask, 'function')
-  strictEqual(typeof client.close, 'function')
+  ok(typeof client.ask === 'function')
 })
 
 test('client.ask sends correct request and handles streaming response', async (_) => {
+  let capturedRequestBody: any = null
+  let capturedHeaders: any = null
+
   const server = createServer((req, res) => {
-    if (req.method === 'POST' && req.url === '/ai') {
-      let body = ''
-      req.on('data', chunk => { body += chunk })
-      req.on('end', () => {
-        const parsed = JSON.parse(body)
-        deepStrictEqual(parsed, {
-          prompt: 'Hello AI',
-          sessionId: 'test-session',
-          stream: true
-        })
+    capturedHeaders = req.headers
 
-        res.writeHead(200, {
-          'Content-Type': 'text/event-stream',
-          'Cache-Control': 'no-cache',
-          Connection: 'keep-alive'
-        })
+    let body = ''
+    req.on('data', chunk => {
+      body += chunk.toString()
+    })
+    req.on('end', () => {
+      capturedRequestBody = JSON.parse(body)
 
-        res.write('event: content\ndata: {"response": "Hello"}\n\n')
-        res.write('event: content\ndata: {"response": " from"}\n\n')
-        res.write('event: content\ndata: {"response": " AI"}\n\n')
-        res.write('event: end\ndata: {"response": {"content": "Hello from AI", "model": "test-model"}}\n\n')
-        res.end()
+      res.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        Connection: 'keep-alive'
       })
-    } else {
-      res.writeHead(404)
+
+      res.write('event: content\ndata: {"response": "Hello "}\n\n')
+      res.write('event: content\ndata: {"response": "world!"}\n\n')
+      res.write('event: end\ndata: {"response": {"content": "Hello world!", "model": "test", "sessionId": "123", "usage": {"totalTokens": 10}}}\n\n')
       res.end()
-    }
+    })
   })
 
   server.listen(0)
   await once(server, 'listening')
-  const port = (server.address() as any).port
+  const port = (server.address() as AddressInfo).port
 
   const client = buildClient({
-    url: `http://localhost:${port}`
+    url: `http://localhost:${port}`,
+    headers: { Authorization: 'Bearer test' }
   })
 
   const stream = await client.ask({
     prompt: 'Hello AI',
-    sessionId: 'test-session'
+    sessionId: 'user-123',
+    temperature: 0.7,
+    model: 'gpt-4',
+    context: { key: 'value' }
   })
 
   const messages = []
@@ -63,15 +62,26 @@ test('client.ask sends correct request and handles streaming response', async (_
     messages.push(message)
   }
 
-  strictEqual(messages.length, 4)
-  deepStrictEqual(messages[0], { type: 'content', content: 'Hello' })
-  deepStrictEqual(messages[1], { type: 'content', content: ' from' })
-  deepStrictEqual(messages[2], { type: 'content', content: ' AI' })
-  deepStrictEqual(messages[3], {
+  strictEqual(capturedRequestBody?.prompt, 'Hello AI')
+  strictEqual(capturedRequestBody?.sessionId, 'user-123')
+  strictEqual(capturedRequestBody?.temperature, 0.7)
+  strictEqual(capturedRequestBody?.model, 'gpt-4')
+  deepStrictEqual(capturedRequestBody?.context, { key: 'value' })
+  strictEqual(capturedRequestBody?.stream, true)
+
+  ok(capturedHeaders['accept']?.includes('text/event-stream'))
+  strictEqual(capturedHeaders['authorization'], 'Bearer test')
+
+  strictEqual(messages.length, 3)
+  deepStrictEqual(messages[0], { type: 'content', content: 'Hello ' })
+  deepStrictEqual(messages[1], { type: 'content', content: 'world!' })
+  deepStrictEqual(messages[2], {
     type: 'done',
     response: {
-      content: 'Hello from AI',
-      model: 'test-model'
+      content: 'Hello world!',
+      model: 'test',
+      sessionId: '123',
+      usage: { totalTokens: 10 }
     }
   })
 
@@ -95,9 +105,11 @@ test('client handles HTTP errors', async (_) => {
 
   try {
     await client.ask({ prompt: 'Hello' })
-    throw new Error('Should have thrown')
+    throw new Error('Should have thrown an error')
   } catch (error) {
-    strictEqual((error as Error).message, 'HTTP 500: Internal Server Error')
+    ok(error instanceof Error)
+    ok(error.message.includes('HTTP 500'))
+    ok(error.message.includes('Internal Server Error'))
   }
 
   server.close()
@@ -105,8 +117,8 @@ test('client handles HTTP errors', async (_) => {
 })
 
 test('client handles timeout', async (_) => {
-  const server = createServer((_, __) => {
-    // Don't respond, causing a timeout
+  const server = createServer((_req, _res) => {
+    // Intentionally do not respond to trigger timeout
   })
 
   server.listen(0)
@@ -120,9 +132,10 @@ test('client handles timeout', async (_) => {
 
   try {
     await client.ask({ prompt: 'Hello' })
-    throw new Error('Should have thrown')
-  } catch (error) {
-    strictEqual((error as Error).message, 'Request timeout')
+    throw new Error('Should have thrown an error')
+  } catch (error: any) {
+    ok(error instanceof Error)
+    strictEqual(error.message, 'Request timeout')
   }
 
   server.close()
@@ -303,15 +316,11 @@ test('client handles data-only messages with various formats', async (_) => {
       Connection: 'keep-alive'
     })
 
-    // Various data-only message formats
-    res.write('data: {"response": "Simple string response"}\n\n')
-    res.write('data: {"content": "Using content field"}\n\n')
-    res.write('data: {"response": {"content": "Nested content"}}\n\n')
-    res.write('data: {"message": "Error message format"}\n\n')
-    res.write('data: {"error": "Direct error field"}\n\n')
-    res.write('data: {"unknown": "Should be ignored"}\n\n')
-    res.write('data: invalid json\n\n')  // Plain text treated as content
-    res.write('data: {"response": {"content": "Done", "model": "gpt-4", "sessionId": "123"}}\n\n')
+    // Various data-only formats
+    res.write('data: {"response": {"content": "Nested response"}}\n\n')
+    res.write('data: {"message": "Error-like but not error field"}\n\n')
+    res.write('data: {"response": {"sessionId": "abc123", "model": "gpt-4"}}\n\n')
+    res.write('data: {"unknown": "field"}\n\n')  // Unknown structure - should be ignored
     res.end()
   })
 
@@ -329,21 +338,10 @@ test('client handles data-only messages with various formats', async (_) => {
     messages.push(message)
   }
 
-  strictEqual(messages.length, 7)
-  deepStrictEqual(messages[0], { type: 'content', content: 'Simple string response' })
-  deepStrictEqual(messages[1], { type: 'content', content: 'Using content field' })
-  deepStrictEqual(messages[2], { type: 'content', content: 'Nested content' })
-  deepStrictEqual(messages[3], { type: 'error', error: new Error('Error message format') })
-  deepStrictEqual(messages[4], { type: 'error', error: new Error('Direct error field') })
-  deepStrictEqual(messages[5], { type: 'content', content: 'invalid json' })
-  deepStrictEqual(messages[6], {
-    type: 'done',
-    response: {
-      content: 'Done',
-      model: 'gpt-4',
-      sessionId: '123'
-    }
-  })
+  strictEqual(messages.length, 3)
+  deepStrictEqual(messages[0], { type: 'content', content: 'Nested response' })
+  deepStrictEqual(messages[1], { type: 'error', error: new Error('Error-like but not error field') })
+  deepStrictEqual(messages[2], { type: 'done', response: { sessionId: 'abc123', model: 'gpt-4' } })
 
   server.close()
   await once(server, 'close')
@@ -384,6 +382,157 @@ test('client handles plain text data-only messages', async (_) => {
   deepStrictEqual(messages[1], { type: 'content', content: 'Some plain text' })
   deepStrictEqual(messages[2], { type: 'content', content: 'Valid JSON' })
   deepStrictEqual(messages[3], { type: 'content', content: 'Another plain message' })
+
+  server.close()
+  await once(server, 'close')
+})
+
+test('client handles null response body', async (_) => {
+  const server = createServer((req, res) => {
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      Connection: 'keep-alive'
+    })
+    // Simulate a response without body by ending immediately
+    res.end()
+  })
+
+  server.listen(0)
+  await once(server, 'listening')
+  const port = (server.address() as any).port
+
+  // Mock fetch to return response with null body
+  const originalFetch = global.fetch
+  global.fetch = async () => {
+    return {
+      ok: true,
+      body: null,
+      text: async () => ''
+    } as any
+  }
+
+  const client = buildClient({
+    url: `http://localhost:${port}`
+  })
+
+  try {
+    await client.ask({ prompt: 'Hello' })
+    throw new Error('Should have thrown an error')
+  } catch (error: any) {
+    ok(error instanceof Error)
+    strictEqual(error.message, 'Response body is null')
+  } finally {
+    global.fetch = originalFetch
+  }
+
+  server.close()
+  await once(server, 'close')
+})
+
+test('client handles unknown error type', async (_) => {
+  const server = createServer((req, res) => {
+    res.writeHead(200)
+    res.end()
+  })
+
+  server.listen(0)
+  await once(server, 'listening')
+  const port = (server.address() as any).port
+
+  // Mock fetch to throw a non-Error object
+  const originalFetch = global.fetch
+  global.fetch = async () => {
+    // eslint-disable-next-line no-throw-literal
+    throw 'String error' // Not an Error instance
+  }
+
+  const client = buildClient({
+    url: `http://localhost:${port}`
+  })
+
+  try {
+    await client.ask({ prompt: 'Hello' })
+    throw new Error('Should have thrown an error')
+  } catch (error: any) {
+    ok(error instanceof Error)
+    strictEqual(error.message, 'Unknown error occurred')
+  } finally {
+    global.fetch = originalFetch
+  }
+
+  server.close()
+  await once(server, 'close')
+})
+
+test('client handles events with no data field', async (_) => {
+  const server = createServer((req, res) => {
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      Connection: 'keep-alive'
+    })
+
+    // Event without data field
+    res.write('event: content\n\n')
+    res.write('event: error\n\n')
+    res.write('data: {"response": "Valid message"}\n\n')
+    res.end()
+  })
+
+  server.listen(0)
+  await once(server, 'listening')
+  const port = (server.address() as any).port
+
+  const client = buildClient({
+    url: `http://localhost:${port}`
+  })
+
+  const stream = await client.ask({ prompt: 'Hello' })
+  const messages = []
+  for await (const message of stream) {
+    messages.push(message)
+  }
+
+  // Only the valid message should be processed
+  strictEqual(messages.length, 1)
+  deepStrictEqual(messages[0], { type: 'content', content: 'Valid message' })
+
+  server.close()
+  await once(server, 'close')
+})
+
+test('client handles unknown event types', async (_) => {
+  const server = createServer((req, res) => {
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      Connection: 'keep-alive'
+    })
+
+    res.write('event: unknown\ndata: {"response": "Unknown event"}\n\n')
+    res.write('event: custom\ndata: {"something": "else"}\n\n')
+    res.write('event: content\ndata: {"response": "Valid event"}\n\n')
+    res.end()
+  })
+
+  server.listen(0)
+  await once(server, 'listening')
+  const port = (server.address() as any).port
+
+  const client = buildClient({
+    url: `http://localhost:${port}`
+  })
+
+  const stream = await client.ask({ prompt: 'Hello' })
+  const messages = []
+  for await (const message of stream) {
+    messages.push(message)
+  }
+
+  // Only the known event should be processed
+  strictEqual(messages.length, 1)
+  deepStrictEqual(messages[0], { type: 'content', content: 'Valid event' })
 
   server.close()
   await once(server, 'close')

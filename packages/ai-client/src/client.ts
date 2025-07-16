@@ -82,9 +82,6 @@ export class Client implements AIClient {
 
     return streamTransform
   }
-
-  async close (): Promise<void> {
-  }
 }
 
 interface ParsedEvent {
