@@ -28,8 +28,7 @@ const client = buildClient({
     Authorization: "Bearer your-api-key",
   },
   timeout: 30000, // optional timeout in ms (default: 60000)
-  logger: customLogger, // optional Pino logger instance
-  loggerOptions: { level: 'debug' }, // optional Pino options (used when no logger provided)
+  logger: customLogger, // optional Logger instance
 });
 
 try {
@@ -38,7 +37,7 @@ try {
     prompt: "Hello AI, how are you today?",
     sessionId: "user-123",
     temperature: 0.7,
-    models: ["openai:gpt-4"],
+    models: [{ provider: "openai", model: "gpt-4" }],
   });
 
   // Read the streaming response
@@ -99,18 +98,7 @@ try {
 
 ## Model Configuration
 
-The client supports two formats for specifying AI models:
-
-### String Format
-
-```typescript
-const stream = await client.ask({
-  prompt: "Hello AI",
-  models: ["openai:gpt-4"]
-});
-```
-
-### Object Format
+The client uses `AiModel` objects from `@platformatic/ai-provider` to specify AI models:
 
 ```typescript
 const stream = await client.ask({
@@ -122,8 +110,6 @@ const stream = await client.ask({
 });
 ```
 
-Both formats are equivalent and will be normalized internally to the object format.
-
 ### Multiple Models for Fallback
 
 You can specify multiple models for fallback scenarios:
@@ -132,8 +118,8 @@ You can specify multiple models for fallback scenarios:
 const stream = await client.ask({
   prompt: "Hello AI",
   models: [
-    "openai:gpt-4",
-    "openai:gpt-3.5-turbo", 
+    { provider: "openai", model: "gpt-4" },
+    { provider: "openai", model: "gpt-3.5-turbo" },
     { provider: "deepseek", model: "deepseek-chat" }
   ]
 });
@@ -196,7 +182,7 @@ Makes a streaming request to the AI service.
 - `sessionId` (string, optional): Session ID for conversation context
 - `context` (string, optional): Additional context for the request
 - `temperature` (number, optional): AI temperature parameter
-- `models` (array, optional): Array of AI models to use, supports both "provider:model" strings and `AiModel` objects from `@platformatic/ai-provider`
+- `models` (array, optional): Array of `AiModel` objects from `@platformatic/ai-provider`
 - `history` (array, optional): Previous conversation history as `AiChatHistory` from `@platformatic/ai-provider`
 - `stream` (boolean, optional): Enable streaming (default: true)
 

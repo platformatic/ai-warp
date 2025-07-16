@@ -1,5 +1,4 @@
 import type { AIClient, AskOptions, ClientOptions, StreamMessage, AskResponse, Logger } from './types.ts'
-import type { AiModel } from '@platformatic/ai-provider'
 import { pipeline } from 'node:stream/promises'
 import { Transform, Readable } from 'node:stream'
 import split2 from 'split2'
@@ -23,31 +22,10 @@ export class Client implements AIClient {
     this.logger = options.logger ?? abstractLogging
   }
 
-  private normalizeModels (models?: (string | AiModel)[]): AiModel[] | undefined {
-    if (!models || models.length === 0) {
-      return undefined
-    }
-
-    return models.map(model => {
-      if (typeof model === 'string') {
-        const parts = model.split(':')
-        if (parts.length === 2) {
-          return {
-            provider: parts[0] as any,
-            model: parts[1]
-          }
-        }
-        throw new Error(`Invalid models format: ${model}. Expected format: "provider:model"`)
-      }
-      return model
-    })
-  }
-
   async ask (options: AskOptions): Promise<Readable> {
     const endpoint = `${this.url}/ai`
-    const normalizedModels = this.normalizeModels(options.models)
 
-    this.logger.debug('Making AI request', { endpoint, prompt: options.prompt, sessionId: options.sessionId, models: normalizedModels })
+    this.logger.debug('Making AI request', { endpoint, prompt: options.prompt, sessionId: options.sessionId, models: options.models })
 
     try {
       const response = await fetch(endpoint, {
@@ -61,7 +39,7 @@ export class Client implements AIClient {
           sessionId: options.sessionId,
           context: options.context,
           temperature: options.temperature,
-          models: normalizedModels,
+          models: options.models,
           history: options.history,
           stream: options.stream !== false
         }),

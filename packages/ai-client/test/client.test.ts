@@ -64,7 +64,7 @@ test('client.ask sends correct request and handles streaming response', async (_
     prompt: 'Hello AI',
     sessionId: 'user-123',
     temperature: 0.7,
-    models: ['openai:gpt-4'],
+    models: [{ provider: 'openai', model: 'gpt-4' }],
     context: { key: 'value' }
   })
 
@@ -149,24 +149,6 @@ test('client handles models as object format', async (_) => {
   await once(server, 'close')
 })
 
-test('client handles invalid models string format', async (_) => {
-  const client = buildClient({
-    url: 'http://localhost:3000',
-    logger: silentLogger
-  })
-
-  try {
-    await client.ask({
-      prompt: 'Hello AI',
-      models: ['invalid-format']
-    })
-    throw new Error('Should have thrown an error')
-  } catch (error: any) {
-    ok(error instanceof Error)
-    ok(error.message.includes('Invalid models format'))
-  }
-})
-
 test('client handles multiple models', async (_) => {
   let capturedRequestBody: any = null
 
@@ -201,7 +183,11 @@ test('client handles multiple models', async (_) => {
 
   const stream = await client.ask({
     prompt: 'Hello AI',
-    models: ['openai:gpt-4', 'openai:gpt-3.5-turbo', { provider: 'deepseek', model: 'deepseek-chat' }]
+    models: [
+      { provider: 'openai', model: 'gpt-4' },
+      { provider: 'openai', model: 'gpt-3.5-turbo' },
+      { provider: 'deepseek', model: 'deepseek-chat' }
+    ]
   })
 
   const messages = []

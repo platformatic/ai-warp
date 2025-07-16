@@ -21,7 +21,7 @@ export interface AskOptions {
   sessionId?: AiSessionId
   context?: string | Record<string, any> | any[]
   temperature?: number
-  models?: (string | AiModel)[]
+  models?: AiModel[]
   history?: AiChatHistory
   stream?: boolean
 }
