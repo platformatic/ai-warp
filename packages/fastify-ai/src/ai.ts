@@ -1,8 +1,8 @@
 import type { FastifyReply, FastifyRequest } from 'fastify'
 import fp from 'fastify-plugin'
 import type { Logger } from 'pino'
-import { Ai } from '@platformatic/ai-provider-dev'
-import type { AiOptions, AiModel, AiResponseResult, AiChatHistory, AiSessionId } from '@platformatic/ai-provider-dev'
+import { Ai } from '@platformatic/ai-provider'
+import type { AiOptions, AiModel, AiResponseResult, AiChatHistory, AiSessionId } from '@platformatic/ai-provider'
 
 const DEFAULT_HEADER_SESSION_ID_NAME = 'x-session-id'
 

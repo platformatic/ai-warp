@@ -99,8 +99,9 @@ try {
     stream: false
   });
 
-  console.log("Response:", response.content);
-  console.log("Model:", response.model);
+  console.log("Response:", response.text);
+  console.log("Result:", response.result);
+  console.log("SessionId:", response.sessionId);
 } catch (error) {
   console.error("Request failed:", error);
 }
@@ -127,7 +128,13 @@ try {
       // Handle AI service errors
       console.error('AI service error:', message.error);
     }
-    // ... handle other message types
+    if (message.type === 'content') {
+      console.log('Received:', message.data)
+    } else if (message.type === 'end') {
+      console.log(`<<< END: "${message.data}"`)
+    } else if (event.event === 'error') {
+      console.error('Error:', event.error)
+    }
   }
 } catch (error) {
   // Handle request-level errors (HTTP errors, timeouts, etc.)
@@ -286,6 +293,7 @@ The Readable stream yields `StreamMessage` objects with the following types:
 #### Done Message
 
 ```typescript
+TODO
 {
   type: 'done',
   response?: {
@@ -304,10 +312,12 @@ The client supports various SSE message formats:
 
 ```
 event: content
+TODO
 data: {"response": "Hello world"}
 
 event: end
 data: {"response": {"content": "Complete", "model": "gpt-4"}}
+TODO
 ```
 
 ### Data-only Messages

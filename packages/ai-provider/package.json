@@ -1,7 +1,7 @@
 {
-  "name": "@platformatic/ai-provider-dev",
+  "name": "@platformatic/ai-provider",
   "type": "module",
-  "version": "0.0.1-dev.2",
+  "version": "0.6.0-dev.1",
   "description": "The Platformatic AI provider interface",
   "license": "Apache-2.0",
 
@@ -51,6 +51,5 @@
   },
   "engines": {
     "node": ">=22.16.0"
-  },
-  "packageManager": "pnpm@10.13.1"
+  }
 }

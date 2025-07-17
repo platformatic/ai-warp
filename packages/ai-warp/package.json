@@ -1,6 +1,6 @@
 {
-  "name": "@platformatic/ai-warp-dev2",
-  "version": "0.7.8",
+  "name": "@platformatic/ai-warp",
+  "version": "0.6.0-dev.1",
   "type": "module",
   "description": "The Platformatic warp AI service",
   "license": "Apache-2.0",
@@ -45,7 +45,7 @@
     "@fastify/type-provider-typebox": "^5.2.0",
     "@fastify/error": "^4.2.0",
     "@platformatic/config": "^2.71.0",
-    "@platformatic/fastify-ai-dev": "workspace:*",
+    "@platformatic/fastify-ai": "workspace:*",
     "@platformatic/generators": "^2.71.0",
     "@platformatic/service": "^2.71.0"
   },
@@ -61,6 +61,5 @@
     "pino": "^9.7.0",
     "pino-pretty": "^13.0.0",
     "typescript": "^5.8.2"
-  },
-  "packageManager": "pnpm@10.13.1"
+  }
 }

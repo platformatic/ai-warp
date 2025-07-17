@@ -1,7 +1,6 @@
 {
   "name": "@platformatic/ai-client",
-  "private": true,
-  "version": "0.0.1",
+  "version": "0.6.0-dev.1",
   "description": "The Platformatic AI client",
   "license": "Apache-2.0",
   "scripts": {
@@ -45,6 +44,5 @@
   },
   "files": [
     "dist"
-  ],
-  "packageManager": "pnpm@10.13.1"
+  ]
 }
