@@ -105,13 +105,34 @@ class AiWarpGenerator extends ServiceGenerator {
   async _beforePrepare (): Promise<void> {
     await super._beforePrepare()
 
-    this.addEnvVars({
-      PLT_OPENAI_API_KEY: this.config.aiOpenaiApiKey ?? PLACEHOLDER_API_KEY,
-      PLT_DEEPSEEK_API_KEY: this.config.aiDeepseekApiKey ?? PLACEHOLDER_API_KEY,
-      PLT_GEMINI_API_KEY: this.config.aiGeminiApiKey ?? PLACEHOLDER_API_KEY
-    },
     // @ts-ignore
-    { overwrite: true, default: false })
+    this.addEnvVar('PLT_OPENAI_API_KEY', PLACEHOLDER_API_KEY, { overwrite: false, default: true })
+    // @ts-ignore
+    this.addEnvVar('PLT_DEEPSEEK_API_KEY', PLACEHOLDER_API_KEY, { overwrite: false, default: true })
+    // @ts-ignore
+    this.addEnvVar('PLT_GEMINI_API_KEY', PLACEHOLDER_API_KEY, { overwrite: false, default: true })
+
+    // this.setConfig({
+    //   env: {
+    //     // PLT_OPENAI_API_KEY: PLACEHOLDER_API_KEY,
+    //     // PLT_DEEPSEEK_API_KEY: PLACEHOLDER_API_KEY,
+    //     // PLT_GEMINI_API_KEY: PLACEHOLDER_API_KEY
+    //   }
+    // })
+
+    if(this.config.aiOpenaiApiKey) {
+    // @ts-ignore
+    this.addEnvVar('PLT_OPENAI_API_KEY', this.config.aiOpenaiApiKey, { overwrite: true, default: false })
+    }
+    if(this.config.aiDeepseekApiKey) {
+    // @ts-ignore
+    this.addEnvVar('PLT_DEEPSEEK_API_KEY', this.config.aiDeepseekApiKey, { overwrite: true, default: false })
+    }
+    if(this.config.aiGeminiApiKey) {
+    // @ts-ignore
+    this.addEnvVar('PLT_GEMINI_API_KEY', this.config.aiGeminiApiKey, { overwrite: true, default: false })
+    }
+
 
     const packageJson = await this.getStackablePackageJson()
 
