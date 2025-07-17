@@ -18,14 +18,21 @@ npm install @platformatic/ai-client
 
 ## Usage
 
+### Endpoints
+
+The Platformatic AI service provides two endpoints:
+
+- **`/api/v1/stream`** - For streaming responses (Server-Sent Events)
+- **`/api/v1/prompt`** - For non-streaming responses (JSON)
+
 ### Streaming Response (default)
 
 ```typescript
 import { buildClient } from "@platformatic/ai-client";
 
-// Create client instance
+// Create client instance for streaming endpoint
 const client = buildClient({
-  url: "http://localhost:3000",
+  url: "http://localhost:3042/api/v1/stream", // Use /stream endpoint for streaming
   headers: {
     Authorization: "Bearer your-api-key",
   },
@@ -39,7 +46,7 @@ try {
     prompt: "Hello AI, how are you today?",
     sessionId: "user-123",
     temperature: 0.7,
-    models: [{ provider: "openai", model: "gpt-4" }],
+    models: ["openai:gpt-4"], // String format or [{ provider: "openai", model: "gpt-4" }]
     stream: true // optional, defaults to true
   });
 
@@ -76,7 +83,7 @@ try {
 import { buildClient } from "@platformatic/ai-client";
 
 const client = buildClient({
-  url: "http://localhost:3000",
+  url: "http://localhost:3042/api/v1/prompt", // Use /prompt endpoint for non-streaming
   headers: {
     Authorization: "Bearer your-api-key",
   },
@@ -88,7 +95,7 @@ try {
     prompt: "Hello AI, how are you today?",
     sessionId: "user-123",
     temperature: 0.7,
-    models: [{ provider: "openai", model: "gpt-4" }],
+    models: ["openai:gpt-4"], // String format or [{ provider: "openai", model: "gpt-4" }]
     stream: false
   });
 
@@ -130,8 +137,17 @@ try {
 
 ## Model Configuration
 
-The client uses `AiModel` objects from `@platformatic/ai-provider` to specify AI models:
+The client supports two model formats:
 
+### String Format (Recommended)
+```typescript
+const stream = await client.ask({
+  prompt: "Hello AI",
+  models: ["openai:gpt-4"]
+});
+```
+
+### Object Format
 ```typescript
 const stream = await client.ask({
   prompt: "Hello AI",
@@ -144,15 +160,27 @@ const stream = await client.ask({
 
 ### Multiple Models for Fallback
 
-You can specify multiple models for fallback scenarios:
+You can specify multiple models for fallback scenarios using either format:
 
 ```typescript
 const stream = await client.ask({
   prompt: "Hello AI",
   models: [
+    "openai:gpt-4",
+    "openai:gpt-3.5-turbo", 
+    "deepseek:deepseek-chat",
+    "gemini:gemini-2.5-flash"
+  ]
+});
+
+// Or using object format
+const stream = await client.ask({
+  prompt: "Hello AI",
+  models: [
     { provider: "openai", model: "gpt-4" },
     { provider: "openai", model: "gpt-3.5-turbo" },
-    { provider: "deepseek", model: "deepseek-chat" }
+    { provider: "deepseek", model: "deepseek-chat" },
+    { provider: "gemini", model: "gemini-2.5-flash" }
   ]
 });
 ```
@@ -214,7 +242,7 @@ Makes a request to the AI service, returning either a stream or a complete respo
 - `sessionId` (string, optional): Session ID for conversation context
 - `context` (string, optional): Additional context for the request
 - `temperature` (number, optional): AI temperature parameter
-- `models` (array, optional): Array of `AiModel` objects from `@platformatic/ai-provider`
+- `models` (array, optional): Array of models in either string format `"provider:model"` or object format `{ provider: string, model: string }`
 - `history` (array, optional): Previous conversation history as `AiChatHistory` from `@platformatic/ai-provider`
 - `stream` (boolean, optional): Enable streaming (default: true)
 

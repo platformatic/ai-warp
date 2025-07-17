@@ -150,6 +150,114 @@ test('client handles models as object format', async (_) => {
   await once(server, 'close')
 })
 
+test('client handles models as string format', async (_) => {
+  let capturedRequestBody: any = null
+
+  const server = createServer((req, res) => {
+    let body = ''
+    req.on('data', chunk => {
+      body += chunk.toString()
+    })
+    req.on('end', () => {
+      capturedRequestBody = JSON.parse(body)
+
+      res.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        Connection: 'keep-alive'
+      })
+
+      res.write('event: content\ndata: {"response": "Hello"}\n\n')
+      res.write('event: end\ndata: {"response": {"content": "Hello", "model": "gpt-4"}}\n\n')
+      res.end()
+    })
+  })
+
+  server.listen(0)
+  await once(server, 'listening')
+  const port = (server.address() as AddressInfo).port
+
+  const client = buildClient({
+    url: `http://localhost:${port}`,
+    logger: silentLogger
+  })
+
+  const stream = await client.ask({
+    prompt: 'Hello AI',
+    models: ['openai:gpt-4'],
+    stream: true
+  })
+
+  const messages = []
+  for await (const message of stream) {
+    messages.push(message)
+  }
+
+  deepStrictEqual(capturedRequestBody?.models, ['openai:gpt-4'])
+  strictEqual(messages.length, 2)
+
+  server.close()
+  await once(server, 'close')
+})
+
+test('client handles mixed model formats', async (_) => {
+  let capturedRequestBody: any = null
+
+  const server = createServer((req, res) => {
+    let body = ''
+    req.on('data', chunk => {
+      body += chunk.toString()
+    })
+    req.on('end', () => {
+      capturedRequestBody = JSON.parse(body)
+
+      res.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        Connection: 'keep-alive'
+      })
+
+      res.write('event: content\ndata: {"response": "Hello"}\n\n')
+      res.write('event: end\ndata: {"response": {"content": "Hello", "model": "gpt-4"}}\n\n')
+      res.end()
+    })
+  })
+
+  server.listen(0)
+  await once(server, 'listening')
+  const port = (server.address() as AddressInfo).port
+
+  const client = buildClient({
+    url: `http://localhost:${port}`,
+    logger: silentLogger
+  })
+
+  const stream = await client.ask({
+    prompt: 'Hello AI',
+    models: [
+      'openai:gpt-4',
+      { provider: 'deepseek', model: 'deepseek-chat' },
+      'gemini:gemini-2.5-flash'
+    ],
+    stream: true
+  })
+
+  const messages = []
+  for await (const message of stream) {
+    messages.push(message)
+  }
+
+  deepStrictEqual(capturedRequestBody?.models, [
+    'openai:gpt-4',
+    { provider: 'deepseek', model: 'deepseek-chat' },
+    'gemini:gemini-2.5-flash'
+  ])
+  strictEqual(messages.length, 2)
+
+  server.close()
+  await once(server, 'close')
+})
+
 test('client handles multiple models', async (_) => {
   let capturedRequestBody: any = null
 

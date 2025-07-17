@@ -11,5 +11,6 @@ export type {
   AskResponse,
   StreamMessage,
   AIClient,
-  Logger
+  Logger,
+  QueryModel
 } from './types.ts'
