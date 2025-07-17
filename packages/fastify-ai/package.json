@@ -1,7 +1,7 @@
 {
   "name": "@platformatic/fastify-ai-dev",
   "type": "module",
-  "version": "0.0.1-dev.1",
+  "version": "0.0.1-dev.2",
   "description": "The fastify AI plugin",
   "license": "Apache-2.0",
   "main": "dist/index.js",

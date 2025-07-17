@@ -109,7 +109,9 @@ class AiWarpGenerator extends ServiceGenerator {
       PLT_OPENAI_API_KEY: this.config.aiOpenaiApiKey ?? PLACEHOLDER_API_KEY,
       PLT_DEEPSEEK_API_KEY: this.config.aiDeepseekApiKey ?? PLACEHOLDER_API_KEY,
       PLT_GEMINI_API_KEY: this.config.aiGeminiApiKey ?? PLACEHOLDER_API_KEY
-    }, { overwrite: false })
+    }, 
+    // @ts-ignore
+    { overwrite: false, default: false })
 
     const packageJson = await this.getStackablePackageJson()
 
@@ -179,24 +181,21 @@ class AiWarpGenerator extends ServiceGenerator {
       type: 'password',
       name: 'aiOpenaiApiKey',
       when: (answers: Record<string, string>) => answers.aiProviders.includes('openai'),
-      message: 'What is your OpenAI API key?',
-      default: PLACEHOLDER_API_KEY
+      message: 'What is your OpenAI API key?'
     })
 
     this.questions.push({
       type: 'password',
       name: 'aiDeepseekApiKey',
       when: (answers: Record<string, string>) => answers.aiProviders.includes('deepseek'),
-      message: 'What is your DeepSeek API key?',
-      default: PLACEHOLDER_API_KEY
+      message: 'What is your DeepSeek API key?'
     })
 
     this.questions.push({
       type: 'password',
       name: 'aiGeminiApiKey',
       when: (answers: Record<string, string>) => answers.aiProviders.includes('gemini'),
-      message: 'What is your Gemini API key?',
-      default: PLACEHOLDER_API_KEY
+      message: 'What is your Gemini API key?'
     })
   }
 }
