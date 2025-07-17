@@ -29,8 +29,6 @@
   },
   "author": "Platformatic Inc. <oss@platformatic.dev> (https://platformatic.dev)",
   "dependencies": {
-    "@fastify/error": "^4.2.0",
-    "@fastify/type-provider-typebox": "^5.2.0",
     "@platformatic/ai-provider-dev": "workspace:*",
     "fastify": "^5.2.1",
     "fastify-plugin": "^5.0.1"
