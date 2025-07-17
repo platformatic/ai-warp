@@ -1,4 +1,5 @@
 import undici from 'undici'
+import { setTimeout as wait } from 'node:timers/promises'
 import { decodeEventStream } from '@platformatic/ai-provider-dev'
 import type { AiChatHistory } from '@platformatic/ai-provider-dev'
 import type { AiContentResponse } from '@platformatic/ai-provider-dev'
@@ -176,6 +177,8 @@ async function main() {
     console.log('\n**********\n')
   }
 
+
+  await wait(1000)
   server.close()
 }
 

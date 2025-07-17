@@ -9,6 +9,10 @@ export class MemoryStorage implements Storage {
     this.list = new ListStorage()
   }
 
+  async close () {
+    // nothing to do
+  }
+
   async valueGet (key: string) {
     return this.values.get(key)
   }
@@ -31,6 +35,10 @@ class KeyValueStorage {
 
   constructor () {
     this.storage = new Map()
+  }
+
+  close () {
+    // nothing to do
   }
 
   async get (key: string) {

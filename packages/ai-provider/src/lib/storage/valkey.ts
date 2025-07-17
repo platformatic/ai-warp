@@ -25,9 +25,8 @@ export class ValkeyStorage implements Storage {
     })
   }
 
-  async init () {
-    // TODO try/catch
-    // await this.client.connect()
+  async close () {
+    await this.client.quit()
   }
 
   async valueGet (key: string) {

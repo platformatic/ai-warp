@@ -263,10 +263,13 @@ export class Ai {
 
   // TODO
   async close () {
-    // for (const provider of this.providers.values()) {
-    //   await provider.provider.close()
-    // }
-    // TODO close storage
+    const tasks = []
+    for (const provider of this.providers.values()) {
+      tasks.push(provider.provider.close())
+    }
+    tasks.push(this.history.storage.close())
+    tasks.push(this.storage.close())
+    await Promise.allSettled(tasks)
   }
 
   validateOptions (options: AiOptions): StrictAiOptions {

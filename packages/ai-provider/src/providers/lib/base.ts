@@ -17,6 +17,7 @@ export class BaseProvider {
     this.logger = options.logger
     this.context = { logger: this.logger }
 
+    // TODO validate client
     this.client = client
   }
 
@@ -33,6 +34,10 @@ export class BaseProvider {
       this.logger.error({ error }, 'Provider init error in client.init')
       throw error
     }
+  }
+
+  async close () {
+    await this.client?.close(this.api, this.context)
   }
 
   async request (_model: string, _prompt: string, _options: ProviderRequestOptions): Promise<ProviderResponse> {
