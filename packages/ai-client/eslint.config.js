@@ -3,14 +3,14 @@ import unusedImports from 'eslint-plugin-unused-imports'
 
 const baseConfig = neostandard({
   ts: true,
-  ignores: resolveIgnoresFromGitignore(),
+  ignores: resolveIgnoresFromGitignore()
 })
 
 export default [
   ...baseConfig,
   {
     plugins: {
-      'unused-imports': unusedImports,
+      'unused-imports': unusedImports
     },
     rules: {
       // Turn off the base rule as it can report incorrect errors
@@ -24,9 +24,9 @@ export default [
           vars: 'all',
           varsIgnorePattern: '^_',
           args: 'after-used',
-          argsIgnorePattern: '^_',
-        },
-      ],
-    },
-  },
+          argsIgnorePattern: '^_'
+        }
+      ]
+    }
+  }
 ]

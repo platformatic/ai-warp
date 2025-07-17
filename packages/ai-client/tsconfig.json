@@ -1,10 +1,8 @@
 {
-  "exclude": ["node_modules", "dist", "test", "benchmarks"],
+  "exclude": ["node_modules", "dist", "benchmarks"],
   "compilerOptions": {
     "moduleResolution": "NodeNext",
-    "lib": [
-      "esnext"
-    ],
+    "lib": ["esnext"],
     "sourceMap": true,
     "pretty": true,
     "noEmit": true,
@@ -24,9 +22,6 @@
     "watchDirectory": "fixedPollingInterval",
     "fallbackPolling": "dynamicPriority",
     "synchronousWatchDirectory": true,
-    "excludeDirectories": [
-      "**/node_modules",
-      "dist"
-    ]
+    "excludeDirectories": ["**/node_modules", "dist"]
   }
 }
