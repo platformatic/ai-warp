@@ -105,34 +105,29 @@ class AiWarpGenerator extends ServiceGenerator {
   async _beforePrepare (): Promise<void> {
     await super._beforePrepare()
 
-    // @ts-ignore
-    this.addEnvVar('PLT_OPENAI_API_KEY', PLACEHOLDER_API_KEY, { overwrite: false, default: true })
-    // @ts-ignore
-    this.addEnvVar('PLT_DEEPSEEK_API_KEY', PLACEHOLDER_API_KEY, { overwrite: false, default: true })
-    // @ts-ignore
-    this.addEnvVar('PLT_GEMINI_API_KEY', PLACEHOLDER_API_KEY, { overwrite: false, default: true })
-
-    // this.setConfig({
-    //   env: {
-    //     // PLT_OPENAI_API_KEY: PLACEHOLDER_API_KEY,
-    //     // PLT_DEEPSEEK_API_KEY: PLACEHOLDER_API_KEY,
-    //     // PLT_GEMINI_API_KEY: PLACEHOLDER_API_KEY
-    //   }
-    // })
-
-    if(this.config.aiOpenaiApiKey) {
-    // @ts-ignore
-    this.addEnvVar('PLT_OPENAI_API_KEY', this.config.aiOpenaiApiKey, { overwrite: true, default: false })
-    }
-    if(this.config.aiDeepseekApiKey) {
-    // @ts-ignore
-    this.addEnvVar('PLT_DEEPSEEK_API_KEY', this.config.aiDeepseekApiKey, { overwrite: true, default: false })
-    }
-    if(this.config.aiGeminiApiKey) {
-    // @ts-ignore
-    this.addEnvVar('PLT_GEMINI_API_KEY', this.config.aiGeminiApiKey, { overwrite: true, default: false })
+    if (this.config.aiOpenaiApiKey) {
+      // @ts-ignore
+      this.addEnvVar('PLT_OPENAI_API_KEY', this.config.aiOpenaiApiKey, { overwrite: true, default: false })
+    } else {
+      // @ts-ignore
+      this.addEnvVar('PLT_OPENAI_API_KEY', PLACEHOLDER_API_KEY, { overwrite: false, default: true })
     }
 
+    if (this.config.aiDeepseekApiKey) {
+      // @ts-ignore
+      this.addEnvVar('PLT_DEEPSEEK_API_KEY', this.config.aiDeepseekApiKey, { overwrite: true, default: false })
+    } else {
+      // @ts-ignore
+      this.addEnvVar('PLT_DEEPSEEK_API_KEY', PLACEHOLDER_API_KEY, { overwrite: false, default: true })
+    }
+
+    if (this.config.aiGeminiApiKey) {
+      // @ts-ignore
+      this.addEnvVar('PLT_GEMINI_API_KEY', this.config.aiGeminiApiKey, { overwrite: true, default: false })
+    } else {
+      // @ts-ignore
+      this.addEnvVar('PLT_GEMINI_API_KEY', PLACEHOLDER_API_KEY, { overwrite: false, default: true })
+    }
 
     const packageJson = await this.getStackablePackageJson()
 
