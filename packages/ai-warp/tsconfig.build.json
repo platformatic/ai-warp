@@ -2,6 +2,7 @@
   "extends": "./tsconfig.json",
   "exclude": ["node_modules", "dist", "test", "benchmarks"],
   "compilerOptions": {
+    "skipLibCheck": true,
     "noEmit": false,
     "noEmitOnError": false,
     "declaration": true,

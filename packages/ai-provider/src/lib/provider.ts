@@ -26,6 +26,7 @@ export type ProviderRequestOptions = {
 export interface Provider {
   name: AiProvider
   request: (model: string, prompt: string, options: ProviderRequestOptions) => Promise<ProviderResponse>
+  close: () => Promise<void>
 }
 
 export interface ProviderOptions {

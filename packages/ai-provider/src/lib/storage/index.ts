@@ -21,6 +21,7 @@ export type Storage = {
   valueSet: (key: string, value: any) => Promise<void>
   listPush: (key: string, value: any, expiration: number) => Promise<void>
   listRange: (key: string) => Promise<any[]>
+  close: () => Promise<void>
 }
 
 const defaultStorageOptions: AiStorageOptions = {
@@ -32,9 +33,8 @@ export async function createStorage (options?: AiStorageOptions): Promise<Storag
   const storageOptions = options ? { ...defaultStorageOptions, ...options } : defaultStorageOptions
 
   if (storageOptions.type === 'valkey') {
+    // TODO try/catch connection may fail
     const s = new ValkeyStorage(storageOptions)
-    // TODO try/catch
-    await s.init()
     return s
   } else {
     return new MemoryStorage(storageOptions)

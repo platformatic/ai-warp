@@ -24,6 +24,53 @@ export async function createApp ({ client, logger }: { client: any, logger?: Log
   }
 
   await app.register(ai, options as AiPluginOptions)
+  
+
+  app.route({
+    url: '/prompt',
+    method: 'POST',
+    handler: async (request, reply) => {
+      try {
+        const { prompt, context, temperature, history, sessionId } = request.body as { prompt: string, context: string, temperature: number, history: AiChatHistory, sessionId: string }
+        const response = await app.ai.request({
+          request,
+          prompt,
+          context,
+          temperature,
+          history,
+          sessionId,
+          stream: false
+        }, reply)
+
+        return reply.send(response)
+      } catch (error) {
+        throw error
+      }
+    }
+  })
+
+  app.route({
+    url: '/stream',
+    method: 'POST',
+    handler: async (request, reply) => {
+      try {
+        const { prompt, context, temperature, history, sessionId } = request.body as { prompt: string, context: string, temperature: number, history: AiChatHistory, sessionId: string }
+        const response = await app.ai.request({
+          request,
+          prompt,
+          context,
+          temperature,
+          history,
+          sessionId,
+          stream: true
+        }, reply)
+
+        return reply.send(response)
+      } catch (error) {
+        throw error
+      }
+    }
+  })
 
   return app
 }

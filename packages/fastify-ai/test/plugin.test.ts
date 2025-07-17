@@ -13,7 +13,7 @@ test('should be able to perform a basic prompt', async () => {
   const app = await createApp({ client })
   const response = await app.inject({
     method: 'POST',
-    url: '/api/v1/prompt',
+    url: '/prompt',
     body: {
       prompt: 'Hello, how are you?'
     }
@@ -42,7 +42,7 @@ test('should be able to perform a basic prompt with stream', async () => {
   const app = await createApp({ client })
   const response = await app.inject({
     method: 'POST',
-    url: '/api/v1/stream',
+    url: '/stream',
     body: {
       prompt: 'Hello, how are you?'
     }
@@ -51,19 +51,4 @@ test('should be able to perform a basic prompt with stream', async () => {
   assert.equal(response.statusCode, 200)
   assert.equal(response.headers['content-type'], 'text/event-stream')
   assert.equal(response.body, 'event: content\ndata: {"response":"All"}\n\nevent: content\ndata: {"response":" good"}\n\nevent: end\ndata: {"response":"COMPLETE"}\n\n')
-})
-
-test('should get error when no prompt is provided', async () => {
-  const app = await createApp({ client: createDummyClient() })
-  const response = await app.inject({
-    method: 'POST',
-    url: '/api/v1/prompt',
-    body: { }
-  })
-
-  const body = JSON.parse(response.body)
-
-  assert.equal(response.statusCode, 400)
-  assert.equal(body.message, "body must have required property 'prompt'")
-  assert.equal(body.code, 'FST_ERR_VALIDATION')
 })

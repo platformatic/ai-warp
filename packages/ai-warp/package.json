@@ -1,15 +1,38 @@
 {
-  "name": "@platformatic/ai-warp",
-  "private": true,
-  "version": "0.0.1",
+  "name": "@platformatic/ai-warp-dev2",
+  "version": "0.7.8",
+  "type": "module",
   "description": "The Platformatic warp AI service",
   "license": "Apache-2.0",
+
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts",
+      "require": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "bin": {
+    "create-ai-warp": "./dist/cli/create.js",
+    "start-ai-warp": "./dist/cli/start.js"
+  },
+
   "scripts": {
+    "service-create": "pnpm build && node ./dist/cli/create.js",
+    "service-start": "pnpm build && node ./dist/cli/start.js -c ./ai-warp-app/platformatic.json",
+    "build:config": "pnpm run build && node --experimental-strip-types src/lib/schema.ts --dump-schema  > schema.json && json2ts > config.d.ts < schema.json",
+
     "test": "node --test --experimental-strip-types test/*.test.ts",
     "test:coverage": "c8 -c test/config/c8-local.json node --test --env-file=test/config/env --no-warnings test/**.test.ts",
     "lint": "eslint src test",
     "lint:fix": "eslint src test --fix",
-    "build": "tsc -p tsconfig.build.json",
+    "build": "tsc -p tsconfig.build.json && cp config.d.ts dist/",
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf dist;",
     "check": "pnpm clean && pnpm lint && pnpm typecheck && pnpm test && pnpm build"
@@ -18,6 +41,14 @@
   "engines": {
     "node": ">=22.16.0"
   },
+  "dependencies": {
+    "@fastify/type-provider-typebox": "^5.2.0",
+    "@fastify/error": "^4.2.0",
+    "@platformatic/config": "^2.71.0",
+    "@platformatic/fastify-ai-dev": "workspace:*",
+    "@platformatic/generators": "^2.71.0",
+    "@platformatic/service": "^2.71.0"
+  },
   "devDependencies": {
     "@types/node": "^22.13.9",
     "c8": "^10.1.3",
@@ -25,6 +56,7 @@
     "eslint": "^9.21.0",
     "eslint-plugin-unused-imports": "^4.1.4",
     "fastify": "^5.2.1",
+    "json-schema-to-typescript": "^15.0.4",
     "neostandard": "^0.12.1",
     "pino": "^9.7.0",
     "pino-pretty": "^13.0.0",
