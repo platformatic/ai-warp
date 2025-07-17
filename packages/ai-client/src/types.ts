@@ -14,6 +14,8 @@ export interface ClientOptions {
   headers?: Record<string, string>
   timeout?: number
   logger?: Logger
+  promptPath?: string
+  streamPath?: string
 }
 
 export type QueryModel = string | AiModel
@@ -29,8 +31,7 @@ export interface AskOptions {
 }
 
 export interface AskResponse {
-  content: string
-  model?: string
+  text: string
   sessionId?: AiSessionId
   result?: AiResponseResult
 }

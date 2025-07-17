@@ -6,11 +6,17 @@ import split2 from 'split2'
 // @ts-ignore
 import abstractLogging from 'abstract-logging'
 
+const DEFAULT_PROMPT_PATH = '/api/v1/prompt'
+const DEFAULT_STREAM_PATH = '/api/v1/stream'
+const DEFAULT_TIMEOUT = 60_000
+
 export class Client implements AIClient {
   private url: string
   private headers: Record<string, string>
   private timeout: number
   private logger: Logger
+  private promptPath: string
+  private streamPath: string
 
   constructor (options: ClientOptions) {
     this.url = options.url.endsWith('/') ? options.url.slice(0, -1) : options.url
@@ -18,15 +24,17 @@ export class Client implements AIClient {
       'Content-Type': 'application/json',
       ...options.headers
     }
-    this.timeout = options.timeout ?? 60000
+    this.timeout = options.timeout ?? DEFAULT_TIMEOUT
     this.logger = options.logger ?? abstractLogging
+    this.promptPath = options.promptPath ?? DEFAULT_PROMPT_PATH
+    this.streamPath = options.streamPath ?? DEFAULT_STREAM_PATH
   }
 
   async ask (options: AskOptions & { stream: true }): Promise<Readable>
   async ask (options: AskOptions & { stream?: false }): Promise<AskResponse>
   async ask (options: AskOptions): Promise<Readable | AskResponse> {
-    const endpoint = this.url
     const isStreaming = options.stream !== false
+    const endpoint = this.url + (isStreaming ? this.streamPath : this.promptPath)
 
     this.logger.debug('Making AI request', { endpoint, prompt: options.prompt, sessionId: options.sessionId, models: options.models, stream: isStreaming })
 

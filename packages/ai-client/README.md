@@ -329,3 +329,17 @@ data: {"content": "Alternative JSON format"}
 
 data: Plain text content
 ```
+
+
+### Client Methods
+
+#### `client.ask(options)`
+Make requests to AI services with streaming or non-streaming responses.
+
+**Options:**
+- `prompt` (string): The prompt to send
+- `sessionId` (string, optional): Session ID for context
+- `models` (array, optional): Models in `"provider:model"` format
+- `stream` (boolean, optional): Enable streaming (default: true)
+- `temperature` (number, optional): Temperature setting
+- `context` (string, optional): Additional context

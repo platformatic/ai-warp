@@ -1,15 +1,16 @@
-import { buildClient } from './dist/index.js'
+import { buildClient } from '../dist/index.js'
 
 const client = buildClient({
-  url: 'http://127.0.0.1:3042/api/v1/stream'
+  url: 'http://127.0.0.1:3042'
 })
 
 try {
   const stream = await client.ask({
     prompt: 'List the first 5 prime numbers',
-    models: ['gemini'],
     stream: true
   })
+
+  console.log({ headers: stream.headers })
 
   stream.on('data', (message) => {
     if (message.type === 'content') {
