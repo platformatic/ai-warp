@@ -28,26 +28,26 @@ const aiWarpSchema = {
           type: 'object',
           additionalProperties: false,
           properties: {
-            openai: { 
-              type: 'object', 
+            openai: {
+              type: 'object',
               required: ['apiKey'],
-              properties: { 
+              properties: {
                 apiKey: { type: 'string' }
-              } 
+              }
             },
-            deepseek: { 
-              type: 'object', 
+            deepseek: {
+              type: 'object',
               required: ['apiKey'],
-              properties: { 
+              properties: {
                 apiKey: { type: 'string' }
-              } 
+              }
             },
-            gemini: { 
-              type: 'object', 
+            gemini: {
+              type: 'object',
               required: ['apiKey'],
-              properties: { 
+              properties: {
                 apiKey: { type: 'string' }
-              } 
+              }
             }
           }
         },
@@ -121,13 +121,13 @@ const aiWarpSchema = {
               }
             },
             requestTimeout: { type: 'number' },
-            retry: { 
-              type: 'object', 
+            retry: {
+              type: 'object',
               required: ['max', 'interval'],
-              properties: { 
-                max: { type: 'number' }, 
-                interval: { type: 'number' } 
-              } 
+              properties: {
+                max: { type: 'number' },
+                interval: { type: 'number' }
+              }
             },
             historyExpiration: { anyOf: [{ type: 'number' }, { type: 'string' }] }
           }

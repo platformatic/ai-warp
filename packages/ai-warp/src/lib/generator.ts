@@ -18,7 +18,7 @@ const PLACEHOLDER_API_KEY = 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'
 class AiWarpGenerator extends ServiceGenerator {
   private _packageJson: PackageJson | null = null
 
-  getDefaultConfig(): { [x: string]: BaseGenerator.JSONValue } {
+  getDefaultConfig (): { [x: string]: BaseGenerator.JSONValue } {
     const defaultBaseConfig = super.getDefaultConfig()
 
     const dir = import.meta.dirname || dirname(fileURLToPath(import.meta.url))
@@ -34,7 +34,7 @@ class AiWarpGenerator extends ServiceGenerator {
     return Object.assign({}, defaultBaseConfig, defaultConfig)
   }
 
-  getConfigFieldsDefinitions(): BaseGenerator.ConfigFieldDefinition[] {
+  getConfigFieldsDefinitions (): BaseGenerator.ConfigFieldDefinition[] {
     const serviceConfigFieldsDefs = super.getConfigFieldsDefinitions()
     return [
       ...serviceConfigFieldsDefs,
@@ -62,7 +62,7 @@ class AiWarpGenerator extends ServiceGenerator {
     ]
   }
 
-  async _getConfigFileContents(): Promise<{ [x: string]: BaseGenerator.JSONValue }> {
+  async _getConfigFileContents (): Promise<{ [x: string]: BaseGenerator.JSONValue }> {
     const baseConfig = await super._getConfigFileContents()
     const packageJson = await this.getStackablePackageJson()
 
@@ -102,16 +102,16 @@ class AiWarpGenerator extends ServiceGenerator {
     return Object.assign({}, baseConfig, config)
   }
 
-  async _beforePrepare(): Promise<void> {
+  async _beforePrepare (): Promise<void> {
     await super._beforePrepare()
 
     this.addEnvVars({
       PLT_OPENAI_API_KEY: this.config.aiOpenaiApiKey ?? PLACEHOLDER_API_KEY,
       PLT_DEEPSEEK_API_KEY: this.config.aiDeepseekApiKey ?? PLACEHOLDER_API_KEY,
       PLT_GEMINI_API_KEY: this.config.aiGeminiApiKey ?? PLACEHOLDER_API_KEY
-    }, 
+    },
     // @ts-ignore
-    { overwrite: false, default: false })
+    { overwrite: true, default: false })
 
     const packageJson = await this.getStackablePackageJson()
 
@@ -120,7 +120,7 @@ class AiWarpGenerator extends ServiceGenerator {
     }
   }
 
-  async _afterPrepare(): Promise<void> {
+  async _afterPrepare (): Promise<void> {
     const packageJson = await this.getStackablePackageJson()
     this.addFile({
       path: '',
@@ -144,7 +144,7 @@ class AiWarpGenerator extends ServiceGenerator {
     }
   }
 
-  async getStackablePackageJson(): Promise<PackageJson> {
+  async getStackablePackageJson (): Promise<PackageJson> {
     if (this._packageJson == null) {
       const packageJsonPath = this.config.aiWarpPackageJsonPath
       const packageJsonFile = await readFile(packageJsonPath, 'utf8')
@@ -164,7 +164,7 @@ class AiWarpGenerator extends ServiceGenerator {
     return this._packageJson
   }
 
-  async prepareQuestions(): Promise<void> {
+  async prepareQuestions (): Promise<void> {
     this.questions.push({
       type: 'checkbox',
       name: 'aiProviders',
