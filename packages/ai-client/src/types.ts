@@ -16,12 +16,14 @@ export interface ClientOptions {
   logger?: Logger
 }
 
+export type QueryModel = string | AiModel
+
 export interface AskOptions {
   prompt: string
   sessionId?: AiSessionId
   context?: string | Record<string, any> | any[]
   temperature?: number
-  models?: AiModel[]
+  models?: QueryModel[]
   history?: AiChatHistory
   stream?: boolean
 }

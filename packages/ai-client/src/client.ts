@@ -25,7 +25,7 @@ export class Client implements AIClient {
   async ask (options: AskOptions & { stream: true }): Promise<Readable>
   async ask (options: AskOptions & { stream?: false }): Promise<AskResponse>
   async ask (options: AskOptions): Promise<Readable | AskResponse> {
-    const endpoint = `${this.url}/ai`
+    const endpoint = this.url
     const isStreaming = options.stream !== false
 
     this.logger.debug('Making AI request', { endpoint, prompt: options.prompt, sessionId: options.sessionId, models: options.models, stream: isStreaming })
