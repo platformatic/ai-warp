@@ -1,13 +1,12 @@
-import type { Readable } from 'node:stream'
-
-// from @platformatic/ai-provider
-export type TimeWindow = number | string;
-export type AiSessionId = string;
-export type AiProvider = 'openai' | 'deepseek' | 'gemini';
+// Types duplicated from @platformatic/ai-provider to keep ai-client dependency-free
+// This package is designed to be standalone and not depend on other Platformatic modules
+export type TimeWindow = number | string
+export type AiSessionId = string
+export type AiProvider = 'openai' | 'deepseek' | 'gemini'
 export type AiChatHistory = {
   prompt: string;
   response: string;
-}[];
+}[]
 export type AiRestore = {
   rateLimit?: TimeWindow
   retry?: TimeWindow
@@ -16,18 +15,18 @@ export type AiRestore = {
   providerExceededError?: TimeWindow
 }
 export type AiModel = {
-    provider: AiProvider;
-    model: string;
-    limits?: {
-        maxTokens?: number;
-        rate?: {
-            max: number;
-            timeWindow: TimeWindow;
-        };
+  provider: AiProvider;
+  model: string;
+  limits?: {
+    maxTokens?: number;
+    rate?: {
+      max: number;
+      timeWindow: TimeWindow;
     };
-    restore?: AiRestore;
-};
-export type AiResponseResult = 'COMPLETE' | 'INCOMPLETE_MAX_TOKENS' | 'INCOMPLETE_UNKNOWN';
+  };
+  restore?: AiRestore;
+}
+export type AiResponseResult = 'COMPLETE' | 'INCOMPLETE_MAX_TOKENS' | 'INCOMPLETE_UNKNOWN'
 //
 
 export interface Logger {
@@ -35,7 +34,6 @@ export interface Logger {
   info(message: string, data?: any): void
   warn(message: string, data?: any): void
   error(message: string, data?: any): void
-  error(data: any, message?: string): void
 }
 
 export interface ClientOptions {
@@ -72,8 +70,12 @@ export interface StreamMessage {
   response?: AskResponse
 }
 
+export interface AsyncIterableStream<T> {
+  [Symbol.asyncIterator](): AsyncIterator<T>
+}
+
 export interface AskResponseStream {
-  stream: Readable
+  stream: AsyncIterableStream<StreamMessage>
   headers: Headers
 }
 

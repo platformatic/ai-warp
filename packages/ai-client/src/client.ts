@@ -1,10 +1,5 @@
 import type { AskOptions, ClientOptions, StreamMessage, AskResponse, Logger, AskResponseStream, AskResponseContent } from './types.ts'
-import { pipeline } from 'node:stream/promises'
-import { Transform, Readable } from 'node:stream'
-import split2 from 'split2'
-
-// @ts-ignore
-import abstractLogging from 'abstract-logging'
+import { consoleLogger } from './console-logger.ts'
 
 const DEFAULT_PROMPT_PATH = '/api/v1/prompt'
 const DEFAULT_STREAM_PATH = '/api/v1/stream'
@@ -25,7 +20,7 @@ export class Client {
       ...options.headers
     }
     this.timeout = options.timeout ?? DEFAULT_TIMEOUT
-    this.logger = options.logger ?? abstractLogging
+    this.logger = options.logger ?? consoleLogger
     this.promptPath = options.promptPath ?? DEFAULT_PROMPT_PATH
     this.streamPath = options.streamPath ?? DEFAULT_STREAM_PATH
   }
@@ -69,8 +64,9 @@ export class Client {
         if (!response.body) {
           throw new Error('Response body is null')
         }
+        const webStream = this.createStreamFromResponse(response.body)
         return {
-          stream: this.createStreamFromResponse(response.body),
+          stream: this.createAsyncIterableStream(webStream),
           headers: response.headers
         }
       } else {
@@ -93,32 +89,62 @@ export class Client {
     }
   }
 
-  private createStreamFromResponse (body: ReadableStream<Uint8Array>): Transform {
-    const logger = this.logger
+  private createStreamFromResponse (body: ReadableStream<Uint8Array>): ReadableStream<StreamMessage> {
+    let buffer = ''
 
-    const parseAIMessages = new Transform({
-      objectMode: true,
-      transform (chunk: string, _encoding, callback) {
-        if (chunk.trim()) {
-          const event = parseEvent(chunk)
-          if (event) {
-            const message = convertEventToMessage(event)
-            if (message) {
-              this.push(message)
+    return body
+      .pipeThrough(new TextDecoderStream())
+      .pipeThrough(
+        new TransformStream<string, StreamMessage>({
+          transform (chunk, controller) {
+            buffer += chunk
+
+            const events = buffer.split('\n\n')
+            buffer = events.pop() || ''
+
+            for (const eventText of events) {
+              if (eventText.trim()) {
+                const event = parseEvent(eventText)
+                if (event) {
+                  const message = convertEventToMessage(event)
+                  if (message) {
+                    controller.enqueue(message)
+                  }
+                }
+              }
+            }
+          },
+          flush (controller) {
+            if (buffer.trim()) {
+              const event = parseEvent(buffer)
+              if (event) {
+                const message = convertEventToMessage(event)
+                if (message) {
+                  controller.enqueue(message)
+                }
+              }
             }
           }
+        })
+      )
+  }
+
+  private createAsyncIterableStream (stream: ReadableStream<StreamMessage>) {
+    const reader = stream.getReader()
+
+    return {
+      async * [Symbol.asyncIterator] () {
+        try {
+          while (true) {
+            const { done, value } = await reader.read()
+            if (done) break
+            if (value) yield value
+          }
+        } finally {
+          reader.releaseLock()
         }
-        callback()
       }
-    })
-
-    const nodeReadable = Readable.fromWeb(body)
-
-    pipeline(nodeReadable, split2('\n\n'), parseAIMessages).catch((error) => {
-      logger.error({ error: error.message, stack: error.stack }, 'Error in AI message parsing pipeline')
-      parseAIMessages.emit('error', error)
-    })
-    return parseAIMessages
+    }
   }
 }
 

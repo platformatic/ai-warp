@@ -1,7 +1,7 @@
 import { buildClient } from '../dist/index.js'
 
 const client = buildClient({
-  url: 'http://127.0.0.1:3042'
+  url: process.env.AI_URL || 'http://127.0.0.1:3042'
 })
 
 try {
@@ -11,9 +11,9 @@ try {
     stream: false
   })
 
-  console.log({ headers: response.headers })
-
-  console.log(response)
+  console.log('Headers:', Object.fromEntries(response.headers.entries()))
+  console.log('Response:', response.content)
 } catch (error) {
   console.error('Error:', error.message)
+  process.exit(1)
 }
