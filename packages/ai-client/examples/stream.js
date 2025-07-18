@@ -16,20 +16,20 @@ try {
     if (message.type === 'content') {
       process.stdout.write(message.content)
     } else if (message.type === 'done') {
-      console.log('\n\nStream completed!')
+      console.log('\n\n *** Stream completed!')
       console.log('Final response:', message.response)
     } else if (message.type === 'error') {
-      console.error('Stream error:', message.error)
+      console.error('! Stream error:', message.error)
     }
   })
 
   stream.on('end', () => {
-    console.log('\nStream ended')
+    console.log('\n *** Stream ended')
   })
 
   stream.on('error', (error) => {
-    console.error('Stream error:', error)
+    console.error('! Stream error:', error)
   })
 } catch (error) {
-  console.error('Error:', error.message)
+  console.error('! Error:', error.message)
 }

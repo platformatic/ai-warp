@@ -61,8 +61,8 @@ export interface AskOptions {
 
 export interface AskResponse {
   text: string
-  sessionId?: AiSessionId
-  result?: AiResponseResult
+  sessionId: AiSessionId
+  result: AiResponseResult
 }
 
 export interface StreamMessage {
