@@ -309,7 +309,7 @@ Makes a request to the AI service, returning either a stream or a complete respo
 - `context` (string, optional): Additional context for the request
 - `temperature` (number, optional): AI temperature parameter
 - `models` (array, optional): Array of models in either string format `"provider:model"` or object format `{ provider: string, model: string }`. Models must match the ones defined in the `ai-warp` service.
-- `history` (array, optional): Previous conversation history as `AiChatHistory` from `@platformatic/ai-provider`
+- `history` (array, optional): Previous conversation history TODO example. Note that `history` and `sessionId` cannot be provided at the same time.
 - `stream` (boolean, optional): Enable streaming (default: true)
 
 #### Returns
