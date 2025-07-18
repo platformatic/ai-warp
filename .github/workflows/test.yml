@@ -52,6 +52,9 @@ jobs:
     - name: Run linting
       run: pnpm lint
     
+    - name: Run build
+      run: pnpm build
+    
     - name: Run type checking
       run: pnpm typecheck
     
@@ -60,6 +63,3 @@ jobs:
       env:
         REDIS_URL: redis://localhost:6379
         VALKEY_URL: redis://localhost:6380
-    
-    - name: Run build
-      run: pnpm build
