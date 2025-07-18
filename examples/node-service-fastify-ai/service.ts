@@ -1,6 +1,6 @@
 import fastify, { type FastifyRequest } from 'fastify'
 import type { PinoLoggerOptions } from 'fastify/types/logger.js'
-import { ai, type AiChatHistory, type AiStorageOptions } from '@platformatic/fastify-ai-dev'
+import { ai, type AiChatHistory, type AiStorageOptions } from '@platformatic/fastify-ai'
 
 interface AppOptions {
   start?: boolean

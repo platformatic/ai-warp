@@ -1,7 +1,7 @@
-import { buildClient } from './dist/index.js'
+import { buildClient } from '../dist/index.js'
 
 const client = buildClient({
-  url: 'http://127.0.0.1:3042/api/v1/prompt'
+  url: 'http://127.0.0.1:3042'
 })
 
 try {
@@ -10,6 +10,8 @@ try {
     models: ['gemini:gemini-2.5-flash'],
     stream: false
   })
+
+  console.log({ headers: response.headers })
 
   console.log(response)
 } catch (error) {

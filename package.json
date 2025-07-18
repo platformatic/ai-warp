@@ -18,6 +18,5 @@
   "author": "Platformatic Inc. <oss@platformatic.dev> (https://platformatic.dev)",
   "engines": {
     "node": ">=22.16.0"
-  },
-  "packageManager": "pnpm@10.13.1"
+  }
 }

@@ -9,14 +9,13 @@
   },
   "author": "Platformatic Inc. <oss@platformatic.dev> (https://platformatic.dev)",
   "dependencies": {
-    "@platformatic/fastify-ai-dev": "workspace:*",
-    "@platformatic/ai-provider-dev": "workspace:*",
+    "@platformatic/fastify-ai": "workspace:*",
+    "@platformatic/ai-provider": "workspace:*",
     "fastify": "^5.4.0",
     "pino": "^9.7.0",
     "undici": "^7.10.0"
   },
   "engines": {
     "node": ">=22.16.0"
-  },
-  "packageManager": "pnpm@10.13.1"
+  }
 }

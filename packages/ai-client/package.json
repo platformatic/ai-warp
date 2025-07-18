@@ -1,7 +1,6 @@
 {
   "name": "@platformatic/ai-client",
-  "private": true,
-  "version": "0.0.1",
+  "version": "0.6.0-dev.1",
   "description": "The Platformatic AI client",
   "license": "Apache-2.0",
   "scripts": {
@@ -16,7 +15,6 @@
   },
   "author": "Platformatic Inc. <oss@platformatic.dev> (https://platformatic.dev)",
   "dependencies": {
-    "@platformatic/ai-provider": "workspace:*",
     "abstract-logging": "^2.0.1",
     "split2": "^4.2.0"
   },
@@ -45,6 +43,5 @@
   },
   "files": [
     "dist"
-  ],
-  "packageManager": "pnpm@10.13.1"
+  ]
 }

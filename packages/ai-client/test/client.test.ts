@@ -60,7 +60,7 @@ test('client.ask sends correct request and handles streaming response', async (_
     logger: silentLogger
   })
 
-  const stream = await client.ask({
+  const response = await client.ask({
     prompt: 'Hello AI',
     sessionId: 'user-123',
     temperature: 0.7,
@@ -70,7 +70,7 @@ test('client.ask sends correct request and handles streaming response', async (_
   })
 
   const messages = []
-  for await (const message of stream) {
+  for await (const message of response.stream) {
     messages.push(message)
   }
 
@@ -132,14 +132,14 @@ test('client handles models as object format', async (_) => {
     logger: silentLogger
   })
 
-  const stream = await client.ask({
+  const response = await client.ask({
     prompt: 'Hello AI',
     models: [{ provider: 'openai', model: 'gpt-4' }],
     stream: true
   })
 
   const messages = []
-  for await (const message of stream) {
+  for await (const message of response.stream) {
     messages.push(message)
   }
 
@@ -182,14 +182,14 @@ test('client handles models as string format', async (_) => {
     logger: silentLogger
   })
 
-  const stream = await client.ask({
+  const response = await client.ask({
     prompt: 'Hello AI',
     models: ['openai:gpt-4'],
     stream: true
   })
 
   const messages = []
-  for await (const message of stream) {
+  for await (const message of response.stream) {
     messages.push(message)
   }
 
@@ -232,7 +232,7 @@ test('client handles mixed model formats', async (_) => {
     logger: silentLogger
   })
 
-  const stream = await client.ask({
+  const response = await client.ask({
     prompt: 'Hello AI',
     models: [
       'openai:gpt-4',
@@ -243,7 +243,7 @@ test('client handles mixed model formats', async (_) => {
   })
 
   const messages = []
-  for await (const message of stream) {
+  for await (const message of response.stream) {
     messages.push(message)
   }
 
@@ -290,7 +290,7 @@ test('client handles multiple models', async (_) => {
     logger: silentLogger
   })
 
-  const stream = await client.ask({
+  const response = await client.ask({
     prompt: 'Hello AI',
     models: [
       { provider: 'openai', model: 'gpt-4' },
@@ -301,7 +301,7 @@ test('client handles multiple models', async (_) => {
   })
 
   const messages = []
-  for await (const message of stream) {
+  for await (const message of response.stream) {
     messages.push(message)
   }
 
@@ -391,9 +391,9 @@ test('client handles mixed JSON and plain text SSE data', async (_) => {
     url: `http://localhost:${port}`
   })
 
-  const stream = await client.ask({ prompt: 'Hello', stream: true })
+  const response = await client.ask({ prompt: 'Hello', stream: true })
   const messages = []
-  for await (const message of stream) {
+  for await (const message of response.stream) {
     messages.push(message)
   }
 
@@ -428,9 +428,9 @@ test('client handles AI provider Server-Sent Events', async (_) => {
     url: `http://localhost:${port}`
   })
 
-  const stream = await client.ask({ prompt: 'Hello', stream: true })
+  const response = await client.ask({ prompt: 'Hello', stream: true })
   const messages = []
-  for await (const message of stream) {
+  for await (const message of response.stream) {
     messages.push(message)
   }
 
@@ -466,9 +466,9 @@ test('client handles data-only SSE messages (no event field)', async (_) => {
     url: `http://localhost:${port}`
   })
 
-  const stream = await client.ask({ prompt: 'Hello', stream: true })
+  const response = await client.ask({ prompt: 'Hello', stream: true })
   const messages = []
-  for await (const message of stream) {
+  for await (const message of response.stream) {
     messages.push(message)
   }
 
@@ -513,9 +513,9 @@ test('client handles mixed event and data-only SSE messages', async (_) => {
     url: `http://localhost:${port}`
   })
 
-  const stream = await client.ask({ prompt: 'Hello', stream: true })
+  const response = await client.ask({ prompt: 'Hello', stream: true })
   const messages = []
-  for await (const message of stream) {
+  for await (const message of response.stream) {
     messages.push(message)
   }
 
@@ -554,9 +554,9 @@ test('client handles data-only messages with various formats', async (_) => {
     url: `http://localhost:${port}`
   })
 
-  const stream = await client.ask({ prompt: 'Hello', stream: true })
+  const response = await client.ask({ prompt: 'Hello', stream: true })
   const messages = []
-  for await (const message of stream) {
+  for await (const message of response.stream) {
     messages.push(message)
   }
 
@@ -592,9 +592,9 @@ test('client handles plain text data-only messages', async (_) => {
     url: `http://localhost:${port}`
   })
 
-  const stream = await client.ask({ prompt: 'Hello', stream: true })
+  const response = await client.ask({ prompt: 'Hello', stream: true })
   const messages = []
-  for await (const message of stream) {
+  for await (const message of response.stream) {
     messages.push(message)
   }
 
@@ -705,9 +705,9 @@ test('client handles events with no data field', async (_) => {
     url: `http://localhost:${port}`
   })
 
-  const stream = await client.ask({ prompt: 'Hello', stream: true })
+  const response = await client.ask({ prompt: 'Hello', stream: true })
   const messages = []
-  for await (const message of stream) {
+  for await (const message of response.stream) {
     messages.push(message)
   }
 
@@ -740,9 +740,9 @@ test('client handles unknown event types', async (_) => {
     url: `http://localhost:${port}`
   })
 
-  const stream = await client.ask({ prompt: 'Hello', stream: true })
+  const response = await client.ask({ prompt: 'Hello', stream: true })
   const messages = []
-  for await (const message of stream) {
+  for await (const message of response.stream) {
     messages.push(message)
   }
 
@@ -795,9 +795,9 @@ test('client uses provided logger', async (_) => {
     logger: mockLogger
   })
 
-  const stream = await client.ask({ prompt: 'Hello', stream: true })
+  const response = await client.ask({ prompt: 'Hello', stream: true })
   const messages = []
-  for await (const message of stream) {
+  for await (const message of response.stream) {
     messages.push(message)
   }
 
@@ -832,9 +832,9 @@ test('client uses default logger when none provided', async (_) => {
     url: `http://localhost:${port}`
   })
 
-  const stream = await client.ask({ prompt: 'Hello', stream: true })
+  const response = await client.ask({ prompt: 'Hello', stream: true })
   const messages = []
-  for await (const message of stream) {
+  for await (const message of response.stream) {
     messages.push(message)
   }
 
@@ -865,9 +865,9 @@ test('client uses abstract-logging when no logger provided', async (_) => {
     url: `http://localhost:${port}`
   })
 
-  const stream = await client.ask({ prompt: 'Hello', stream: true })
+  const response = await client.ask({ prompt: 'Hello', stream: true })
   const messages = []
-  for await (const message of stream) {
+  for await (const message of response.stream) {
     messages.push(message)
   }
 
@@ -922,7 +922,7 @@ test('client handles non-streaming response', async (_) => {
   strictEqual(capturedRequestBody?.stream, false)
   deepStrictEqual(capturedRequestBody?.models, [{ provider: 'openai', model: 'gpt-4' }])
 
-  deepStrictEqual(response, {
+  deepStrictEqual(response.content, {
     content: 'Hello world!',
     model: 'gpt-4',
     sessionId: 'user-123'
@@ -994,12 +994,12 @@ test('client defaults to streaming when stream option not specified', async (_) 
     logger: silentLogger
   })
 
-  const stream = await client.ask({
+  const response = await client.ask({
     prompt: 'Hello AI'
   })
 
   strictEqual(capturedRequestBody?.stream, true)
-  ok(stream && typeof (stream as any).on === 'function', 'Should return a stream')
+  ok(response && typeof (response as any).stream.on === 'function', 'Should return a stream')
 
   server.close()
   await once(server, 'close')
@@ -1025,13 +1025,13 @@ test('client handles URL without trailing slash', async (_) => {
     logger: silentLogger
   })
 
-  const stream = await client.ask({
+  const response = await client.ask({
     prompt: 'Hello AI',
     stream: true
   })
 
   const messages = []
-  for await (const message of stream) {
+  for await (const message of response.stream) {
     messages.push(message)
   }
 
@@ -1063,9 +1063,9 @@ test('client handles data with error field instead of message', async (_) => {
     logger: silentLogger
   })
 
-  const stream = await client.ask({ prompt: 'Hello', stream: true })
+  const response = await client.ask({ prompt: 'Hello', stream: true })
   const messages = []
-  for await (const message of stream) {
+  for await (const message of response.stream) {
     messages.push(message)
   }
 
@@ -1097,9 +1097,9 @@ test('client handles response object with content property', async (_) => {
     logger: silentLogger
   })
 
-  const stream = await client.ask({ prompt: 'Hello', stream: true })
+  const response = await client.ask({ prompt: 'Hello', stream: true })
   const messages = []
-  for await (const message of stream) {
+  for await (const message of response.stream) {
     messages.push(message)
   }
 
@@ -1131,9 +1131,9 @@ test('client handles response object without model or sessionId', async (_) => {
     logger: silentLogger
   })
 
-  const stream = await client.ask({ prompt: 'Hello', stream: true })
+  const response = await client.ask({ prompt: 'Hello', stream: true })
   const messages = []
-  for await (const message of stream) {
+  for await (const message of response.stream) {
     messages.push(message)
   }
 
@@ -1167,9 +1167,9 @@ test('client handles empty chunks in stream', async (_) => {
     logger: silentLogger
   })
 
-  const stream = await client.ask({ prompt: 'Hello', stream: true })
+  const response = await client.ask({ prompt: 'Hello', stream: true })
   const messages = []
-  for await (const message of stream) {
+  for await (const message of response.stream) {
     messages.push(message)
   }
 
@@ -1201,9 +1201,9 @@ test('client handles response with unknown structure', async (_) => {
     logger: silentLogger
   })
 
-  const stream = await client.ask({ prompt: 'Hello', stream: true })
+  const response = await client.ask({ prompt: 'Hello', stream: true })
   const messages = []
-  for await (const message of stream) {
+  for await (const message of response.stream) {
     messages.push(message)
   }
 
@@ -1236,16 +1236,16 @@ test('client stream handles error events', async (_) => {
     logger: silentLogger
   })
 
-  const stream = await client.ask({ prompt: 'Hello', stream: true })
+  const response = await client.ask({ prompt: 'Hello', stream: true })
   const messages = []
   let streamError: Error | null = null
 
-  stream.on('error', (err) => {
+  response.stream.on('error', (err: any) => {
     streamError = err
   })
 
   try {
-    for await (const message of stream) {
+    for await (const message of response.stream) {
       messages.push(message)
     }
   } catch {

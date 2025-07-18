@@ -1,8 +1,8 @@
 import undici from 'undici'
 import { setTimeout as wait } from 'node:timers/promises'
-import { decodeEventStream } from '@platformatic/ai-provider-dev'
-import type { AiChatHistory } from '@platformatic/ai-provider-dev'
-import type { AiContentResponse } from '@platformatic/ai-provider-dev'
+import { decodeEventStream } from '@platformatic/ai-provider'
+import type { AiChatHistory } from '@platformatic/ai-provider'
+import type { AiContentResponse } from '@platformatic/ai-provider'
 import { app } from './service.ts'
 
 const url = 'http://localhost:3000/chat'

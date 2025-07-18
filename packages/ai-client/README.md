@@ -4,11 +4,9 @@ A TypeScript client for streaming AI responses from Platformatic AI services.
 
 ## Features
 
-- 🚀 **Streaming support** - Real-time streaming of AI responses
-- 🔧 **TypeScript first** - Full TypeScript support with type safety
-- 📡 **Server-Sent Events** - Handles both event-based and data-only SSE messages
-- 📄 **Flexible parsing** - Supports JSON and plain text data formats
-- 🎯 **Simple API** - Easy to use with async/await and for-await-of
+- 🌐 **AI Warp Communication** - Complete TypeScript client for `@platformatic/ai-warp` service API
+- 🎯 **Simple API** - `buildClient` and `ask` are the only functions to handles all AI interactions
+- 🚀 **Streaming support** - Real-time streaming support
 
 ## Installation
 
@@ -23,32 +21,37 @@ npm install @platformatic/ai-client
 The Platformatic AI service provides two endpoints:
 
 - **`/api/v1/stream`** - For streaming responses (Server-Sent Events)
-- **`/api/v1/prompt`** - For non-streaming responses (JSON)
+- **`/api/v1/prompt`** - For direct responses (JSON)
 
 ### Streaming Response (default)
 
 ```typescript
 import { buildClient } from "@platformatic/ai-client";
+import pino from 'pino';
 
-// Create client instance for streaming endpoint
+// Create client instance - it handles both streaming and direct
 const client = buildClient({
-  url: "http://localhost:3042/api/v1/stream", // Use /stream endpoint for streaming
+  url: "http://localhost:3042", // Base URL, paths are handled automatically
   headers: {
     Authorization: "Bearer your-api-key",
   },
   timeout: 30000, // optional timeout in ms (default: 60000)
-  logger: customLogger, // optional Logger instance
+  logger: pino({ level: 'warn' }), // optional Logger instance
 });
 
 try {
   // Make a streaming request to the AI service
-  const stream = await client.ask({
+  const response = await client.ask({
     prompt: "Hello AI, how are you today?",
     sessionId: "user-123",
     temperature: 0.7,
     models: ["openai:gpt-4"], // String format or [{ provider: "openai", model: "gpt-4" }]
     stream: true // optional, defaults to true
   });
+
+  // Access the stream and headers
+  const { stream, headers } = response;
+  console.log("Response headers:", headers);
 
   // Read the streaming response
   let fullResponse = "";
@@ -77,20 +80,20 @@ try {
 }
 ```
 
-### Non-Streaming Response
+### Direct Response
 
 ```typescript
 import { buildClient } from "@platformatic/ai-client";
 
 const client = buildClient({
-  url: "http://localhost:3042/api/v1/prompt", // Use /prompt endpoint for non-streaming
+  url: "http://localhost:3042", // Base URL, paths are handled automatically
   headers: {
     Authorization: "Bearer your-api-key",
   },
 });
 
 try {
-  // Make a non-streaming request to the AI service
+  // Make a direct request to the AI service
   const response = await client.ask({
     prompt: "Hello AI, how are you today?",
     sessionId: "user-123",
@@ -99,8 +102,10 @@ try {
     stream: false
   });
 
-  console.log("Response:", response.content);
-  console.log("Model:", response.model);
+  // Access the content and headers
+  const { content, headers } = response;
+  console.log("Response headers:", headers);
+  console.log("Response content:", content);
 } catch (error) {
   console.error("Request failed:", error);
 }
@@ -112,22 +117,25 @@ The client provides multiple ways to handle errors:
 
 ```typescript
 try {
-  const stream = await client.ask({
+  const response = await client.ask({
     prompt: "Hello AI",
     sessionId: "user-123"
   });
 
   // Handle stream errors (connection issues, parsing errors, etc.)
-  stream.on('error', (err) => {
+  response.stream.on('error', (err) => {
     console.error('Stream error:', err);
   });
 
-  for await (const message of stream) {
+  for await (const message of response.stream) {
     if (message.type === 'error') {
       // Handle AI service errors
       console.error('AI service error:', message.error);
+    } else if (message.type === 'content') {
+      console.log('Received:', message.content);
+    } else if (message.type === 'done') {
+      console.log('Final response:', message.response);
     }
-    // ... handle other message types
   }
 } catch (error) {
   // Handle request-level errors (HTTP errors, timeouts, etc.)
@@ -141,7 +149,7 @@ The client supports two model formats:
 
 ### String Format (Recommended)
 ```typescript
-const stream = await client.ask({
+const response = await client.ask({
   prompt: "Hello AI",
   models: ["openai:gpt-4"]
 });
@@ -149,7 +157,7 @@ const stream = await client.ask({
 
 ### Object Format
 ```typescript
-const stream = await client.ask({
+const response = await client.ask({
   prompt: "Hello AI",
   models: [{
     provider: "openai",
@@ -163,7 +171,7 @@ const stream = await client.ask({
 You can specify multiple models for fallback scenarios using either format:
 
 ```typescript
-const stream = await client.ask({
+const response = await client.ask({
   prompt: "Hello AI",
   models: [
     "openai:gpt-4",
@@ -174,7 +182,7 @@ const stream = await client.ask({
 });
 
 // Or using object format
-const stream = await client.ask({
+const response = await client.ask({
   prompt: "Hello AI",
   models: [
     { provider: "openai", model: "gpt-4" },
@@ -185,7 +193,75 @@ const stream = await client.ask({
 });
 ```
 
-The AI service will try each model in order until one succeeds.
+The AI service will try each model in order until one succeeds. Models must match the ones declared in the `ai-warp` service.
+
+## Session Management
+
+The client supports conversation continuity through session IDs. Here's how it works:
+
+### Creating a New Conversation
+
+When you make your first request without a `sessionId`, the AI service creates a new session:
+
+```typescript
+// First request - no sessionId provided
+const response = await client.ask({
+  prompt: "Hello, I'm planning a trip to Italy",
+  stream: false
+});
+
+// The sessionId is available in both the response content and headers
+console.log("New session:", response.content.sessionId);
+console.log("Session from header:", response.headers.get('x-session-id'));
+// Both will output: "sess_abc123xyz"
+```
+
+### Continuing a Conversation
+
+Use the returned `sessionId` in subsequent requests to maintain conversation context:
+
+```typescript
+const sessionId = response.content.sessionId;
+
+// Follow-up request using the same sessionId
+const followUp = await client.ask({
+  prompt: "What's the weather like there in spring?",
+  sessionId: sessionId, // Continue the conversation
+  stream: false
+});
+
+// The AI will remember the previous context about Italy
+```
+
+### Streaming with Sessions
+
+Session management works the same way with streaming responses:
+
+```typescript
+const response = await client.ask({
+  prompt: "Tell me about Rome",
+  stream: true
+});
+
+let sessionId;
+
+// The sessionId is also available immediately in the response headers
+console.log("Session from header:", response.headers.get('x-session-id'));
+
+for await (const message of response.stream) {
+  if (message.type === 'done' && message.response) {
+    sessionId = message.response.sessionId;
+    console.log("Session ID:", sessionId);
+  }
+}
+
+// Use the sessionId for the next request
+const nextResponse = await client.ask({
+  prompt: "What are the best restaurants there?",
+  sessionId: sessionId,
+  stream: true
+});
+```
 
 ## API Reference
 
@@ -199,33 +275,23 @@ Creates a new AI client instance.
 - `headers` (object, optional): HTTP headers to include with requests
 - `timeout` (number, optional): Request timeout in milliseconds (default: 60000)
 - `logger` (Logger, optional): Logger instance (uses abstract-logging if not provided)
+- `promptPath` (string, optional): Custom path for direct requests (default: `/api/v1/prompt`)
+- `streamPath` (string, optional): Custom path for streaming requests (default: `/api/v1/stream`)
 
 #### Logger Support
 
-You can configure logging by providing a logger instance:
+You can configure logging by providing a pino logger instance:
 
 ```typescript
-import type { Logger } from '@platformatic/ai-client'
+import pino from 'pino'
 
-const customLogger: Logger = {
-  debug: (message: string, data?: any) => console.log('DEBUG:', message, data),
-  info: (message: string, data?: any) => console.log('INFO:', message, data),
-  warn: (message: string, data?: any) => console.warn('WARN:', message, data),
-  error: (messageOrData: string | any, messageWhenData?: string) => {
-    if (typeof messageOrData === 'string') {
-      console.error('ERROR:', messageOrData, messageWhenData)
-    } else {
-      console.error('ERROR:', messageWhenData || 'Error', messageOrData)
-    }
-  }
-}
+const logger = pino({ level: 'info' })
 
 const client = buildClient({
   url: "http://localhost:3000",
-  logger: customLogger
+  logger: logger
 })
 ```
-
 If no `logger` is provided, the client will use `abstract-logging` (a no-op logger that is API-compatible with the Logger interface).
 
 #### Returns
@@ -238,84 +304,73 @@ Makes a request to the AI service, returning either a stream or a complete respo
 
 #### Options
 
-- `prompt` (string): The prompt to send to the AI
-- `sessionId` (string, optional): Session ID for conversation context
+- **`prompt`** (string): The prompt to send to the AI
+- `sessionId` (string, optional): Session ID for conversation continuity. If not provided, the AI service creates a new session. Use the returned `sessionId` from previous responses to maintain conversation context across multiple requests. Each session maintains its own conversation history and context.
 - `context` (string, optional): Additional context for the request
 - `temperature` (number, optional): AI temperature parameter
-- `models` (array, optional): Array of models in either string format `"provider:model"` or object format `{ provider: string, model: string }`
-- `history` (array, optional): Previous conversation history as `AiChatHistory` from `@platformatic/ai-provider`
+- `models` (array, optional): Array of models in either string format `"provider:model"` or object format `{ provider: string, model: string }`. Models must match the ones defined in the `ai-warp` service.
+- `history` (array, optional): Previous conversation history TODO example. Note that `history` and `sessionId` cannot be provided at the same time.
 - `stream` (boolean, optional): Enable streaming (default: true)
 
 #### Returns
 
-- When `stream: true` (default): `Promise<Readable>` - A Node.js Readable stream of messages
-- When `stream: false`: `Promise<AskResponse>` - A complete response object
+- When `stream: true` (default): `Promise<AskResponseStream>` - An object containing the stream and headers
+- When `stream: false`: `Promise<AskResponseContent>` - An object containing the content and headers
 
-#### Response Object (Non-streaming)
+#### Streaming Response Object
 
 ```typescript
 {
-  content: string          // The AI's response content
-  model?: string          // The model used to generate the response
-  sessionId?: string      // Session ID if provided
+  stream: Readable,        // Node.js Readable stream of StreamMessage objects
+  headers: Headers         // Response headers from the server
 }
 ```
 
-### Stream Messages
+#### Direct Response Object
 
-The Readable stream yields `StreamMessage` objects with the following types:
+```typescript
+{
+  content: AskResponse,    // The complete AI response object
+  headers: Headers         // Response headers from the server
+}
+```
 
-#### Content Message
+### Response Types
 
+#### `AskResponse` (Direct Response Content)
+
+```typescript
+{
+  text: string,                    // The AI's response text
+  sessionId: string,               // Session ID for conversation continuity
+  result: AiResponseResult         // Result status: 'COMPLETE' | 'INCOMPLETE_MAX_TOKENS' | 'INCOMPLETE_UNKNOWN'
+}
+```
+
+#### `StreamMessage` (Streaming Response Messages)
+
+The stream yields different types of messages:
+
+**Content Message** - Contains partial response text:
 ```typescript
 {
   type: 'content',
-  content: string
+  content: string          // Partial response text chunk
 }
 ```
 
-#### Error Message
-
+**Error Message** - Contains error information:
 ```typescript
 {
   type: 'error',
-  error: Error
+  error: Error             // Error object with details
 }
 ```
 
-#### Done Message
-
+**Done Message** - Contains final response metadata:
 ```typescript
 {
   type: 'done',
-  response?: {
-    content: string
-    model?: string
-    sessionId?: string
-  }
+  response?: AskResponse   // Final response object with complete metadata
 }
-```
-
-## Server-Sent Events Support
-
-The client supports various SSE message formats:
-
-### Event-based Messages
-
-```
-event: content
-data: {"response": "Hello world"}
-
-event: end
-data: {"response": {"content": "Complete", "model": "gpt-4"}}
-```
-
-### Data-only Messages
-
-```
-data: {"response": "JSON content"}
-
-data: {"content": "Alternative JSON format"}
-
-data: Plain text content
 ```

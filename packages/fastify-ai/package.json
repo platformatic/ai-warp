@@ -1,7 +1,7 @@
 {
-  "name": "@platformatic/fastify-ai-dev",
+  "name": "@platformatic/fastify-ai",
   "type": "module",
-  "version": "0.0.1-dev.2",
+  "version": "0.6.0-dev.1",
   "description": "The fastify AI plugin",
   "license": "Apache-2.0",
   "main": "dist/index.js",
@@ -29,7 +29,7 @@
   },
   "author": "Platformatic Inc. <oss@platformatic.dev> (https://platformatic.dev)",
   "dependencies": {
-    "@platformatic/ai-provider-dev": "workspace:*",
+    "@platformatic/ai-provider": "workspace:*",
     "fastify": "^5.2.1",
     "fastify-plugin": "^5.0.1"
   },
@@ -46,6 +46,5 @@
   },
   "engines": {
     "node": ">=22.16.0"
-  },
-  "packageManager": "pnpm@10.13.1"
+  }
 }
