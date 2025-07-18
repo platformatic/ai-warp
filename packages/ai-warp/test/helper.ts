@@ -8,7 +8,7 @@ export function getPort (): number {
   return 3042 + apps
 }
 
-export async function createApp ({ client, authConfig }: { client: any, authConfig?: any }) {
+export async function createApp ({ client, authConfig }: { client?: any, authConfig?: any }) {
   const port = getPort()
 
   const config: AiWarpConfig = {
@@ -22,7 +22,7 @@ export async function createApp ({ client, authConfig }: { client: any, authConf
       providers: {
         openai: {
           apiKey: 'test',
-          client
+          client: client || createDummyClient()
         }
       },
       models: [

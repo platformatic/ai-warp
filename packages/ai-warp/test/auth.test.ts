@@ -55,7 +55,6 @@ test('should extract user from valid JWT token', async () => {
 })
 
 test('should reject requests with invalid JWT token', async () => {
-  const client = createDummyClient()
   const authConfig = {
     required: true,
     jwt: {
@@ -63,7 +62,7 @@ test('should reject requests with invalid JWT token', async () => {
     }
   }
 
-  const [app, _port] = await createApp({ client, authConfig })
+  const [app, _port] = await createApp({ authConfig })
 
   // Add a route to test user extraction
   app.route({
@@ -93,7 +92,6 @@ test('should reject requests with invalid JWT token', async () => {
 })
 
 test('should reject requests with missing JWT token', async () => {
-  const client = createDummyClient()
   const authConfig = {
     required: true,
     jwt: {
@@ -101,7 +99,7 @@ test('should reject requests with missing JWT token', async () => {
     }
   }
 
-  const [app, _port] = await createApp({ client, authConfig })
+  const [app, _port] = await createApp({ authConfig })
 
   // Add a route to test user extraction
   app.route({
@@ -179,7 +177,6 @@ test('should populate request.user for AI endpoints', async () => {
 })
 
 test('should work with JWT namespace option', async () => {
-  const client = createDummyClient()
   const authConfig = {
     required: true,
     jwt: {
@@ -188,7 +185,7 @@ test('should work with JWT namespace option', async () => {
     }
   }
 
-  const [app, _port] = await createApp({ client, authConfig })
+  const [app, _port] = await createApp({ authConfig })
 
   // Add a route to test user extraction
   app.route({
@@ -261,7 +258,6 @@ test('should reject unauthenticated requests to AI endpoints when auth is config
 })
 
 test('should reject unauthenticated requests to custom routes when auth is configured', async () => {
-  const client = createDummyClient()
   const authConfig = {
     required: true,
     jwt: {
@@ -269,7 +265,7 @@ test('should reject unauthenticated requests to custom routes when auth is confi
     }
   }
 
-  const [app, _port] = await createApp({ client, authConfig })
+  const [app, _port] = await createApp({ authConfig })
 
   // Add a route to test auth enforcement
   app.route({
