@@ -31,8 +31,7 @@
   "dependencies": {
     "@platformatic/ai-provider": "workspace:*",
     "fastify": "^5.2.1",
-    "fastify-plugin": "^5.0.1",
-    "fastify-user": "^1.4.0"
+    "fastify-plugin": "^5.0.1"
   },
   "devDependencies": {
     "@types/node": "^22.13.9",
