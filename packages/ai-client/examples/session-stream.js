@@ -56,7 +56,7 @@ async function chatWithAI () {
 
       const response = await client.ask({
         prompt: question,
-        sessionId: sessionId, // Continue the conversation
+        sessionId, // Continue the conversation
         stream: true
       })
 
