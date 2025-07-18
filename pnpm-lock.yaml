@@ -9,20 +9,13 @@ importers:
   .: {}
 
   packages/ai-client:
-    dependencies:
-      abstract-logging:
-        specifier: ^2.0.1
-        version: 2.0.1
-      split2:
-        specifier: ^4.2.0
-        version: 4.2.0
     devDependencies:
+      '@platformatic/ai-provider':
+        specifier: workspace:*
+        version: link:../ai-provider
       '@types/node':
         specifier: ^22.13.9
         version: 22.16.4
-      '@types/split2':
-        specifier: ^4.2.3
-        version: 4.2.3
       c8:
         specifier: ^10.1.3
         version: 10.1.3
@@ -734,9 +727,6 @@ packages:
 
   '@types/shimmer@1.2.0':
     resolution: {integrity: sha512-UE7oxhQLLd9gub6JKIAhDq06T0F6FnztwMNRvYgjeQSBeMc1ZG/tA47EwfduvkuQS8apbkM/lpLpWsaCeYsXVg==}
-
-  '@types/split2@4.2.3':
-    resolution: {integrity: sha512-59OXIlfUsi2k++H6CHgUQKEb2HKRokUA39HY1i1dS8/AIcqVjtAAFdf8u+HxTWK/4FUHMJQlKSZ4I6irCBJ1Zw==}
 
   '@types/ws@8.18.1':
     resolution: {integrity: sha512-ThVF6DCVhA8kUGy+aazFQ4kXQ7E1Ty7A3ypFOe0IcJV8O/M511G99AW24irKrW56Wt44yG9+ij8FaqoBGkuBXg==}
@@ -3586,10 +3576,6 @@ snapshots:
       undici-types: 6.21.0
 
   '@types/shimmer@1.2.0': {}
-
-  '@types/split2@4.2.3':
-    dependencies:
-      '@types/node': 22.16.4
 
   '@types/ws@8.18.1':
     dependencies:
