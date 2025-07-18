@@ -3,11 +3,13 @@ import fp from 'fastify-plugin'
 import type { Logger } from 'pino'
 import { Ai } from '@platformatic/ai-provider'
 import type { AiOptions, AiModel, AiResponseResult, AiChatHistory, AiSessionId } from '@platformatic/ai-provider'
+import type { FastifyUserPluginOptions } from 'fastify-user'
 
 const DEFAULT_HEADER_SESSION_ID_NAME = 'x-session-id'
 
-export type AiPluginOptions = Omit< AiOptions, 'logger'> & {
+export type AiPluginOptions = Omit<AiOptions, 'logger'> & {
   headerSessionIdName?: string
+  user?: FastifyUserPluginOptions
 }
 
 export type FastifyAiRequest = {
@@ -42,6 +44,21 @@ export default fp(async (fastify, options: AiPluginOptions) => {
   if (!options.headerSessionIdName) {
     options.headerSessionIdName = DEFAULT_HEADER_SESSION_ID_NAME
   }
+
+  // Register fastify-user if user options are provided
+  if (options.user) {
+    // @ts-ignore
+    const fastifyUserModule = await import('fastify-user')
+    // @ts-ignore
+    await fastify.register(fastifyUserModule.default, options.user)
+
+    // Add preHandler hook to extract user from JWT
+    fastify.addHook('preHandler', async (request, _reply) => {
+      // @ts-ignore
+      await request.extractUser()
+    })
+  }
+
   const aiOptions: AiOptions = {
     ...options,
     logger: fastify.log as Logger
