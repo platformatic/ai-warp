@@ -58,51 +58,91 @@ Or use `@platformatic/ai-client`
 
 ```typescript
 import { buildClient } from '@platformatic/ai-client'
+import pino from 'pino'
 
 const client = buildClient({
-  url: 'http://localhost:3042'
+  url: 'http://localhost:3042',
+  logger: pino({ level: 'info' })
 })
 
 const response = await client.ask({
-  prompt: 'Hello AI, how are you today?'
+  prompt: 'Hello AI, how are you today?',
+  stream: false
 })
 
-console.log(response)
+console.log('Response:', response.content)
+console.log('Headers:', response.headers)
+console.log('Session ID:', response.headers.get('x-session-id'))
 ```
 
-TODO return headers
-TODO print response
+**Output:**
+```json
+{
+  "content": {
+    "text": "Hello! I'm doing well, thank you for asking. I'm here and ready to help you with any questions or tasks you might have. How are you doing today?",
+    "sessionId": "sess_abc123xyz",
+    "result": "COMPLETE"
+  },
+  "headers": {
+    "x-session-id": "sess_abc123xyz",
+    "content-type": "application/json"
+  }
+}
+```
 
 ---
 
 ## ✨ Features
 
-### AI Models Provider Gateway
-TODO In a unified interface
+### 🌐 **Unified AI Provider Gateway**
+Access multiple AI providers through a single, consistent interface. Switch between OpenAI, DeepSeek, and Google Gemini without changing your application code. Configure models using either simple string format (`"openai:gpt-4"`) or detailed object configuration with custom limits and retry policies.
 
-### 🔄 Automatic Fallback
-When a model fails, the system automatically tries the next available model in the configuration order.
-Request limits
-Retry, Timeout TODO
-Configurable retry mechanisms with exponential backoff for transient failures.
-Restoring
+### 🔄 **Intelligent Automatic Fallback**
+When a model fails or reaches its limits, the system automatically tries the next available model in your configuration chain. This ensures maximum uptime and availability for your AI applications:
+- **Model Selection**: Automatically routes requests to the next available model
+- **Rate Limit Management**: Automatic handling of provider rate limits with time-window-based restoration
 
-### 💾 Session Management
-Persistent conversation history with configurable storage backends (memory, Valkey).
+### 💾 **Advanced Session Management**
+Maintain conversation continuity across multiple requests with persistent session storage:
+- **Conversation History**: Automatic storage and retrieval of chat history
+- **Multiple Storage Backends**: Support for in-memory storage and distributed Valkey
+- **Session Lifecycle**: Configurable session expiration and cleanup
+- **Cross-Request Context**: Session IDs available in both response body and `x-session-id` header
+- **Scalable Architecture**: Sessions shared across multiple service instances
 
-### 🌊 Streaming Support
-Real-time streaming responses using Server-Sent Events (SSE).
+### 🌊 **Real-time Streaming Support**
+Get immediate responses with Server-Sent Events (SSE) streaming:
+- **Chunked Responses**: Receive AI responses as they're generated
+- **Multiple Message Types**: Handle content, error, and completion messages
+- **Event-based Architecture**: Support for both event-based and data-only SSE formats
 
-### 📈 Scalability
-Designed for high-throughput scenarios with efficient connection pooling and resource management.
-Takes advantages of `undici` pipelining
-Shared model state, history, shared storage
+### 📈 **Enterprise-grade Scalability**
+Built for high-throughput production environments:
+- **Connection Pooling**: Efficient HTTP connection management using `undici`
+- **Pipelining Optimization**: Take advantage of HTTP/1.1 pipelining for better performance
+- **Shared State Management**: Distributed session and model state across service instances
+- **Resource Limits**: Configurable rate limits, timeouts, and token limits per model
 
-### 🔌 Supported Providers
+### 🔧 **Developer-friendly TypeScript Client**
+Comprehensive TypeScript client with full type safety:
+- **Type-safe Interfaces**: Complete TypeScript definitions for all API responses
+- **Flexible Configuration**: Support for custom headers, timeouts, and logging
+- **Pino Logger Integration**: Built-in support for structured logging
+- **Error Handling**: Comprehensive error handling with detailed error types
+- **Async/Await Support**: Modern JavaScript patterns with async iterators for streaming
 
-- OpenAI
-- DeepSeek
-- Google Gemini
+### 🛡️ **Robust Error Handling & Recovery**
+Sophisticated error handling mechanisms ensure reliability:
+- **Timeout Management**: Configurable request timeouts with automatic cleanup
+- **Graceful Error Recovery**: Automatic restoration of failed providers after cooling periods
+- **Detailed Error Reporting**: Comprehensive error messages with context and suggestions
+
+### 🔌 **Multi-Provider Support**
+Native support for major AI providers with optimized integrations:
+- **OpenAI**: Full support for GPT models including GPT-4, GPT-3.5-turbo
+- **DeepSeek**: Integration with DeepSeek's high-performance models
+- **Google Gemini**: Support for Gemini Pro and Gemini Flash models
+- **Extensible Architecture**: Easy to add new providers through the plugin system
 
 --- 
 
@@ -114,25 +154,4 @@ TODO
 ## 🏗️ Architecture Overview
 
 TODO image 
-
-The Platformatic AI Warp architecture is designed for scalability and reliability:
-
-### Request Flow
-1. **Client Request** → AI Warp Service
-2. **Model Selection** → Automatic fallback chain
-3. **Provider Communication** → Optimized HTTP connections
-4. **Response Processing** → Streaming or batch responses
-5. **Session Management** → Persistent conversation history
-
-### Scalability Features
-- **Connection Pooling**: Efficient HTTP connection management
-- **Shared State**: Distributed session storage with Valkey/Redis
-- **Load Balancing**: Multiple provider instances for high availability
-- **Resource Limits**: Configurable rate limits and timeouts
-
-### Error Recovery
-- **Automatic Retries**: Exponential backoff for transient failures
-- **Provider Fallback**: Seamless switching between AI providers
-- **Circuit Breaker**: Temporary provider disabling after repeated failures
-- **Graceful Degradation**: Fallback to simpler models when needed
 

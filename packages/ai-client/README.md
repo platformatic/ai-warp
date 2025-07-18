@@ -4,11 +4,9 @@ A TypeScript client for streaming AI responses from Platformatic AI services.
 
 ## Features
 
-- 🚀 **Streaming support** - Real-time streaming of AI responses
-- 🔧 **TypeScript first** - Full TypeScript support with type safety
-- 📡 **Server-Sent Events** - Handles both event-based and data-only SSE messages
-- 📄 **Flexible parsing** - Supports JSON and plain text data formats
-- 🎯 **Simple API** - Easy to use with async/await and for-await-of
+- 🌐 **AI Warp Communication** - Complete TypeScript client for `@platformatic/ai-warp` service API
+- 🎯 **Simple API** - `buildClient` and `ask` are the only functions to handles all AI interactions
+- 🚀 **Streaming support** - Real-time streaming support
 
 ## Installation
 
