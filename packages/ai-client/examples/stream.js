@@ -1,35 +1,31 @@
 import { buildClient } from '../dist/index.js'
 
 const client = buildClient({
-  url: 'http://127.0.0.1:3042'
+  url: process.env.AI_URL || 'http://127.0.0.1:3042'
 })
 
 try {
-  const stream = await client.ask({
+  const response = await client.ask({
     prompt: 'List the first 5 prime numbers',
     stream: true
   })
 
-  console.log({ headers: stream.headers })
+  console.log('Response headers:', Object.fromEntries(response.headers.entries()))
 
-  stream.on('data', (message) => {
+  for await (const message of response.stream) {
     if (message.type === 'content') {
       process.stdout.write(message.content)
     } else if (message.type === 'done') {
-      console.log('\n\n *** Stream completed!')
+      console.log('\n\n*** Stream completed!')
       console.log('Final response:', message.response)
     } else if (message.type === 'error') {
-      console.error('! Stream error:', message.error)
+      console.error('\n! Stream error:', message.error.message)
+      break
     }
-  })
+  }
 
-  stream.on('end', () => {
-    console.log('\n *** Stream ended')
-  })
-
-  stream.on('error', (error) => {
-    console.error('! Stream error:', error)
-  })
+  console.log('\n*** Stream ended')
 } catch (error) {
   console.error('! Error:', error.message)
+  process.exit(1)
 }

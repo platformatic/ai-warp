@@ -1,6 +1,5 @@
-import type { Readable } from 'node:stream'
-
-// from @platformatic/ai-provider
+// Types duplicated from @platformatic/ai-provider to keep ai-client dependency-free
+// This package is designed to be standalone and not depend on other Platformatic modules
 export type TimeWindow = number | string
 export type AiSessionId = string
 export type AiProvider = 'openai' | 'deepseek' | 'gemini'
@@ -35,7 +34,6 @@ export interface Logger {
   info(message: string, data?: any): void
   warn(message: string, data?: any): void
   error(message: string, data?: any): void
-  error(data: any, message?: string): void
 }
 
 export interface ClientOptions {
@@ -72,8 +70,12 @@ export interface StreamMessage {
   response?: AskResponse
 }
 
+export interface AsyncIterableStream<T> {
+  [Symbol.asyncIterator](): AsyncIterator<T>
+}
+
 export interface AskResponseStream {
-  stream: Readable
+  stream: AsyncIterableStream<StreamMessage>
   headers: Headers
 }
 
