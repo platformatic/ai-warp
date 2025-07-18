@@ -39,7 +39,7 @@ async function buildStackable (opts: { config: string }): Promise<StackableInter
 }
 
 const stackable: Stackable<AiWarpConfig, AiGenerator> = {
-  async app (app: FastifyInstance, options: object) {
+  async app (app: FastifyInstance, _options: object) {
     const fastify = app as unknown as FastifyInstance & AiWarpMixin
     const { config } = fastify.platformatic
 
