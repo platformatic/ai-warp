@@ -6,7 +6,7 @@ import type { AiOptions, AiModel, AiResponseResult, AiChatHistory, AiSessionId }
 
 const DEFAULT_HEADER_SESSION_ID_NAME = 'x-session-id'
 
-export type AiPluginOptions = Omit< AiOptions, 'logger'> & {
+export type AiPluginOptions = Omit<AiOptions, 'logger'> & {
   headerSessionIdName?: string
 }
 
@@ -42,6 +42,7 @@ export default fp(async (fastify, options: AiPluginOptions) => {
   if (!options.headerSessionIdName) {
     options.headerSessionIdName = DEFAULT_HEADER_SESSION_ID_NAME
   }
+
   const aiOptions: AiOptions = {
     ...options,
     logger: fastify.log as Logger

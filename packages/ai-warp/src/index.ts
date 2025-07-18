@@ -8,6 +8,7 @@ import ai, { type AiChatHistory, type AiSessionId } from '@platformatic/fastify-
 import { schema } from './lib/schema.js'
 import { Generator } from './lib/generator.js'
 import type { AiWarpConfig } from '../config.js'
+import fastifyUser from 'fastify-user'
 
 const DEFAULT_PROMPT_PATH = '/api/v1/prompt'
 const DEFAULT_STREAM_PATH = '/api/v1/stream'
@@ -28,6 +29,7 @@ export type AiRequestBody = {
 }
 
 const InternalServerError = createError('INTERNAL_SERVER_ERROR', 'Internal Server Error', 500)
+const UnauthorizedError = createError('UNAUTHORIZED', 'Unauthorized', 401)
 function isAFastifyError (object: object): object is FastifyError {
   return 'code' in object && 'name' in object
 }
@@ -44,7 +46,28 @@ const stackable: Stackable<AiWarpConfig, AiGenerator> = {
     const { config } = fastify.platformatic
 
     await fastify.register(platformaticService, config)
-    await fastify.register(ai, config.ai)
+    await fastify.register(ai, config.ai as any)
+
+    // Register fastify-user if auth options are provided
+    if (config.auth) {
+      // @ts-ignore
+      await fastify.register(fastifyUser, config.auth)
+
+      // Add onRequest hook to extract user from JWT and check auth
+      fastify.addHook('onRequest', async (request, _reply) => {
+        // @ts-ignore
+        await request.extractUser()
+
+        // Check if user is required but missing
+        const isAuthRequired = config.auth?.required === true
+        // @ts-ignore
+        const isMissingUser = request.user === undefined || request.user === null
+
+        if (isAuthRequired && isMissingUser) {
+          throw new UnauthorizedError()
+        }
+      })
+    }
 
     const bodySchema = Type.Object({
       context: Type.Optional(Type.String()),
@@ -134,10 +157,6 @@ const stackable: Stackable<AiWarpConfig, AiGenerator> = {
         }
       }
     })
-
-    // TODO auth with @platformatic/fastify-user on ai-warp service
-
-    // await fastify.register(fastifyUser as any, config.auth)
 
     // TODO client rate limit with @fastify/rate-limit on ai-warp service
   },

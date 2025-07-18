@@ -719,6 +719,59 @@ export interface AiWarpConfig {
       providerExceededError?: number | string;
     };
   };
+  auth?: {
+    /**
+     * If true, any unauthenticated requests will be blocked
+     */
+    required?: boolean;
+    jwt?: {
+      jwks?:
+        | boolean
+        | {
+            max?: number;
+            ttl?: number;
+            issuersWhitelist?: string[];
+            providerDiscovery?: boolean;
+            jwksPath?: string;
+            timeout?: number;
+          };
+      secret:
+        | string
+        | {
+            public: string;
+            private?: string;
+          };
+      decode?: {
+        complete?: boolean;
+        checkTyp?: string;
+      };
+      sign?: {
+        expiresIn: number | string;
+        notBefore: number | string;
+        key?: string;
+      };
+      verify?: {
+        extractToken?: boolean;
+        onlyCookie?: boolean;
+        errorCacheTTL?: number;
+        cache?: boolean;
+        cacheTTL?: number;
+        allowedIss?: string | string[];
+        allowedAud?: string | string[];
+        allowedSub?: string | string[];
+        requiredClaims?: string[];
+        maxAge?: number | string;
+      };
+      cookie?: {
+        cookieName?: string;
+        signed?: boolean;
+      };
+      namespace?: string;
+    };
+    webhook?: {
+      url: string;
+    };
+  };
 }
 export interface Info {
   title: string;

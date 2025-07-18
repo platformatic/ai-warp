@@ -145,6 +145,142 @@ const aiWarpSchema = {
         }
       }
     },
+    auth: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        required: {
+          type: 'boolean',
+          description: 'If true, any unauthenticated requests will be blocked',
+          default: false
+        },
+        jwt: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            jwks: {
+              oneOf: [
+                { type: 'boolean' },
+                {
+                  type: 'object',
+                  additionalProperties: false,
+                  properties: {
+                    max: { type: 'number' },
+                    ttl: { type: 'number' },
+                    issuersWhitelist: {
+                      type: 'array',
+                      items: { type: 'string' }
+                    },
+                    providerDiscovery: { type: 'boolean' },
+                    jwksPath: { type: 'string' },
+                    timeout: { type: 'number' }
+                  }
+                }
+              ]
+            },
+            secret: {
+              oneOf: [
+                { type: 'string' },
+                {
+                  type: 'object',
+                  additionalProperties: false,
+                  properties: {
+                    public: { type: 'string' },
+                    private: { type: 'string' }
+                  },
+                  required: ['public']
+                }
+              ]
+            },
+            decode: {
+              type: 'object',
+              additionalProperties: false,
+              properties: {
+                complete: { type: 'boolean' },
+                checkTyp: { type: 'string' }
+              }
+            },
+            sign: {
+              type: 'object',
+              additionalProperties: false,
+              properties: {
+                expiresIn: {
+                  oneOf: [
+                    { type: 'number' },
+                    { type: 'string' }
+                  ]
+                },
+                notBefore: {
+                  oneOf: [
+                    { type: 'number' },
+                    { type: 'string' }
+                  ]
+                },
+                key: { type: 'string' }
+              },
+              required: ['expiresIn', 'notBefore']
+            },
+            verify: {
+              type: 'object',
+              additionalProperties: false,
+              properties: {
+                extractToken: { type: 'boolean' },
+                onlyCookie: { type: 'boolean' },
+                errorCacheTTL: { type: 'number' },
+                cache: { type: 'boolean' },
+                cacheTTL: { type: 'number' },
+                allowedIss: {
+                  oneOf: [
+                    { type: 'string' },
+                    { type: 'array', items: { type: 'string' } }
+                  ]
+                },
+                allowedAud: {
+                  oneOf: [
+                    { type: 'string' },
+                    { type: 'array', items: { type: 'string' } }
+                  ]
+                },
+                allowedSub: {
+                  oneOf: [
+                    { type: 'string' },
+                    { type: 'array', items: { type: 'string' } }
+                  ]
+                },
+                requiredClaims: {
+                  type: 'array',
+                  items: { type: 'string' }
+                },
+                maxAge: {
+                  oneOf: [
+                    { type: 'number' },
+                    { type: 'string' }
+                  ]
+                }
+              }
+            },
+            cookie: {
+              type: 'object',
+              additionalProperties: false,
+              properties: {
+                cookieName: { type: 'string' },
+                signed: { type: 'boolean' }
+              }
+            },
+            namespace: { type: 'string' }
+          },
+          required: ['secret']
+        },
+        webhook: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            url: { type: 'string' }
+          },
+          required: ['url']
+        }
+      }
+    }
   },
   required: ['ai'],
   additionalProperties: false
