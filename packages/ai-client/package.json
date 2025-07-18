@@ -15,7 +15,6 @@
   },
   "author": "Platformatic Inc. <oss@platformatic.dev> (https://platformatic.dev)",
   "dependencies": {
-    "abstract-logging": "^2.0.1",
     "split2": "^4.2.0"
   },
   "devDependencies": {

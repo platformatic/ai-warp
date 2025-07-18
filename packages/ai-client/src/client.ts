@@ -2,9 +2,7 @@ import type { AskOptions, ClientOptions, StreamMessage, AskResponse, Logger, Ask
 import { pipeline } from 'node:stream/promises'
 import { Transform, Readable } from 'node:stream'
 import split2 from 'split2'
-
-// @ts-ignore
-import abstractLogging from 'abstract-logging'
+import { consoleLogger } from './console-logger.ts'
 
 const DEFAULT_PROMPT_PATH = '/api/v1/prompt'
 const DEFAULT_STREAM_PATH = '/api/v1/stream'
@@ -25,7 +23,7 @@ export class Client {
       ...options.headers
     }
     this.timeout = options.timeout ?? DEFAULT_TIMEOUT
-    this.logger = options.logger ?? abstractLogging
+    this.logger = options.logger ?? consoleLogger
     this.promptPath = options.promptPath ?? DEFAULT_PROMPT_PATH
     this.streamPath = options.streamPath ?? DEFAULT_STREAM_PATH
   }
@@ -115,7 +113,7 @@ export class Client {
     const nodeReadable = Readable.fromWeb(body)
 
     pipeline(nodeReadable, split2('\n\n'), parseAIMessages).catch((error) => {
-      logger.error({ error: error.message, stack: error.stack }, 'Error in AI message parsing pipeline')
+      logger.error('Error in AI message parsing pipeline', { error: error.message, stack: error.stack })
       parseAIMessages.emit('error', error)
     })
     return parseAIMessages
