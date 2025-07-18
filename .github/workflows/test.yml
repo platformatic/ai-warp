@@ -1,0 +1,65 @@
+name: Test
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        node-version: ['22.x', '24.x']
+    
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      
+      valkey:
+        image: valkey/valkey:7.2-alpine
+        ports:
+          - 6380:6379
+        options: >-
+          --health-cmd "valkey-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ matrix.node-version }}
+    
+    - name: Setup pnpm
+      uses: pnpm/action-setup@v4
+      with:
+        version: latest
+    
+    - name: Install dependencies
+      run: pnpm install
+    
+    - name: Run linting
+      run: pnpm lint
+    
+    - name: Run build
+      run: pnpm build
+    
+    - name: Run type checking
+      run: pnpm typecheck
+    
+    - name: Run tests
+      run: pnpm test
+      env:
+        REDIS_URL: redis://localhost:6379
+        VALKEY_URL: redis://localhost:6380
