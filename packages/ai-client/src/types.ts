@@ -1,5 +1,34 @@
 import type { Readable } from 'node:stream'
-import type { AiModel, AiResponseResult, AiChatHistory, AiSessionId } from '@platformatic/ai-provider'
+
+// from @platformatic/ai-provider
+export type TimeWindow = number | string;
+export type AiSessionId = string;
+export type AiProvider = 'openai' | 'deepseek' | 'gemini';
+export type AiChatHistory = {
+  prompt: string;
+  response: string;
+}[];
+export type AiRestore = {
+  rateLimit?: TimeWindow
+  retry?: TimeWindow
+  timeout?: TimeWindow
+  providerCommunicationError?: TimeWindow
+  providerExceededError?: TimeWindow
+}
+export type AiModel = {
+    provider: AiProvider;
+    model: string;
+    limits?: {
+        maxTokens?: number;
+        rate?: {
+            max: number;
+            timeWindow: TimeWindow;
+        };
+    };
+    restore?: AiRestore;
+};
+export type AiResponseResult = 'COMPLETE' | 'INCOMPLETE_MAX_TOKENS' | 'INCOMPLETE_UNKNOWN';
+//
 
 export interface Logger {
   debug(message: string, data?: any): void
@@ -43,7 +72,12 @@ export interface StreamMessage {
   response?: AskResponse
 }
 
-export interface AIClient {
-  ask(options: AskOptions & { stream: true }): Promise<Readable>
-  ask(options: AskOptions & { stream?: false }): Promise<AskResponse>
+export interface AskResponseStream {
+  stream: Readable
+  headers: Headers
+}
+
+export interface AskResponseContent {
+  content: JSON
+  headers: Headers
 }

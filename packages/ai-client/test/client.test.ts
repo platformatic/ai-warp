@@ -60,7 +60,7 @@ test('client.ask sends correct request and handles streaming response', async (_
     logger: silentLogger
   })
 
-  const stream = await client.ask({
+  const response = await client.ask({
     prompt: 'Hello AI',
     sessionId: 'user-123',
     temperature: 0.7,
@@ -70,7 +70,7 @@ test('client.ask sends correct request and handles streaming response', async (_
   })
 
   const messages = []
-  for await (const message of stream) {
+  for await (const message of response.stream) {
     messages.push(message)
   }
 

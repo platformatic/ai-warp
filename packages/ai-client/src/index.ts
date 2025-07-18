@@ -1,7 +1,7 @@
 import { Client } from './client.ts'
-import type { ClientOptions, AIClient } from './types.ts'
+import type { ClientOptions } from './types.ts'
 
-export function buildClient (options: ClientOptions): AIClient {
+export function buildClient (options: ClientOptions): Client {
   return new Client(options)
 }
 
@@ -10,7 +10,8 @@ export type {
   AskOptions,
   AskResponse,
   StreamMessage,
-  AIClient,
+  AskResponseStream,
+  AskResponseContent,
   Logger,
   QueryModel
 } from './types.ts'

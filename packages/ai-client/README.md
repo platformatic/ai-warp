@@ -37,7 +37,7 @@ const client = buildClient({
     Authorization: "Bearer your-api-key",
   },
   timeout: 30000, // optional timeout in ms (default: 60000)
-  logger: customLogger, // optional Logger instance
+  logger: pino({ level: 'warn' }), // optional Logger instance
 });
 
 try {
@@ -258,7 +258,11 @@ Makes a request to the AI service, returning either a stream or a complete respo
 - When `stream: true` (default): `Promise<Readable>` - A Node.js Readable stream of messages
 - When `stream: false`: `Promise<AskResponse>` - A complete response object
 
+TODO headers
+
 #### Response Object (Non-streaming)
+
+TODO
 
 ```typescript
 {
