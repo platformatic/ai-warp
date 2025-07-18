@@ -24,7 +24,6 @@ export async function createApp ({ client, logger }: { client: any, logger?: Log
   }
 
   await app.register(ai, options as AiPluginOptions)
-  
 
   app.route({
     url: '/prompt',

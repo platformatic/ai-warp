@@ -1,13 +1,13 @@
 import type { Readable } from 'node:stream'
 
 // from @platformatic/ai-provider
-export type TimeWindow = number | string;
-export type AiSessionId = string;
-export type AiProvider = 'openai' | 'deepseek' | 'gemini';
+export type TimeWindow = number | string
+export type AiSessionId = string
+export type AiProvider = 'openai' | 'deepseek' | 'gemini'
 export type AiChatHistory = {
   prompt: string;
   response: string;
-}[];
+}[]
 export type AiRestore = {
   rateLimit?: TimeWindow
   retry?: TimeWindow
@@ -16,18 +16,18 @@ export type AiRestore = {
   providerExceededError?: TimeWindow
 }
 export type AiModel = {
-    provider: AiProvider;
-    model: string;
-    limits?: {
-        maxTokens?: number;
-        rate?: {
-            max: number;
-            timeWindow: TimeWindow;
-        };
+  provider: AiProvider;
+  model: string;
+  limits?: {
+    maxTokens?: number;
+    rate?: {
+      max: number;
+      timeWindow: TimeWindow;
     };
-    restore?: AiRestore;
-};
-export type AiResponseResult = 'COMPLETE' | 'INCOMPLETE_MAX_TOKENS' | 'INCOMPLETE_UNKNOWN';
+  };
+  restore?: AiRestore;
+}
+export type AiResponseResult = 'COMPLETE' | 'INCOMPLETE_MAX_TOKENS' | 'INCOMPLETE_UNKNOWN'
 //
 
 export interface Logger {
