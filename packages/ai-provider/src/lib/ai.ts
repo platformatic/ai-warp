@@ -589,13 +589,14 @@ export class Ai {
               options.stream
             )
             break
-          } catch (error: any) { // TODO fix type
-            err = error
+          } catch (error: unknown) { // Fixed type - catch variables must be any or unknown
+            const errorWithCode = error as FastifyError
+            err = errorWithCode
 
             // do not retry on timeout errors and empty response
-            if (error.code && (error.code === 'PROVIDER_REQUEST_TIMEOUT_ERROR' ||
-              error.code === 'PROVIDER_REQUEST_STREAM_TIMEOUT_ERROR' ||
-              error.code === 'PROVIDER_RESPONSE_MAX_TOKENS_ERROR')) {
+            if (errorWithCode.code && (errorWithCode.code === 'PROVIDER_REQUEST_TIMEOUT_ERROR' ||
+              errorWithCode.code === 'PROVIDER_REQUEST_STREAM_TIMEOUT_ERROR' ||
+              errorWithCode.code === 'PROVIDER_RESPONSE_MAX_TOKENS_ERROR')) {
               break
             }
 
@@ -717,22 +718,23 @@ export class Ai {
         await this.history.push(sessionId, createEventId(), { prompt: req.prompt, response: contentResponse.text }, this.options.limits.historyExpiration)
 
         return contentResponse
-      } catch (error: any) { // TODO fix type
+      } catch (error: unknown) { // Fixed type - catch variables must be any or unknown
+        const errorWithCode = error as FastifyError
         // skip:
         // - storage errors
         // - PROVIDER_RESPONSE_MAX_TOKENS_ERROR (options error)
         // update state if errors are one of:
-        if (error.code !== 'PROVIDER_RATE_LIMIT_ERROR' &&
-          error.code !== 'PROVIDER_REQUEST_TIMEOUT_ERROR' &&
-          error.code !== 'PROVIDER_REQUEST_STREAM_TIMEOUT_ERROR' &&
-          error.code !== 'PROVIDER_RESPONSE_ERROR' &&
-          error.code !== 'PROVIDER_RESPONSE_NO_CONTENT' &&
-          error.code !== 'PROVIDER_EXCEEDED_QUOTA_ERROR'
+        if (errorWithCode.code !== 'PROVIDER_RATE_LIMIT_ERROR' &&
+          errorWithCode.code !== 'PROVIDER_REQUEST_TIMEOUT_ERROR' &&
+          errorWithCode.code !== 'PROVIDER_REQUEST_STREAM_TIMEOUT_ERROR' &&
+          errorWithCode.code !== 'PROVIDER_RESPONSE_ERROR' &&
+          errorWithCode.code !== 'PROVIDER_RESPONSE_NO_CONTENT' &&
+          errorWithCode.code !== 'PROVIDER_EXCEEDED_QUOTA_ERROR'
         ) {
           throw error
         }
 
-        err = error
+        err = errorWithCode
       }
 
       if (err) {

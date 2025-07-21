@@ -13,7 +13,28 @@ import { createOpenAiClient } from './lib/openai-undici-client.ts'
 // @see https://platform.openai.com/docs/api-reference/chat/create
 
 export type OpenAIOptions = ProviderOptions
-export type OpenAIResponse = any // TODO fix types
+export type OpenAIResponse = {
+  id: string
+  object: string
+  created: number
+  model: string
+  choices: Array<{
+    index: number
+    message?: {
+      role: string
+      content: string
+    }
+    delta?: {
+      content?: string
+    }
+    finish_reason: string | null
+  }>
+  usage?: {
+    prompt_tokens: number
+    completion_tokens: number
+    total_tokens: number
+  }
+}
 
 export type OpenAIMessage = {
   role: 'system' | 'user' | 'assistant'
