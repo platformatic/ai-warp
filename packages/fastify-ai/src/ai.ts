@@ -1,6 +1,7 @@
 import type { FastifyReply, FastifyRequest } from 'fastify'
 import fp from 'fastify-plugin'
 import type { Logger } from 'pino'
+import type { Readable } from 'node:stream'
 import { Ai } from '@platformatic/ai-provider'
 import type { AiOptions, AiModel, AiResponseResult, AiChatHistory, AiSessionId } from '@platformatic/ai-provider'
 
@@ -27,7 +28,7 @@ export type ContentResponse = {
   sessionId: AiSessionId
 }
 
-export type FastifyAiResponse = ContentResponse | ReadableStream
+export type FastifyAiResponse = ContentResponse | Readable
 
 declare module 'fastify' {
   interface FastifyInstance {
