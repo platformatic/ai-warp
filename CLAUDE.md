@@ -93,10 +93,11 @@ Real-time responses via Server-Sent Events (SSE) with proper event parsing and e
 ## Key Dependencies
 
 - `undici` - HTTP client with connection pooling
-- `openai` - OpenAI SDK
 - `iovalkey` - Valkey/Redis client for distributed sessions
 - `fastify` - Web framework
 - `pino` - Structured logging
+
+No SDK from AI Models Providers
 
 ## Examples
 

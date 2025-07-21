@@ -7,7 +7,6 @@ A TypeScript client for streaming AI responses from Platformatic AI services. **
 - 🌐 **Cross-platform** - Works in browsers and Node.js environments
 - 🎯 **Simple API** - `buildClient` and `ask` are the only functions to handle all AI interactions
 - 🚀 **Streaming support** - Real-time streaming with async iteration
-- 📡 **Server-Sent Events** - Browser-compatible SSE streaming
 - 🔄 **Type-safe** - Full TypeScript support with type compatibility validation
 - 🌊 **Modern streams** - Uses Web Streams API for browser compatibility
 
@@ -57,8 +56,7 @@ const client = buildClient({
   headers: {
     Authorization: "Bearer your-api-key",
   },
-  timeout: 30000,
-  logger: console, // optional logger
+  timeout: 30000
 });
 
 // Example usage same as browser
