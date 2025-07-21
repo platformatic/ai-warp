@@ -1,6 +1,7 @@
 import type { Logger } from 'pino'
 import type { AiProvider, AiResponseResult } from './ai.ts'
 import type { Pool } from 'undici'
+import type { Readable } from 'node:stream'
 import { OptionError } from './errors.ts'
 import { OpenAIProvider } from '../providers/openai.ts'
 import { DeepSeekProvider } from '../providers/deepseek.ts'
@@ -65,7 +66,7 @@ export interface ProviderClient {
   stream: (api: any, request: any, context: ProviderClientContext) => Promise<any>
 }
 
-export type ProviderResponse = ProviderContentResponse | ReadableStream
+export type ProviderResponse = ProviderContentResponse | Readable
 
 export type StreamChunkCallback = (response: string) => Promise<string>
 

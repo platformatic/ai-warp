@@ -1,5 +1,6 @@
 import { mock, test } from 'node:test'
 import assert from 'node:assert'
+import { Readable } from 'node:stream'
 import { setTimeout as wait } from 'node:timers/promises'
 import { Ai, type ContentResponse } from '../src/lib/ai.ts'
 import pino from 'pino'
@@ -232,19 +233,28 @@ test('should restore model after stream timeout error when enough time has passe
     requestCount++
     if (requestCount === 1) {
       await wait(200) // Simulate timeout
-      return new ReadableStream({
-        start (controller) {
-          controller.enqueue(new TextEncoder().encode('{"choices": [{"delta": {"content": "chunk1"}}]}'))
-          controller.close()
-        }
+      const readable = new Readable({
+        read () {}
       })
+
+      setImmediate(() => {
+        readable.push(Buffer.from('{"choices": [{"delta": {"content": "chunk1"}}]}'))
+        readable.push(null) // End stream
+      })
+
+      return readable
     }
-    return new ReadableStream({
-      start (controller) {
-        controller.enqueue(new TextEncoder().encode('{"choices": [{"delta": {"content": "restored"}}]}'))
-        controller.close()
-      }
+
+    const readable = new Readable({
+      read () {}
     })
+
+    setImmediate(() => {
+      readable.push(Buffer.from('{"choices": [{"delta": {"content": "restored"}}]}'))
+      readable.push(null) // End stream
+    })
+
+    return readable
   }
 
   const ai = new Ai({
@@ -298,7 +308,7 @@ test('should restore model after stream timeout error when enough time has passe
     }
   })
 
-  assert.ok(response instanceof ReadableStream)
+  assert.ok(typeof response.pipe === 'function')
   assert.equal(requestCount, 2)
 })
 

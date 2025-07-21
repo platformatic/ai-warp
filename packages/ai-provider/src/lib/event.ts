@@ -39,11 +39,11 @@ export type AiStreamEvent = {
  * Encode an event to the Event Stream format
  * @see https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events#event_stream_format
  */
-export function encodeEvent ({ event, data }: AiStreamEvent): Uint8Array {
+export function encodeEvent ({ event, data }: AiStreamEvent): Buffer {
   const jsonString = stringifyEventData(data)
   const eventString = `event: ${event}\ndata: ${jsonString}\n\n`
 
-  return new TextEncoder().encode(eventString)
+  return Buffer.from(eventString, 'utf8')
 }
 
 /**
