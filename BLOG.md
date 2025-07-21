@@ -238,7 +238,6 @@ for await (const chunk of response2.stream) {
 ### ⚡ **Lightning Fast Performance**
 - **Optimized HTTP Client**: Efficient connection reuse with [`undici`](https://github.com/nodejs/undici)
 - **Connection Pooling**: Efficient resource management
-- **Smart Caching**: Reduce redundant API calls
 
 ### 🛡️ **Rock-Solid Reliability**
 - **Graceful Degradation**: Automatic failover between providers
