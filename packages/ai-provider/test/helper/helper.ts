@@ -1,3 +1,4 @@
+import { Readable } from 'node:stream'
 import { Ai, createModelState, type AiProvider, type ModelStateErrorReason, type ModelStatus, type ProviderState } from '../../src/lib/ai.ts'
 
 export function createDummyClient () {
@@ -13,40 +14,46 @@ export function createDummyClient () {
 export function mockOpenAiStream (chunks: any[]) {
   let chunkIndex = 0
 
-  // Create an async iterable stream
-  const asyncIterable = {
-    async * [Symbol.asyncIterator] () {
+  const readable = new Readable({
+    read () {
+      // No-op: data is pushed from async iteration
+    }
+  })
+
+  // Simulate async streaming by pushing chunks
+  const pushChunks = async () => {
+    try {
       while (chunkIndex < chunks.length) {
         const chunk = chunks[chunkIndex++]
         // Send in OpenAI stream format - raw data lines
         const data = `data: ${JSON.stringify(chunk)}\n\n`
-        yield Buffer.from(data)
+        readable.push(Buffer.from(data))
 
         // Small delay to simulate streaming
         await new Promise(resolve => setTimeout(resolve, 10))
       }
       // Send [DONE] to end the stream
-      yield Buffer.from('data: [DONE]\n\n')
+      readable.push(Buffer.from('data: [DONE]\n\n'))
+      readable.push(null) // End the stream
+    } catch (error) {
+      readable.destroy(error)
     }
   }
 
-  return asyncIterable
+  // Start pushing chunks asynchronously
+  setImmediate(() => pushChunks())
+
+  return readable
 }
 
-export async function consumeStream (response: ReadableStream) {
+export async function consumeStream (response: Readable) {
   const content: string[] = []
   let end: string = ''
 
-  // The response is a ReadableStream that emits Server-sent events
-  const reader = (response as ReadableStream).getReader()
-  const decoder = new TextDecoder()
-
-  try {
-    while (true) {
-      const { done, value } = await reader.read()
-      if (done) break
-
-      const eventData = decoder.decode(value)
+  return new Promise((resolve, reject) => {
+    // The response is a Readable stream that emits Server-sent events
+    response.on('data', (chunk: Buffer) => {
+      const eventData = chunk.toString('utf8')
       // Parse Server-sent events format
       const lines = eventData.split('\n')
 
@@ -76,12 +83,16 @@ export async function consumeStream (response: ReadableStream) {
           currentData = null
         }
       }
-    }
-  } finally {
-    reader.releaseLock()
-  }
+    })
 
-  return { content, end }
+    response.on('end', () => {
+      resolve({ content, end })
+    })
+
+    response.on('error', (error) => {
+      reject(error)
+    })
+  })
 }
 
 export async function setModelState ({

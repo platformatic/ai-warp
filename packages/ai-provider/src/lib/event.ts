@@ -50,7 +50,7 @@ export function encodeEvent ({ id, event, data }: AiStreamEvent): Uint8Array {
   const jsonString = stringifyEventData(data)
   const eventString = `id: ${id}\nevent: ${event}\ndata: ${jsonString}\n\n`
 
-  return new TextEncoder().encode(eventString)
+  return Buffer.from(eventString, 'utf8')
 }
 
 /**

@@ -1,5 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { setTimeout as wait } from 'node:timers/promises'
+import { Readable, Transform } from 'node:stream'
+import cloneable from 'cloneable-readable'
 import type { Logger } from 'pino'
 import type { FastifyError } from '@fastify/error'
 
@@ -105,7 +107,7 @@ export type AiContentResponse = {
   sessionId: AiSessionId
 }
 
-export type AiStreamResponse = ReadableStream & {
+export type AiStreamResponse = Readable & {
   sessionId: AiSessionId
 }
 
@@ -613,49 +615,23 @@ export class Ai {
         }
 
         // @ts-ignore
-        if (typeof providerResponse.pipe === 'function' || providerResponse instanceof ReadableStream) {
-          // Handle streaming response: tee the stream to process history/pub/sub in background
-          // while returning a clean stream to the user
+        if (typeof providerResponse.pipe === 'function') {
+          // Clone the stream using cloneable-readable for history processing
+          // @ts-ignore
+          const cloneableStream = cloneable(providerResponse as Readable)
+          const responseStream = cloneableStream // Return the original
+          const historyStream = cloneableStream.clone() // Create one clone for history
+
+          // Handle streaming response: process history/pub/sub in background
           const streamChannel = `ai-stream:${sessionId}`
           let accumulatedResponse = ''
           
-          // Capture references for use in the stream
-          const history = this.history
-          const storage = this.storage
-          const historyExpiration = this.options.limits.historyExpiration
-          
-          // Tee the stream to create two independent streams
-          const [userStream, backgroundStream] = (providerResponse as AiStreamResponse).tee()
-          
-          // Process the background stream for history and pub/sub
+          // Process the cloned stream in background to accumulate response for history and pub/sub
           const processStreamInBackground = async () => {
-            const reader = backgroundStream.getReader()
-            
             try {
-              while (true) {
-                const { done, value } = await reader.read()
-                
-                if (done) {
-                  // Store only the final accumulated response to history (for backward compatibility)
-                  const finalEventId = createEventId()
-                  await history.push(sessionId, finalEventId, { 
-                    prompt: request.prompt, 
-                    response: accumulatedResponse
-                  }, historyExpiration)
-                  
-                  // Publish final event
-                  await storage.publish(streamChannel, {
-                    eventId: finalEventId,
-                    type: 'complete',
-                    sessionId,
-                    data: { response: accumulatedResponse }
-                  })
-                  
-                  break
-                }
-                
-                // Decode the chunk from Uint8Array to string
-                const chunkString = new TextDecoder().decode(value)
+              for await (const chunk of historyStream) {
+                // Decode the chunk from Buffer to string
+                const chunkString = chunk.toString('utf8')
                 
                 // Parse the event stream format to extract events
                 const events = decodeEventStream(chunkString)
@@ -668,8 +644,8 @@ export class Ai {
                     const content = (event.data as any)?.response || (event.data as any)?.content || ''
                     accumulatedResponse += content
                     
-                    // Only publish streaming event via Redis pub/sub (don't store chunks in history)
-                    await storage.publish(streamChannel, {
+                    // Publish streaming event via pub/sub
+                    await this.storage.publish(streamChannel, {
                       eventId,
                       type: 'content',
                       sessionId,
@@ -677,50 +653,63 @@ export class Ai {
                     })
                   } else if (event.event === 'error') {
                     // Store error to history
-                    await history.push(sessionId, eventId, { 
+                    await this.history.push(sessionId, eventId, { 
                       prompt: request.prompt, 
                       error: event.data
-                    }, historyExpiration)
+                    }, this.options.limits.historyExpiration)
                     
                     // Publish error event
-                    await storage.publish(streamChannel, {
+                    await this.storage.publish(streamChannel, {
                       eventId,
                       type: 'error',
                       sessionId,
                       data: event.data
                     })
-                    break
+                    return
                   }
                 }
               }
+              
+              // Store final accumulated response to history
+              const finalEventId = createEventId()
+              await this.history.push(sessionId, finalEventId, { 
+                prompt: request.prompt, 
+                response: accumulatedResponse
+              }, this.options.limits.historyExpiration)
+              
+              // Publish final event
+              await this.storage.publish(streamChannel, {
+                eventId: finalEventId,
+                type: 'complete',
+                sessionId,
+                data: { response: accumulatedResponse }
+              })
             } catch (error: any) {
               // Store error to history
               const errorEventId = createEventId()
-              await history.push(sessionId, errorEventId, { 
+              await this.history.push(sessionId, errorEventId, { 
                 prompt: request.prompt, 
                 error: error.message || String(error)
-              }, historyExpiration)
+              }, this.options.limits.historyExpiration)
               
               // Publish error event
-              await storage.publish(streamChannel, {
+              await this.storage.publish(streamChannel, {
                 eventId: errorEventId,
                 type: 'error',
                 sessionId,
                 data: { message: error.message || String(error) }
               })
-            } finally {
-              reader.releaseLock()
             }
           }
-          
+
           // Process stream in background (don't await to avoid blocking the response)
           processStreamInBackground().catch(error => {
             this.logger.error({ error }, 'Failed to process stream for history/pubsub')
           })
-          
-          // Attach sessionId to the user stream
-          ;(userStream as AiStreamResponse).sessionId = sessionId
-          return userStream as AiStreamResponse
+
+          // Attach sessionId to the stream for the user
+          (responseStream as any).sessionId = sessionId
+          return responseStream as unknown as AiStreamResponse
         }
 
         const contentResponse: AiContentResponse = response as AiContentResponse
@@ -862,7 +851,7 @@ export class Ai {
         })
       ])
 
-      if (response instanceof ReadableStream) {
+      if (response instanceof Readable) {
         return this.wrapStreamWithTimeout(response, timeout) as AiStreamResponse
       }
 
@@ -878,56 +867,48 @@ export class Ai {
     }
   }
 
-  private wrapStreamWithTimeout (stream: ReadableStream, timeout: number): ReadableStream {
-    const reader = stream.getReader()
+  private wrapStreamWithTimeout (stream: Readable, timeout: number): Readable {
     let timeoutId: NodeJS.Timeout | undefined
 
-    return new ReadableStream({
-      async start (controller) {
-        const resetTimeout = async () => {
-          if (timeoutId) {
-            clearTimeout(timeoutId)
-          }
+    const resetTimeout = () => {
+      if (timeoutId) {
+        clearTimeout(timeoutId)
+      }
 
-          timeoutId = setTimeout(() => {
-            controller.error(new ProviderRequestStreamTimeoutError(timeout))
-            reader.releaseLock()
-          }, timeout).unref()
-        }
+      timeoutId = setTimeout(() => {
+        timeoutTransform.destroy(new ProviderRequestStreamTimeoutError(timeout))
+      }, timeout).unref()
+    }
 
-        await resetTimeout()
-
-        try {
-          while (true) {
-            const { done, value } = await reader.read()
-
-            if (done) {
-              if (timeoutId) {
-                clearTimeout(timeoutId)
-              }
-              controller.close()
-              break
-            }
-
-            // Reset timeout on each chunk
-            await resetTimeout()
-            controller.enqueue(value)
-          }
-        } catch (error) {
-          if (timeoutId) {
-            clearTimeout(timeoutId)
-          }
-          controller.error(error)
-        }
+    const timeoutTransform = new Transform({
+      transform (chunk: Buffer, _encoding: string, callback: (error?: Error | null, data?: any) => void) {
+        resetTimeout()
+        callback(null, chunk)
       },
 
-      cancel (reason) {
+      flush (callback: (error?: Error | null, data?: any) => void) {
         if (timeoutId) {
           clearTimeout(timeoutId)
         }
-        return reader.cancel(reason)
+        callback()
       }
     })
+
+    // Set up initial timeout
+    resetTimeout()
+
+    // Handle source stream errors
+    stream.on('error', (error) => {
+      if (timeoutId) {
+        clearTimeout(timeoutId)
+      }
+      timeoutTransform.destroy(error)
+    })
+
+    // Pipe the source stream through the timeout transform
+    stream.pipe(timeoutTransform)
+
+    return timeoutTransform
   }
 
   private createResumeStream (events: any[], sessionId: AiSessionId): ReadableStream {
