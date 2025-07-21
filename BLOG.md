@@ -121,17 +121,10 @@ graph TB
     B2 --> DeepSeek
     B2 --> Others
     
-    subgraph "Valkey Cluster"
-        V1[(Valkey Node 1)]
-        V2[(Valkey Node 2)]
-        V3[(Valkey Node 3)]
-    end
+    V1[(Valkey Database)]
     
     D1 --> V1
     D2 --> V1
-    V1 <--> V2
-    V2 <--> V3
-    V3 <--> V1
     
     subgraph "Session Data"
         S1[Session ID: sess_abc123]
@@ -140,7 +133,7 @@ graph TB
         S4["{prompt: 'How are you?', response: 'I'm doing well'}"]
     end
     
-    V1 --> S1
+    V1 -.-> S1
     S1 --> S2
     S2 --> S3
     S2 --> S4
