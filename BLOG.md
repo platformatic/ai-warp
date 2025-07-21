@@ -141,8 +141,6 @@ graph TB
     style A1 fill:#e1f5fe
     style A2 fill:#e1f5fe
     style V1 fill:#f3e5f5
-    style V2 fill:#f3e5f5
-    style V3 fill:#f3e5f5
     style S1 fill:#e8f5e8
     style S2 fill:#e8f5e8
 ```
