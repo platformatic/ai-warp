@@ -1,12 +1,15 @@
+import { EventEmitter } from 'node:events'
 import type { AiStorageOptions, Storage } from './index.ts'
 
 export class MemoryStorage implements Storage {
   values: KeyValueStorage
-  list: ListStorage
+  hash: HashStorage
+  pubsub: PubSubStorage
 
   constructor (_options: AiStorageOptions) {
     this.values = new KeyValueStorage()
-    this.list = new ListStorage()
+    this.hash = new HashStorage()
+    this.pubsub = new PubSubStorage()
   }
 
   async close () {
@@ -21,12 +24,28 @@ export class MemoryStorage implements Storage {
     this.values.set(key, value)
   }
 
-  async listPush (key: string, value: any, expiration: number) {
-    this.list.push(key, value, expiration)
+  async hashSet (key: string, field: string, value: any, expiration: number) {
+    this.hash.set(key, field, value, expiration)
   }
 
-  async listRange (key: string) {
-    return this.list.range(key)
+  async hashGetAll (key: string) {
+    return this.hash.getAll(key)
+  }
+
+  async hashGet (key: string, field: string) {
+    return this.hash.get(key, field)
+  }
+
+  async publish (channel: string, message: any) {
+    this.pubsub.publish(channel, message)
+  }
+
+  async subscribe (channel: string, callback: (message: any) => void) {
+    this.pubsub.subscribe(channel, callback)
+  }
+
+  async unsubscribe (channel: string) {
+    this.pubsub.unsubscribe(channel)
   }
 }
 
@@ -50,41 +69,103 @@ class KeyValueStorage {
   }
 }
 
-type ListValue = {
+type HashValue = {
   value: any
   expire: number
 }
 
-class ListStorage {
-  storage: Map<string, ListValue[]>
+type HashData = Map<string, HashValue>
+
+class HashStorage {
+  storage: Map<string, HashData>
 
   constructor () {
     this.storage = new Map()
   }
 
-  async push (key: string, value: any, expiration: number) {
-    const list = this.storage.get(key) || []
-    list.push({ value, expire: Date.now() + expiration })
-
-    // Clean up expired items when pushing new ones
-    const now = Date.now()
-    const filteredList = list.filter(item => item.expire > now)
-
-    this.storage.set(key, filteredList)
-  }
-
-  async range (key: string) {
-    const list = this.storage.get(key)
-    if (!list) { return [] }
-
-    const now = Date.now()
-    const validItems = list.filter(item => item.expire > now)
-
-    // Update storage with filtered items to remove expired ones
-    if (validItems.length !== list.length) {
-      this.storage.set(key, validItems)
+  async set (key: string, field: string, value: any, expiration: number) {
+    let hash = this.storage.get(key)
+    if (!hash) {
+      hash = new Map()
+      this.storage.set(key, hash)
     }
 
-    return validItems.map(item => item.value)
+    hash.set(field, { value, expire: Date.now() + expiration })
+
+    // Clean up expired fields when setting new ones
+    this.cleanExpired(key)
+  }
+
+  async get (key: string, field: string) {
+    const hash = this.storage.get(key)
+    if (!hash) { return undefined }
+
+    const hashValue = hash.get(field)
+    if (!hashValue) { return undefined }
+
+    const now = Date.now()
+    if (hashValue.expire <= now) {
+      hash.delete(field)
+      return undefined
+    }
+
+    return hashValue.value
+  }
+
+  async getAll (key: string): Promise<Record<string, any>> {
+    const hash = this.storage.get(key)
+    if (!hash) { return {} }
+
+    this.cleanExpired(key)
+
+    const result: Record<string, any> = {}
+    for (const [field, hashValue] of hash.entries()) {
+      result[field] = hashValue.value
+    }
+
+    return result
+  }
+
+  private cleanExpired (key: string) {
+    const hash = this.storage.get(key)
+    if (!hash) { return }
+
+    const now = Date.now()
+    for (const [field, hashValue] of hash.entries()) {
+      if (hashValue.expire <= now) {
+        hash.delete(field)
+      }
+    }
+
+    // Remove the key if no fields remain
+    if (hash.size === 0) {
+      this.storage.delete(key)
+    }
+  }
+}
+
+class PubSubStorage extends EventEmitter {
+  constructor () {
+    super()
+  }
+
+  publish (channel: string, message: any) {
+    // Use setImmediate to make it async and avoid blocking
+    setImmediate(() => {
+      this.emit(channel, message)
+    })
+  }
+
+  subscribe (channel: string, callback: (message: any) => void) {
+    this.on(channel, callback)
+  }
+
+  unsubscribe (channel: string, callback?: (message: any) => void) {
+    if (callback) {
+      this.off(channel, callback)
+    } else {
+      // Remove all listeners for the channel
+      this.removeAllListeners(channel)
+    }
   }
 }

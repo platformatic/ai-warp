@@ -20,6 +20,7 @@ export type FastifyAiRequest = {
   stream?: boolean
   history?: AiChatHistory
   sessionId?: AiSessionId
+  resume?: boolean
 }
 
 export type ContentResponse = {
@@ -58,6 +59,7 @@ export default fp(async (fastify, options: AiPluginOptions) => {
       const response = await ai.request({
         models: request.models,
         prompt: request.prompt,
+        resume: request.resume,
         options: {
           context: request.context,
           temperature: request.temperature,
@@ -65,7 +67,7 @@ export default fp(async (fastify, options: AiPluginOptions) => {
           history: request.history,
           sessionId: request.sessionId
         }
-      })
+      } as any)
       reply.header(options.headerSessionIdName!, response.sessionId)
 
       if (request.stream) {
