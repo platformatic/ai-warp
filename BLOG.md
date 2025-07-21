@@ -210,7 +210,7 @@ for await (const chunk of client.ask({
 ## Built for Production from Day One
 
 ### ⚡ **Lightning Fast Performance**
-- **HTTP/1.1 Pipelining**: Optimized connection reuse with `undici`
+- **Optimized HTTP Client**: Efficient connection reuse with [`undici`](https://github.com/nodejs/undici)
 - **Connection Pooling**: Efficient resource management
 - **Smart Caching**: Reduce redundant API calls
 
