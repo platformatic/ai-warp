@@ -1,11 +1,9 @@
-import undici from 'undici'
 import { setTimeout as wait } from 'node:timers/promises'
-import { decodeEventStream } from '@platformatic/ai-provider'
-import type { AiChatHistory } from '@platformatic/ai-provider'
-import type { AiContentResponse } from '@platformatic/ai-provider'
+import type { AiChatHistory, AiContentResponse } from '@platformatic/ai-provider'
+import { AskResponseContent, buildClient } from '@platformatic/ai-client'
 import { app } from './service.ts'
 
-const url = 'http://localhost:3000/chat'
+const url = 'http://localhost:3000'
 
 type Prompt = {
   stream?: boolean
@@ -110,6 +108,14 @@ const headers = {
 
 async function main() {
   const server = await app({ start: true, logger: { level: 'debug', transport: { target: 'pino-pretty' } } })
+  const client = buildClient({
+    url,
+    promptPath: '/chat',
+    streamPath: '/chat',
+    headers: {
+      'Content-Type': 'application/json'
+    }
+  })
 
   for (const set of prompts) {
     console.log('\n**********')
@@ -120,16 +126,16 @@ async function main() {
       if (sessionId) {
         console.log(' *** sessionId', sessionId)
       }
-      
+
       console.log('\n>>>', prompt)
 
-      const response = await undici.request(url, {
-        method: 'POST',
-        headers: {
-          ...headers,
-          // 'Authorization': 'Bearer ...'
-        },
-        body: JSON.stringify({ prompt, history, stream: set.stream, sessionId, models: set.models })
+      const stream = set.stream ? true : false
+      const response = await client.ask({
+        prompt, 
+        history,
+        stream, 
+        sessionId, 
+        models: set.models
       })
 
       if (response.headers['x-session-id']) {
@@ -140,22 +146,19 @@ async function main() {
 
       if (set.stream) {
         let content = ''
-        for await (const chunk of response.body) {
-          const r = new TextDecoder().decode(chunk)
-
-          // Process complete events from buffer
-          const events = decodeEventStream(r)
-          for (const event of events) {
-            if (event.event === 'content') {
-              console.log('<<< * ', event.data.response)
-              if(event.data.response) {
-                content += event.data.response
-              }
-            } else if (event.event === 'end') {
-              console.log(`<<< END: "${event.data.response}"`)
-            } else if (event.event === 'error') {
-              console.error('Error:', event.data.message)
+        for await (const message of response.stream) {
+          if (message.type === 'content') {
+            console.log('<<< * ', message.content)
+            content += message.content
+          } else if (message.type === 'done') {
+            console.log('\n')
+            // Verify sessionId from response (if available)
+            if (message.response && message.response.sessionId) {
+              console.log('📝 Session ID from response:', message.response.sessionId)
             }
+          } else if (message.type === 'error') {
+            console.error('\n❌ Stream error:', message.error?.message)
+            return
           }
         }
 
@@ -165,11 +168,10 @@ async function main() {
           history.push({ prompt, response: content })
         }
       } else {
-        const responseData = await response.body.json() as AiContentResponse
-        console.log('<<<', responseData.text)
+        console.log('<<<', (response as AskResponseContent).content.text)
 
         if (history) {
-          history.push({ prompt, response: responseData.text })
+          history.push({ prompt, response: response.content.text })
         }
       }
     }
