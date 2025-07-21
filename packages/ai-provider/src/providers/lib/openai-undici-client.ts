@@ -64,7 +64,7 @@ export function createOpenAiClient (options: OpenAiClientOptions) {
 
       return responseData
     },
-    stream: async (client, request: OpenAIRequest, context: ProviderClientContext): Promise<Readable> => { // TODO types
+    stream: async (client, request: OpenAIRequest, context: ProviderClientContext): Promise<Readable> => {
       context.logger.debug({ path: apiPath, request }, 'OpenAI undici stream request')
 
       const response = await client.pool.request({

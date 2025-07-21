@@ -132,6 +132,7 @@ async function main() {
 
       const stream = set.stream ? true : false
       const response = await client.ask({
+        // @ts-ignore
         stream, 
         prompt, 
         history,
