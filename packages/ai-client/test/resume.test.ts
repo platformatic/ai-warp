@@ -375,7 +375,7 @@ test('should auto-resume interrupted streaming request', async (t) => {
     })
 
     for await (const message of response.stream) {
-      if (message.type === 'content') {
+      if (message.type === 'content' && message.content) {
         receivedChunks.push(message.content)
       } else if (message.type === 'done') {
         sessionId = message.response?.sessionId
@@ -409,7 +409,7 @@ test('should auto-resume interrupted streaming request', async (t) => {
   })
 
   for await (const message of resumeResponse.stream) {
-    if (message.type === 'content') {
+    if (message.type === 'content' && message.content) {
       resumeChunks.push(message.content)
     } else if (message.type === 'done') {
       resumeResult = message.response
@@ -477,7 +477,7 @@ test('should handle resume with fresh request when no stored events', async (t) 
   })
 
   for await (const message of response.stream) {
-    if (message.type === 'content') {
+    if (message.type === 'content' && message.content) {
       chunks.push(message.content)
     } else if (message.type === 'done') {
       result = message.response

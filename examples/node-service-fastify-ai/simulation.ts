@@ -1,6 +1,6 @@
 import { setTimeout as wait } from 'node:timers/promises'
 import type { AiChatHistory, AiContentResponse } from '@platformatic/ai-provider'
-import type { AskResponseContent } from '@platformatic/ai-client'
+import type { AskResponseContent, AskResponseStream } from '@platformatic/ai-client'
 import { buildClient } from '@platformatic/ai-client'
 import { app } from './service.ts'
 
@@ -17,26 +17,26 @@ type Prompt = {
 let lastSessionId: string | undefined
 const prompts: Prompt[] =
   [
-    // {
-    //   stream: false,
-    //   prompts: [
-    //     'Can you help me to prepare a dinner?',
-    //     "I'd like to prepare a dinner for my 2 kids, they love fish and potatoes",
-    //     "Oh I forgot, they don't like garlic. Also, I don't think the cheese is a good idea to put on top of fish. Since you suggest to use the oven, add some tomatoes",
-    //     'Sounds delicious! Thank you'
-    //   ]
-    // },
+    {
+      stream: false,
+      prompts: [
+        'Can you help me to prepare a dinner?',
+        "I'd like to prepare a dinner for my 2 kids, they love fish and potatoes",
+        "Oh I forgot, they don't like garlic. Also, I don't think the cheese is a good idea to put on top of fish. Since you suggest to use the oven, add some tomatoes",
+        'Sounds delicious! Thank you'
+      ]
+    },
 
-    // {
-    //   stream: false,
-    //   prompts: [
-    //     'Can you help me to prepare a dinner?',
-    //     "I'd like to prepare a dinner for my 2 kids, they love fish and potatoes",
-    //     "Oh I forgot, they don't like garlic. Also, I don't think the cheese is a good idea to put on top of fish. Since you suggest to use the oven, add some tomatoes",
-    //     'Sounds delicious! Thank you'
-    //   ],
-    //   // models: ['deepseek:deepseek-chat']
-    // },
+    {
+      stream: false,
+      prompts: [
+        'Can you help me to prepare a dinner?',
+        "I'd like to prepare a dinner for my 2 kids, they love fish and potatoes",
+        "Oh I forgot, they don't like garlic. Also, I don't think the cheese is a good idea to put on top of fish. Since you suggest to use the oven, add some tomatoes",
+        'Sounds delicious! Thank you'
+      ],
+      // models: ['deepseek:deepseek-chat']
+    },
 
     {
       stream: true,
@@ -48,59 +48,59 @@ const prompts: Prompt[] =
       ]
     },
 
-//     {
-//       stream: false,
-//       history: [
-//         {
-//           prompt: 'Can you help me to schedule a trip?',
-//           response: `
-// Of course! I'd be happy to help you schedule your trip. Please provide me with some details:
-// 1. Where are you traveling from and to?
-// 2. What are your travel dates?
-// 3. What type of activities are you interested in (e.g., sightseeing, adventure, relaxation)?
-// 4. Do you have a budget in mind?
-// 5. How many people are traveling with you?
-// Feel free to share any other preferences or requirements you have!
-//         `
-//         },
-//         {
-//           prompt: "I'd like to go on a nice sea town with my family in Italy",
-//           response: `
-// Italy is home to many beautiful seaside towns that are perfect for a family vacation. Here are a few recommendations:
-// 1. **Cinque Terre**: This stunning coastal region consists of five picturesque villages—Monterosso al Mare, Vernazza, Corniglia, Manarola, and Riomaggiore. The colorful houses, breathtaking views, and hiking trails make it a great place for families. There are also lovely beaches where you can relax.
-// 2. **Sorrento**: Overlooking the Bay of Naples, Sorrento is known for its charming streets, beautiful villas, and stunning views of Mount Vesuvius. It’s a great base for exploring nearby attractions like Pompeii and the Amalfi Coast.
-// 3. **Positano**: Famous for its steep cliffs and colorful buildings, Positano is a beautiful town on the Amalfi Coast. While it can be touristy, its stunning scenery and beaches make it worth a visit. Families can enjoy boat trips and exploring nearby towns.
-// 4. **Portofino**: This small fishing village is known for its picturesque harbor and colorful buildings. It’s a great spot for families who enjoy nature, as there are hiking trails and beautiful views. The nearby Parco        
-// `
-//         }
-//       ],
-//       prompts: [
-//         "Great, I'd like to visit some places, please schedule a week trip for me",
-//         'Thank you!'
-//       ]
-//     },
+    {
+      stream: false,
+      history: [
+        {
+          prompt: 'Can you help me to schedule a trip?',
+          response: `
+Of course! I'd be happy to help you schedule your trip. Please provide me with some details:
+1. Where are you traveling from and to?
+2. What are your travel dates?
+3. What type of activities are you interested in (e.g., sightseeing, adventure, relaxation)?
+4. Do you have a budget in mind?
+5. How many people are traveling with you?
+Feel free to share any other preferences or requirements you have!
+        `
+        },
+        {
+          prompt: "I'd like to go on a nice sea town with my family in Italy",
+          response: `
+Italy is home to many beautiful seaside towns that are perfect for a family vacation. Here are a few recommendations:
+1. **Cinque Terre**: This stunning coastal region consists of five picturesque villages—Monterosso al Mare, Vernazza, Corniglia, Manarola, and Riomaggiore. The colorful houses, breathtaking views, and hiking trails make it a great place for families. There are also lovely beaches where you can relax.
+2. **Sorrento**: Overlooking the Bay of Naples, Sorrento is known for its charming streets, beautiful villas, and stunning views of Mount Vesuvius. It’s a great base for exploring nearby attractions like Pompeii and the Amalfi Coast.
+3. **Positano**: Famous for its steep cliffs and colorful buildings, Positano is a beautiful town on the Amalfi Coast. While it can be touristy, its stunning scenery and beaches make it worth a visit. Families can enjoy boat trips and exploring nearby towns.
+4. **Portofino**: This small fishing village is known for its picturesque harbor and colorful buildings. It’s a great spot for families who enjoy nature, as there are hiking trails and beautiful views. The nearby Parco        
+`
+        }
+      ],
+      prompts: [
+        "Great, I'd like to visit some places, please schedule a week trip for me",
+        'Thank you!'
+      ]
+    },
 
-//     {
-//       prompts: [
-//         'Can you help me to schedule a trip?',
-//         "I'd like to go on a nice sea town with my family in Italy",
-//       ]
-//     },
+    {
+      prompts: [
+        'Can you help me to schedule a trip?',
+        "I'd like to go on a nice sea town with my family in Italy",
+      ]
+    },
 
-//     {
-//       sessionId: lastSessionId,
-//       prompts: [
-//         'Can you add another place to visit?',
-//       ]
-//     },
+    {
+      sessionId: lastSessionId,
+      prompts: [
+        'Can you add another place to visit?',
+      ]
+    },
 
-//     {
-//       stream: true,
-//       prompts: [
-//         'Can you help me to schedule a trip?',
-//         "I'd like to go on a nice sea town with my family in Italy",
-//       ]
-//     }
+    {
+      stream: true,
+      prompts: [
+        'Can you help me to schedule a trip?',
+        "I'd like to go on a nice sea town with my family in Italy",
+      ]
+    }
   ]
 
 const headers = {
@@ -132,9 +132,9 @@ async function main() {
 
       const stream = set.stream ? true : false
       const response = await client.ask({
+        stream, 
         prompt, 
         history,
-        stream, 
         sessionId, 
         models: set.models
       })
@@ -169,10 +169,11 @@ async function main() {
           history.push({ prompt, response: content })
         }
       } else {
-        console.log('<<<', (response as AskResponseContent).content.text)
+        const text = ((response as AskResponseContent).content as any)?.text ?? ''
+        console.log('<<<', text)
 
         if (history) {
-          history.push({ prompt, response: response.content.text })
+          history.push({ prompt, response: text })
         }
       }
     }
