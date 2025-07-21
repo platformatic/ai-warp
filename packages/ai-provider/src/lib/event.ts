@@ -23,25 +23,32 @@ export interface AiStreamEventEnd {
 }
 
 export type AiStreamEvent = {
+  id: string
   event: 'content'
   data: AiStreamEventContent
 } |
 {
+  id: string
   event: 'end'
   data: AiStreamEventEnd
 } |
 {
+  id: string
   event: 'error'
   data: FastifyError
+}
+
+export function createEventId (): string {
+  return crypto.randomUUID()
 }
 
 /**
  * Encode an event to the Event Stream format
  * @see https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events#event_stream_format
  */
-export function encodeEvent ({ event, data }: AiStreamEvent): Uint8Array {
+export function encodeEvent ({ id, event, data }: AiStreamEvent): Uint8Array {
   const jsonString = stringifyEventData(data)
-  const eventString = `event: ${event}\ndata: ${jsonString}\n\n`
+  const eventString = `id: ${id}\nevent: ${event}\ndata: ${jsonString}\n\n`
 
   return new TextEncoder().encode(eventString)
 }
@@ -68,16 +75,19 @@ export function decodeEventStream (chunk: string): AiStreamEvent[] {
         const parsedData = JSON.parse(currentData)
         if (currentEvent === 'content') {
           events.push({
+            id: createEventId(),
             event: 'content',
             data: parsedData as AiStreamEventContent
           })
         } if (currentEvent === 'end') {
           events.push({
+            id: createEventId(),
             event: 'end',
             data: parsedData as AiStreamEventEnd
           })
         } else if (currentEvent === 'error') {
           events.push({
+            id: createEventId(),
             event: 'error',
             data: parsedData as FastifyError
           })

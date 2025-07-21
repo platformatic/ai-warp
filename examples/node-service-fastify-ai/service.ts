@@ -135,7 +135,7 @@ export async function app({ start = false, logger }: AppOptions) {
       sessionId,
       models: models?.map(model => {
         const [provider, modelName] = model.split(':')
-        if (provider !== 'openai' && provider !== 'deepseek') {
+        if (provider !== 'openai' && provider !== 'deepseek' && provider !== 'gemini') {
           throw new Error(`Provider "${provider}" not supported`)
         }
         return { provider, model: modelName }

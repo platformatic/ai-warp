@@ -2,7 +2,7 @@ import { Pool } from 'undici'
 import { ReadableStream, type UnderlyingByteSource } from 'node:stream/web'
 import type { AiProvider, AiResponseResult } from '../lib/ai.ts'
 import { type AiChatHistory, type ProviderClient, type ProviderClientContext, type ProviderClientOptions, type ProviderOptions, type ProviderRequestOptions, type ProviderResponse, type StreamChunkCallback } from '../lib/provider.ts'
-import { encodeEvent, parseEventStream, type AiStreamEvent } from '../lib/event.ts'
+import { createEventId, encodeEvent, parseEventStream, type AiStreamEvent } from '../lib/event.ts'
 import { ProviderResponseNoContentError } from '../lib/errors.ts'
 import { BaseProvider } from './lib/base.ts'
 import { DEFAULT_UNDICI_POOL_OPTIONS, OPENAI_DEFAULT_API_PATH, OPENAI_DEFAULT_BASE_URL, OPENAI_PROVIDER_NAME, UNDICI_USER_AGENT } from '../lib/config.ts'
@@ -123,6 +123,7 @@ class OpenAiByteSource implements UnderlyingByteSource {
           const error = new ProviderResponseNoContentError(`${this.providerName} stream`)
 
           const eventData: AiStreamEvent = {
+            id: event.id ?? createEventId(),
             event: 'error',
             data: error
           }
@@ -146,6 +147,7 @@ class OpenAiByteSource implements UnderlyingByteSource {
           }
 
           const eventData: AiStreamEvent = {
+            id: event.id ?? createEventId(),
             event: 'content',
             data: { response }
           }
@@ -154,6 +156,7 @@ class OpenAiByteSource implements UnderlyingByteSource {
           const finish = data.choices[0].finish_reason
           if (finish) {
             const eventData: AiStreamEvent = {
+              id: event.id ?? createEventId(),
               event: 'end',
               data: { response: mapResponseResult(finish) }
             }

@@ -2,7 +2,7 @@ import { Pool } from 'undici'
 import { ReadableStream, type UnderlyingByteSource } from 'node:stream/web'
 import type { AiProvider, AiResponseResult } from '../lib/ai.ts'
 import { type ProviderClient, type ProviderClientContext, type ProviderClientOptions, type ProviderOptions, type ProviderRequestOptions, type ProviderResponse, type StreamChunkCallback } from '../lib/provider.ts'
-import { encodeEvent, parseEventStream, type AiStreamEvent } from '../lib/event.ts'
+import { createEventId, encodeEvent, parseEventStream, type AiStreamEvent } from '../lib/event.ts'
 import { OptionError, ProviderExceededQuotaError, ProviderResponseError, ProviderResponseMaxTokensError, ProviderResponseNoContentError } from '../lib/errors.ts'
 import { BaseProvider } from './lib/base.ts'
 import { DEFAULT_UNDICI_POOL_OPTIONS, GEMINI_DEFAULT_BASE_URL, GEMINI_PROVIDER_NAME, UNDICI_USER_AGENT } from '../lib/config.ts'
@@ -247,6 +247,7 @@ class GeminiByteSource implements UnderlyingByteSource {
           const error = new ProviderResponseNoContentError(`${this.providerName} stream`)
 
           const eventData: AiStreamEvent = {
+            id: event.id ?? createEventId(),
             event: 'error',
             data: error
           }
@@ -270,6 +271,7 @@ class GeminiByteSource implements UnderlyingByteSource {
           }
 
           const eventData: AiStreamEvent = {
+            id: event.id ?? createEventId(),
             event: 'content',
             data: { response }
           }
@@ -278,6 +280,7 @@ class GeminiByteSource implements UnderlyingByteSource {
           const finish = data.candidates?.[0]?.finishReason
           if (finish) {
             const eventData: AiStreamEvent = {
+              id: event.id ?? createEventId(),
               event: 'end',
               data: { response: mapResponseResult(finish) }
             }
