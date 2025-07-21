@@ -1,5 +1,5 @@
 import { Pool } from 'undici'
-import { ReadableStream, type UnderlyingByteSource } from 'node:stream/web'
+import { Readable } from 'node:stream'
 import type { AiProvider, AiResponseResult } from '../lib/ai.ts'
 import { type AiChatHistory, type ProviderClient, type ProviderClientContext, type ProviderClientOptions, type ProviderOptions, type ProviderRequestOptions, type ProviderResponse, type StreamChunkCallback } from '../lib/provider.ts'
 import { encodeEvent, parseEventStream, type AiStreamEvent } from '../lib/event.ts'
@@ -69,7 +69,7 @@ export class OpenAIProvider extends BaseProvider {
     if (options.stream) {
       const response = await this.client.stream(this.api, request, this.context)
 
-      return new ReadableStream(new OpenAiByteSource(this.providerName, response, options.onStreamChunk))
+      return new OpenAiStreamTransformer(this.providerName, response, options.onStreamChunk)
     }
 
     this.logger.debug({ request }, `${this.providerName} request`)
@@ -103,67 +103,81 @@ export class OpenAIProvider extends BaseProvider {
   }
 }
 
-class OpenAiByteSource implements UnderlyingByteSource {
-  type: 'bytes' = 'bytes'
+class OpenAiStreamTransformer extends Readable {
   providerName: string
-  readable: ReadableStream
+  sourceStream: Readable
   chunkCallback?: StreamChunkCallback
 
-  constructor (providerName: string, readable: ReadableStream, chunkCallback?: StreamChunkCallback) {
+  constructor (providerName: string, sourceStream: Readable, chunkCallback?: StreamChunkCallback) {
+    super()
     this.providerName = providerName
-    this.readable = readable
+    this.sourceStream = sourceStream
     this.chunkCallback = chunkCallback
+
+    this.sourceStream.on('data', this.handleData.bind(this))
+    this.sourceStream.on('end', this.handleEnd.bind(this))
+    this.sourceStream.on('error', this.handleError.bind(this))
   }
 
-  async start (controller: ReadableByteStreamController) {
-    for await (const chunk of this.readable) {
-      const events = parseEventStream(chunk.toString('utf8'))
-      for (const event of events) {
-        if (event.event === 'error') {
-          const error = new ProviderResponseNoContentError(`${this.providerName} stream`)
+  private async handleData(chunk: Buffer) {
+    const events = parseEventStream(chunk.toString('utf8'))
+    for (const event of events) {
+      if (event.event === 'error') {
+        const error = new ProviderResponseNoContentError(`${this.providerName} stream`)
 
-          const eventData: AiStreamEvent = {
-            event: 'error',
-            data: error
-          }
-          controller.enqueue(encodeEvent(eventData))
-          controller.close()
+        const eventData: AiStreamEvent = {
+          event: 'error',
+          data: error
+        }
+        this.push(encodeEvent(eventData))
+        this.push(null)
+        return
+      }
 
+      // data only events
+      if (!event.event && event.data) {
+        if (event.data === '[DONE]') {
+          this.push(null)
           return
         }
 
-        // data only events
-        if (!event.event && event.data) {
-          if (event.data === '[DONE]') {
-            return
-          }
+        const data = JSON.parse(event.data)
+        const { content } = data.choices[0].delta
+        let response = content ?? ''
+        if (this.chunkCallback) {
+          response = await this.chunkCallback(response)
+        }
 
-          const data = JSON.parse(event.data)
-          const { content } = data.choices[0].delta
-          let response = content ?? ''
-          if (this.chunkCallback) {
-            response = await this.chunkCallback(response)
-          }
+        const eventData: AiStreamEvent = {
+          event: 'content',
+          data: { response }
+        }
+        this.push(encodeEvent(eventData))
 
+        const finish = data.choices[0].finish_reason
+        if (finish) {
           const eventData: AiStreamEvent = {
-            event: 'content',
-            data: { response }
+            event: 'end',
+            data: { response: mapResponseResult(finish) }
           }
-          controller.enqueue(encodeEvent(eventData))
-
-          const finish = data.choices[0].finish_reason
-          if (finish) {
-            const eventData: AiStreamEvent = {
-              event: 'end',
-              data: { response: mapResponseResult(finish) }
-            }
-            controller.enqueue(encodeEvent(eventData))
-            controller.close()
-            return
-          }
+          this.push(encodeEvent(eventData))
+          this.push(null)
+          return
         }
       }
     }
+  }
+
+  private handleEnd() {
+    this.push(null)
+  }
+
+  private handleError(error: Error) {
+    this.destroy(error)
+  }
+
+  _read() {
+    // No-op: data is pushed from source stream events
   }
 }
 

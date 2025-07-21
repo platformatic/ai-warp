@@ -1,23 +1,17 @@
+import { Readable } from 'node:stream'
 import { InvalidTimeWindowNumberInputError, InvalidTimeWindowStringInputError, InvalidTimeWindowUnitError } from './errors.ts'
 import { decodeEventStream } from './event.ts'
 
 /**
  * Process a cloned stream to accumulate the complete response
  */
-export async function processStream (stream: ReadableStream): Promise<string | undefined> {
-  const reader = stream.getReader()
+export async function processStream (stream: Readable): Promise<string | undefined> {
   let response = ''
 
-  try {
-    while (true) {
-      const { done, value } = await reader.read()
-
-      if (done) {
-        break
-      }
-
-      // Decode the chunk from Uint8Array to string
-      const chunkString = new TextDecoder().decode(value)
+  return new Promise((resolve, reject) => {
+    stream.on('data', (chunk: Buffer) => {
+      // Decode the chunk from Buffer to string
+      const chunkString = chunk.toString('utf8')
 
       // Parse the event stream format to extract events
       const events = decodeEventStream(chunkString)
@@ -28,15 +22,20 @@ export async function processStream (stream: ReadableStream): Promise<string | u
           response += event.data.response
         }
         if (event.event === 'error') {
+          resolve(undefined)
           return
         }
       }
-    }
+    })
 
-    return response
-  } finally {
-    reader.releaseLock()
-  }
+    stream.on('end', () => {
+      resolve(response)
+    })
+
+    stream.on('error', (error) => {
+      reject(error)
+    })
+  })
 }
 
 export function parseTimeWindow (timeWindow: number | string, key?: string): number {

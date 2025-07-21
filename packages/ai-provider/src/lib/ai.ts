@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { setTimeout as wait } from 'node:timers/promises'
+import { Readable, PassThrough } from 'node:stream'
 import type { Logger } from 'pino'
 import type { FastifyError } from '@fastify/error'
 
@@ -103,7 +104,7 @@ export type AiContentResponse = {
   sessionId: AiSessionId
 }
 
-export type AiStreamResponse = ReadableStream & {
+export type AiStreamResponse = Readable & {
   sessionId: AiSessionId
 }
 
@@ -576,8 +577,24 @@ export class Ai {
         }
 
         // @ts-ignore
-        if (typeof providerResponse.pipe === 'function' || providerResponse instanceof ReadableStream) {
-          const [responseStream, historyStream] = (providerResponse as AiStreamResponse).tee()
+        if (typeof providerResponse.pipe === 'function' || providerResponse instanceof Readable) {
+          // Create two separate streams using PassThrough
+          const responseStream = new PassThrough()
+          const historyStream = new PassThrough()
+          
+          // Pipe the original stream to both PassThrough streams
+          ;(providerResponse as Readable).on('data', (chunk) => {
+            responseStream.push(chunk)
+            historyStream.push(chunk)
+          })
+          ;(providerResponse as Readable).on('end', () => {
+            responseStream.push(null)
+            historyStream.push(null)
+          })
+          ;(providerResponse as Readable).on('error', (err) => {
+            responseStream.destroy(err)
+            historyStream.destroy(err)
+          })
 
           // Process the cloned stream in background to accumulate response for history
           processStream(historyStream)
@@ -735,7 +752,7 @@ export class Ai {
         })
       ])
 
-      if (response instanceof ReadableStream) {
+      if (response instanceof Readable) {
         return this.wrapStreamWithTimeout(response, timeout) as AiStreamResponse
       }
 
@@ -751,56 +768,42 @@ export class Ai {
     }
   }
 
-  private wrapStreamWithTimeout (stream: ReadableStream, timeout: number): ReadableStream {
-    const reader = stream.getReader()
+  private wrapStreamWithTimeout (stream: Readable, timeout: number): Readable {
+    const wrappedStream = new PassThrough()
     let timeoutId: NodeJS.Timeout | undefined
 
-    return new ReadableStream({
-      async start (controller) {
-        const resetTimeout = async () => {
-          if (timeoutId) {
-            clearTimeout(timeoutId)
-          }
-
-          timeoutId = setTimeout(() => {
-            controller.error(new ProviderRequestStreamTimeoutError(timeout))
-            reader.releaseLock()
-          }, timeout).unref()
-        }
-
-        await resetTimeout()
-
-        try {
-          while (true) {
-            const { done, value } = await reader.read()
-
-            if (done) {
-              if (timeoutId) {
-                clearTimeout(timeoutId)
-              }
-              controller.close()
-              break
-            }
-
-            // Reset timeout on each chunk
-            await resetTimeout()
-            controller.enqueue(value)
-          }
-        } catch (error) {
-          if (timeoutId) {
-            clearTimeout(timeoutId)
-          }
-          controller.error(error)
-        }
-      },
-
-      cancel (reason) {
-        if (timeoutId) {
-          clearTimeout(timeoutId)
-        }
-        return reader.cancel(reason)
+    const resetTimeout = () => {
+      if (timeoutId) {
+        clearTimeout(timeoutId)
       }
+
+      timeoutId = setTimeout(() => {
+        wrappedStream.destroy(new ProviderRequestStreamTimeoutError(timeout))
+      }, timeout).unref()
+    }
+
+    resetTimeout()
+
+    stream.on('data', (chunk) => {
+      resetTimeout()
+      wrappedStream.push(chunk)
     })
+
+    stream.on('end', () => {
+      if (timeoutId) {
+        clearTimeout(timeoutId)
+      }
+      wrappedStream.push(null)
+    })
+
+    stream.on('error', (error) => {
+      if (timeoutId) {
+        clearTimeout(timeoutId)
+      }
+      wrappedStream.destroy(error)
+    })
+
+    return wrappedStream
   }
 }
 
