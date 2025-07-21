@@ -289,6 +289,77 @@ const nextResponse = await client.ask({
 });
 ```
 
+## Logging
+
+The client supports custom logging through the `logger` option. By default, the client uses a silent logger that produces no output.
+
+### Available Loggers
+
+```typescript
+import { buildClient, consoleLogger, nullLogger } from "@platformatic/ai-client";
+
+// Silent logger (default) - no logging output
+const client = buildClient({
+  url: "http://127.0.0.1:3042",
+  logger: nullLogger, // This is the default
+});
+
+// Console logger - logs to console
+const client = buildClient({
+  url: "http://127.0.0.1:3042",
+  logger: consoleLogger,
+});
+```
+
+### Custom Logger
+
+You can provide your own logger implementation:
+
+```typescript
+import { buildClient } from "@platformatic/ai-client";
+
+const customLogger = {
+  debug: (message: string, data?: any) => {
+    // Custom debug logging
+    console.debug(`[DEBUG] ${message}`, data);
+  },
+  info: (message: string, data?: any) => {
+    // Custom info logging
+    console.info(`[INFO] ${message}`, data);
+  },
+  warn: (message: string, data?: any) => {
+    // Custom warning logging
+    console.warn(`[WARN] ${message}`, data);
+  },
+  error: (message: string, data?: any) => {
+    // Custom error logging
+    console.error(`[ERROR] ${message}`, data);
+  },
+};
+
+const client = buildClient({
+  url: "http://127.0.0.1:3042",
+  logger: customLogger,
+});
+```
+
+### Logger Interface
+
+```typescript
+interface Logger {
+  debug(message: string, data?: any): void;
+  info(message: string, data?: any): void;
+  warn(message: string, data?: any): void;
+  error(message: string, data?: any): void;
+}
+```
+
+The client will log various events including:
+- Request details (debug level)
+- Successful responses (info level) 
+- Request timeouts (warn level)
+- Request errors (error level)
+
 ## Examples
 
 The package includes working examples:
@@ -338,7 +409,7 @@ Creates a new AI client instance.
 - `url` (string): The AI service URL
 - `headers` (object, optional): HTTP headers to include with requests
 - `timeout` (number, optional): Request timeout in milliseconds (default: 60000)
-- `logger` (Logger, optional): Logger instance (uses console log if not provided)
+- `logger` (Logger, optional): Logger instance (default: silent logger - no logging)
 - `promptPath` (string, optional): Custom path for direct requests (default: `/api/v1/prompt`)
 - `streamPath` (string, optional): Custom path for streaming requests (default: `/api/v1/stream`)
 

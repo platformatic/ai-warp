@@ -30,3 +30,10 @@ export const consoleLogger: Logger = {
     }
   }
 }
+
+export const nullLogger: Logger = {
+  debug: () => {},
+  info: () => {},
+  warn: () => {},
+  error: () => {}
+}

@@ -1,5 +1,5 @@
 import type { AskOptions, ClientOptions, StreamMessage, AskResponse, Logger, AskResponseStream, AskResponseContent } from './types.ts'
-import { consoleLogger } from './console-logger.ts'
+import { nullLogger } from './console-logger.ts'
 
 const DEFAULT_PROMPT_PATH = '/api/v1/prompt'
 const DEFAULT_STREAM_PATH = '/api/v1/stream'
@@ -20,7 +20,7 @@ export class Client {
       ...options.headers
     }
     this.timeout = options.timeout ?? DEFAULT_TIMEOUT
-    this.logger = options.logger ?? consoleLogger
+    this.logger = options.logger ?? nullLogger
     this.promptPath = options.promptPath ?? DEFAULT_PROMPT_PATH
     this.streamPath = options.streamPath ?? DEFAULT_STREAM_PATH
   }
