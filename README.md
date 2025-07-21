@@ -6,10 +6,14 @@
 
 ## 📦 Packages
 
-- **`@platformatic/ai-provider`** - Core implementation for AI communication with multiple providers
-- **`@platformatic/fastify-ai`** - Fastify plugin for integrating AI capabilities into `fastify`
-- **`@platformatic/ai-client`** - TypeScript client to interact with `@platformatic/ai-warp` services
-- **`@platformatic/ai-warp`** - The AI service ready to run
+- **`@platformatic/ai-provider`** - Core implementation for AI communication with multiple providers  
+  See [packages/ai-provider/README.md](./packages/ai-provider/README.md)
+- **`@platformatic/fastify-ai`** - Fastify plugin for integrating AI capabilities into `fastify`  
+  See [packages/fastify-ai/README.md](./packages/fastify-ai/README.md)
+- **`@platformatic/ai-client`** - TypeScript client to interact with `@platformatic/ai-warp` services  
+  See [packages/ai-client/README.md](./packages/ai-client/README.md)
+- **`@platformatic/ai-warp`** - The AI service ready to run  
+  See [packages/ai-warp/README.md](./packages/ai-warp/README.md)
 
 ## 🚀 Quick Start
 
@@ -24,7 +28,7 @@ npx wattpm@latest create
 ```
 
 ```txt
-Hello Alice, welcome to Watt 2.71.0!
+Hello Alice, welcome to Watt 2.72.0!
 ? Where would you like to create your project? warp-service
 ? Which package manager do you want to use? pnpm
 ? Which kind of service do you want to create? @platformatic/ai-warp
@@ -80,11 +84,11 @@ console.log('Session ID:', response.headers.get('x-session-id'))
 {
   "content": {
     "text": "Hello! I'm doing well, thank you for asking. I'm here and ready to help you with any questions or tasks you might have. How are you doing today?",
-    "sessionId": "sess_abc123xyz",
+    "sessionId": "a81bc81b-cafe-4e5d-abff-90865d1e13b1",
     "result": "COMPLETE"
   },
   "headers": {
-    "x-session-id": "sess_abc123xyz",
+    "x-session-id": "a81bc81b-cafe-4e5d-abff-90865d1e13b1",
     "content-type": "application/json"
   }
 }
@@ -139,19 +143,13 @@ Sophisticated error handling mechanisms ensure reliability:
 
 ### 🔌 **Multi-Provider Support**
 Native support for major AI providers with optimized integrations:
-- **OpenAI**: Full support for GPT models including GPT-4, GPT-3.5-turbo
-- **DeepSeek**: Integration with DeepSeek's high-performance models
+- **OpenAI**: Full support for GPT models
+- **DeepSeek**: Integration with DeepSeek models
 - **Google Gemini**: Support for Gemini Pro and Gemini Flash models
 - **Extensible Architecture**: Easy to add new providers through the plugin system
 
 --- 
 
-## 🔧 Configuration Options
-
-TODO
-
-
 ## 🏗️ Architecture Overview
 
-TODO image 
-
+![](./docs/architecture-overview.png)
