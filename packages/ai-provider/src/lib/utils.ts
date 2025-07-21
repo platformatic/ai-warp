@@ -8,34 +8,25 @@ import { decodeEventStream } from './event.ts'
 export async function processStream (stream: Readable): Promise<string | undefined> {
   let response = ''
 
-  return new Promise((resolve, reject) => {
-    stream.on('data', (chunk: Buffer) => {
-      // Decode the chunk from Buffer to string
-      const chunkString = chunk.toString('utf8')
+  for await (const chunk of stream) {
+    // Decode the chunk from Buffer to string
+    const chunkString = chunk.toString('utf8')
 
-      // Parse the event stream format to extract events
-      const events = decodeEventStream(chunkString)
+    // Parse the event stream format to extract events
+    const events = decodeEventStream(chunkString)
 
-      // Accumulate content from all content events
-      for (const event of events) {
-        if (event.event === 'content') {
-          response += event.data.response
-        }
-        if (event.event === 'error') {
-          resolve(undefined)
-          return
-        }
+    // Accumulate content from all content events
+    for (const event of events) {
+      if (event.event === 'content') {
+        response += event.data.response
       }
-    })
+      if (event.event === 'error') {
+        return undefined
+      }
+    }
+  }
 
-    stream.on('end', () => {
-      resolve(response)
-    })
-
-    stream.on('error', (error) => {
-      reject(error)
-    })
-  })
+  return response
 }
 
 export function parseTimeWindow (timeWindow: number | string, key?: string): number {
