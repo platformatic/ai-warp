@@ -1,19 +1,19 @@
 {
   "name": "platformatic-warp",
   "private": true,
-  "version": "0.8.0",
+  "version": "0.8.1",
   "description": "The platformatic warp monorepo",
   "license": "Apache-2.0",
   "scripts": {
     "clean": "rm -rf node_modules && rm -rf packages/*/node_modules && rm -rf examples/node_modules",
-
     "test": "pnpm -r --workspace-concurrency=1 --if-present test",
     "test:coverage": "pnpm -r --workspace-concurrency=1 --if-present test:coverage",
     "lint": "pnpm -r --workspace-concurrency=1 --if-present lint",
     "lint:fix": "pnpm -r --workspace-concurrency=1 --if-present lint:fix",
     "build": "pnpm -r --workspace-concurrency=1 --if-present build",
     "typecheck": "pnpm -r --workspace-concurrency=1 --if-present typecheck",
-    "check": "pnpm -r --workspace-concurrency=1 --if-present check"
+    "check": "pnpm -r --workspace-concurrency=1 --if-present check",
+    "sync-version": "pnpm -r --workspace-concurrency=1 --if-present build && ./scripts/sync-version.sh && pnpm i"
   },
   "author": "Platformatic Inc. <oss@platformatic.dev> (https://platformatic.dev)",
   "engines": {

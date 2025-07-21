@@ -1,7 +1,7 @@
 {
   "name": "@platformatic/ai-provider",
   "type": "module",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "description": "The Platformatic AI provider interface",
   "license": "Apache-2.0",
   "main": "dist/index.js",
@@ -25,7 +25,8 @@
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf dist;",
-    "check": "pnpm clean && pnpm lint && pnpm typecheck && pnpm test && pnpm build"
+    "check": "pnpm clean && pnpm lint && pnpm typecheck && pnpm test && pnpm build",
+    "prepublish": "pnpm build"
   },
   "author": "Platformatic Inc. <oss@platformatic.dev> (https://platformatic.dev)",
   "dependencies": {

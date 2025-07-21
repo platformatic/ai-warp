@@ -1,6 +1,6 @@
 {
   "name": "@platformatic/ai-warp",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "type": "module",
   "description": "The Platformatic warp AI service",
   "license": "Apache-2.0",
@@ -32,7 +32,8 @@
     "build": "tsc -p tsconfig.build.json && cp config.d.ts dist/",
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf dist;",
-    "check": "pnpm clean && pnpm lint && pnpm typecheck && pnpm test && pnpm build"
+    "check": "pnpm clean && pnpm lint && pnpm typecheck && pnpm test && pnpm build",
+    "prepublish": "pnpm build"
   },
   "author": "Platformatic Inc. <oss@platformatic.dev> (https://platformatic.dev)",
   "engines": {
