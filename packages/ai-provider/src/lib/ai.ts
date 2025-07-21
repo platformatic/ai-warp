@@ -519,19 +519,19 @@ export class Ai {
           // Get the last event ID to resume from
           const lastEvent = allEvents[allEvents.length - 1]
           const resumeFromEventId = lastEvent.eventId
-          this.logger.debug({ 
-            sessionId: req.options.sessionId, 
+          this.logger.debug({
+            sessionId: req.options.sessionId,
             lastEventId: resumeFromEventId,
-            totalEvents: allEvents.length 
+            totalEvents: allEvents.length
           }, 'Auto-resuming from last event')
 
           // Try to get events from the last event ID
           const events = await this.history.rangeFromId(req.options.sessionId, resumeFromEventId)
-          
+
           if (events.length > 0) {
             // Create a resumable stream from historical events
             const resumeStream = this.createResumeStream(events, sessionId)
-            return resumeStream as AiStreamResponse
+            return resumeStream as unknown as AiStreamResponse
           } else {
             this.logger.debug({ resumeFromEventId, sessionId }, 'No events found for resume, continuing with normal request')
           }
@@ -852,7 +852,7 @@ export class Ai {
           }
 
           const event = events[eventIndex++]
-          
+
           // Create SSE-formatted chunk for the event
           let eventType = 'content'
           let eventData = event
@@ -869,9 +869,9 @@ export class Ai {
           // Format as Server-Sent Event
           const sseChunk = `event: ${eventType}\ndata: ${JSON.stringify(eventData)}\nid: ${event.eventId || createEventId()}\n\n`
           const encodedChunk = new TextEncoder().encode(sseChunk)
-          
+
           controller.enqueue(encodedChunk)
-          
+
           // Schedule next event with a small delay to simulate real streaming
           setTimeout(processNextEvent, 10)
         }
@@ -882,7 +882,7 @@ export class Ai {
     })
 
     // Attach sessionId to the resume stream
-    ;(resumeStream as AiStreamResponse).sessionId = sessionId
+    ;(resumeStream as unknown as AiStreamResponse).sessionId = sessionId
     return resumeStream
   }
 }

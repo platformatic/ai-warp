@@ -18,13 +18,13 @@ test('should handle resume parameter in stream request', async () => {
   const app = await createApp({ client })
 
   // Mock the AI provider to capture the request
-  app.ai.request = async (request: any, reply: any) => {
+  app.ai.request = async (request: any, _reply: any) => {
     receivedRequest = request
-    
+
     // Return a mock stream
     const encoder = new TextEncoder()
     const stream = new ReadableStream({
-      start(controller) {
+      start (controller) {
         controller.enqueue(encoder.encode('event: content\ndata: {"response": "Test response"}\n\n'))
         controller.enqueue(encoder.encode('event: end\ndata: {"response": {"text": "Test response", "sessionId": "test-session", "result": "COMPLETE"}}\n\n'))
         controller.close()
@@ -66,12 +66,12 @@ test('should handle resume: false parameter', async () => {
   const app = await createApp({ client })
 
   // Mock the AI provider
-  app.ai.request = async (request: any, reply: any) => {
+  app.ai.request = async (request: any, _reply: any) => {
     receivedRequest = request
-    
+
     const encoder = new TextEncoder()
     const stream = new ReadableStream({
-      start(controller) {
+      start (controller) {
         controller.enqueue(encoder.encode('event: content\ndata: {"response": "New response"}\n\n'))
         controller.enqueue(encoder.encode('event: end\ndata: {"response": {"text": "New response", "sessionId": "test-session", "result": "COMPLETE"}}\n\n'))
         controller.close()
@@ -113,12 +113,12 @@ test('should default resume to true when not specified', async () => {
   const app = await createApp({ client })
 
   // Mock the AI provider
-  app.ai.request = async (request: any, reply: any) => {
+  app.ai.request = async (request: any, _reply: any) => {
     receivedRequest = request
-    
+
     const encoder = new TextEncoder()
     const stream = new ReadableStream({
-      start(controller) {
+      start (controller) {
         controller.enqueue(encoder.encode('event: content\ndata: {"response": "Auto resume response"}\n\n'))
         controller.enqueue(encoder.encode('event: end\ndata: {"response": {"text": "Auto resume response", "sessionId": "test-session", "result": "COMPLETE"}}\n\n'))
         controller.close()
@@ -158,9 +158,9 @@ test('should handle resume parameter in prompt request', async () => {
   const app = await createApp({ client })
 
   // Mock the AI provider
-  app.ai.request = async (request: any, reply: any) => {
+  app.ai.request = async (request: any, _reply: any) => {
     receivedRequest = request
-    
+
     return {
       text: 'Direct response',
       sessionId: 'test-session',
@@ -204,12 +204,12 @@ test('should pass resume parameter to underlying AI request correctly', async ()
   const app = await createApp({ client })
 
   // Mock the AI provider to capture all requests
-  app.ai.request = async (request: any, reply: any) => {
+  app.ai.request = async (request: any, _reply: any) => {
     capturedRequests.push(request)
-    
+
     const encoder = new TextEncoder()
     const stream = new ReadableStream({
-      start(controller) {
+      start (controller) {
         controller.enqueue(encoder.encode('event: content\ndata: {"response": "Mock response"}\n\n'))
         controller.enqueue(encoder.encode('event: end\ndata: {"response": {"text": "Mock response", "sessionId": "test-session", "result": "COMPLETE"}}\n\n'))
         controller.close()
@@ -252,17 +252,17 @@ test('should pass resume parameter to underlying AI request correctly', async ()
   })
 
   assert.equal(capturedRequests.length, 3)
-  
+
   // First request with resume: true
   assert.equal(capturedRequests[0].resume, true)
   assert.equal(capturedRequests[0].prompt, 'Hello with resume')
   assert.equal(capturedRequests[0].sessionId, 'session-1')
-  
+
   // Second request with resume: false
   assert.equal(capturedRequests[1].resume, false)
   assert.equal(capturedRequests[1].prompt, 'Hello without resume')
   assert.equal(capturedRequests[1].sessionId, 'session-2')
-  
+
   // Third request with default resume (undefined, handled by ai-provider)
   assert.equal(capturedRequests[2].resume, undefined)
   assert.equal(capturedRequests[2].prompt, 'Hello default resume')

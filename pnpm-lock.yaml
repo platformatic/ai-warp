@@ -8,6 +8,24 @@ importers:
 
   .: {}
 
+  examples/node-service-fastify-ai:
+    dependencies:
+      '@platformatic/ai-provider':
+        specifier: workspace:*
+        version: link:../../packages/ai-provider
+      '@platformatic/fastify-ai':
+        specifier: workspace:*
+        version: link:../../packages/fastify-ai
+      fastify:
+        specifier: ^5.4.0
+        version: 5.4.0
+      pino:
+        specifier: ^9.7.0
+        version: 9.7.0
+      undici:
+        specifier: ^7.11.0
+        version: 7.11.0
+
   packages/ai-client:
     devDependencies:
       '@platformatic/ai-provider':

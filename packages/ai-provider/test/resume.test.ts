@@ -71,7 +71,7 @@ test('should resume stream from event ID', async () => {
   const resumedResponse = await ai.request({
     models: ['openai:gpt-4o-mini'],
     prompt: 'Say hello again', // This will be ignored for resume
-    options: { 
+    options: {
       stream: true,
       sessionId: originalSessionId
     }
@@ -134,7 +134,7 @@ test('should make normal request when resume is disabled', async () => {
 
   assert.ok(response1 instanceof ReadableStream)
   const sessionId = (response1 as any).sessionId
-  
+
   // Consume first stream
   const reader1 = response1.getReader()
   while (true) {
@@ -149,7 +149,7 @@ test('should make normal request when resume is disabled', async () => {
   const response2 = await ai.request({
     models: ['openai:gpt-4o-mini'],
     prompt: 'Hello again',
-    options: { 
+    options: {
       sessionId,
       stream: true
     },

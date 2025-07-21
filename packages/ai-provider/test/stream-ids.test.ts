@@ -15,7 +15,7 @@ test('should include UUID ids in streaming events', async () => {
       ])
     })
   }
-  
+
   const ai = new Ai({
     logger: pino({ level: 'silent' }),
     providers: {
@@ -54,9 +54,9 @@ test('should include UUID ids in streaming events', async () => {
 
       const chunk = decoder.decode(value)
       const lines = chunk.split('\n')
-      
+
       let currentEvent: { event?: string, data?: string, id?: string } = {}
-      
+
       for (const line of lines) {
         if (line.startsWith('event: ')) {
           currentEvent.event = line.substring(7).trim()
@@ -77,23 +77,23 @@ test('should include UUID ids in streaming events', async () => {
 
   // Should have content events and end event
   assert.ok(events.length > 0, 'Should have at least one event')
-  
+
   // Every event should have an id field with a UUID
   for (const event of events) {
     assert.ok(event.id, `Event should have an id: ${JSON.stringify(event)}`)
     // Check if it's a valid UUID format (36 characters with dashes in specific positions)
-    assert.match(event.id, /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i, 
+    assert.match(event.id, /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
       `Event id should be a valid UUID: ${event.id}`)
   }
-  
+
   // Check we have content events
   const contentEvents = events.filter(e => e.event === 'content')
   assert.ok(contentEvents.length > 0, 'Should have content events')
-  
+
   // Check we have an end event
   const endEvents = events.filter(e => e.event === 'end')
   assert.equal(endEvents.length, 1, 'Should have exactly one end event')
-  
+
   // All events should have unique IDs
   const eventIds = events.map(e => e.id)
   const uniqueIds = new Set(eventIds)
@@ -113,7 +113,7 @@ test('should include UUID ids in streaming events with valkey storage', async ()
       ])
     })
   }
-  
+
   const ai = new Ai({
     logger: pino({ level: 'silent' }),
     providers: {
@@ -162,9 +162,9 @@ test('should include UUID ids in streaming events with valkey storage', async ()
 
       const chunk = decoder.decode(value)
       const lines = chunk.split('\n')
-      
+
       let currentEvent: { event?: string, data?: string, id?: string } = {}
-      
+
       for (const line of lines) {
         if (line.startsWith('event: ')) {
           currentEvent.event = line.substring(7).trim()
@@ -185,23 +185,23 @@ test('should include UUID ids in streaming events with valkey storage', async ()
 
   // Should have content events and end event
   assert.ok(events.length > 0, 'Should have at least one event')
-  
+
   // Every event should have an id field with a UUID
   for (const event of events) {
     assert.ok(event.id, `Event should have an id: ${JSON.stringify(event)}`)
     // Check if it's a valid UUID format (36 characters with dashes in specific positions)
-    assert.match(event.id, /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i, 
+    assert.match(event.id, /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
       `Event id should be a valid UUID: ${event.id}`)
   }
-  
+
   // Check we have content events
   const contentEvents = events.filter(e => e.event === 'content')
   assert.ok(contentEvents.length > 0, 'Should have content events')
-  
+
   // Check we have an end event
   const endEvents = events.filter(e => e.event === 'end')
   assert.equal(endEvents.length, 1, 'Should have exactly one end event')
-  
+
   // All events should have unique IDs
   const eventIds = events.map(e => e.id)
   const uniqueIds = new Set(eventIds)

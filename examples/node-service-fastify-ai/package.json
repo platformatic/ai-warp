@@ -12,6 +12,7 @@
     "@platformatic/ai-provider": "workspace:*",
     "@platformatic/fastify-ai": "workspace:*",
     "@platformatic/ai-client": "workspace:*",
+    "@platformatic/fastify-ai": "workspace:*",
     "fastify": "^5.4.0",
     "pino": "^9.7.0",
     "undici": "^7.11.0"

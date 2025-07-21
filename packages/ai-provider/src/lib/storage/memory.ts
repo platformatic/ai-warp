@@ -145,10 +145,6 @@ class HashStorage {
 }
 
 class PubSubStorage extends EventEmitter {
-  constructor () {
-    super()
-  }
-
   publish (channel: string, message: any) {
     // Use setImmediate to make it async and avoid blocking
     setImmediate(() => {
