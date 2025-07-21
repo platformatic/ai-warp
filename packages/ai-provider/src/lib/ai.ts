@@ -531,7 +531,7 @@ export class Ai {
           if (events.length > 0) {
             // Create a resumable stream from historical events
             const resumeStream = this.createResumeStream(events, sessionId)
-            return resumeStream as unknown as AiStreamResponse
+            return resumeStream as AiStreamResponse
           } else {
             this.logger.debug({ resumeFromEventId, sessionId }, 'No events found for resume, continuing with normal request')
           }
@@ -911,16 +911,16 @@ export class Ai {
     return timeoutTransform
   }
 
-  private createResumeStream (events: any[], sessionId: AiSessionId): ReadableStream {
+  private createResumeStream (events: any[], sessionId: AiSessionId): Readable {
     let eventIndex = 0
 
-    const resumeStream = new ReadableStream({
-      start (controller) {
+    const resumeStream = new Readable({
+      read () {
         // Process events sequentially with a small delay to simulate streaming
         const processNextEvent = () => {
           if (eventIndex >= events.length) {
             // All events processed
-            controller.close()
+            this.push(null)
             return
           }
 
@@ -941,9 +941,9 @@ export class Ai {
 
           // Format as Server-Sent Event
           const sseChunk = `event: ${eventType}\ndata: ${JSON.stringify(eventData)}\nid: ${event.eventId || createEventId()}\n\n`
-          const encodedChunk = new TextEncoder().encode(sseChunk)
+          const encodedChunk = Buffer.from(sseChunk, 'utf8')
 
-          controller.enqueue(encodedChunk)
+          this.push(encodedChunk)
 
           // Schedule next event with a small delay to simulate real streaming
           setTimeout(processNextEvent, 10)
@@ -955,7 +955,7 @@ export class Ai {
     })
 
     // Attach sessionId to the resume stream
-    ;(resumeStream as unknown as AiStreamResponse).sessionId = sessionId
+    ;(resumeStream as any).sessionId = sessionId
     return resumeStream
   }
 }
