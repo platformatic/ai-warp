@@ -1,7 +1,7 @@
 {
   "name": "platformatic-warp",
   "private": true,
-  "version": "0.0.1",
+  "version": "0.8.0",
   "description": "The platformatic warp monorepo",
   "license": "Apache-2.0",
   "scripts": {
