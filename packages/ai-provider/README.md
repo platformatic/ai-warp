@@ -67,18 +67,15 @@ const streamResponse = await ai.request({
   }
 })
 
-// Process Node.js stream
-streamResponse.on('data', (chunk) => {
-  console.log('Chunk:', chunk.toString())
-})
-
-streamResponse.on('end', () => {
+// Process Node.js stream with for await loop
+try {
+  for await (const chunk of streamResponse) {
+    console.log('Chunk:', chunk.toString())
+  }
   console.log('Stream finished')
-})
-
-streamResponse.on('error', (err) => {
+} catch (err) {
   console.error('Stream error:', err)
-})
+}
 
 await ai.close()
 ```
@@ -226,20 +223,17 @@ const followUp = await ai.request({
 Node.js Readable stream with attached `sessionId` property for session management.
 
 ```javascript
-// Process streaming response with Node.js streams
-streamResponse.on('data', (chunk) => {
-  const data = chunk.toString()
-  // Process chunk (may contain multiple SSE events)
-  console.log('Received:', data)
-})
-
-streamResponse.on('end', () => {
+// Process streaming response with for await loop
+try {
+  for await (const chunk of streamResponse) {
+    const data = chunk.toString()
+    // Process chunk (may contain multiple SSE events)
+    console.log('Received:', data)
+  }
   console.log('Stream completed')
-})
-
-streamResponse.on('error', (err) => {
+} catch (err) {
   console.error('Stream error:', err)
-})
+}
 }
 ```
 
