@@ -33,11 +33,11 @@ export class Client {
 
     const endpoint = this.url + (isStreaming ? this.streamPath : this.promptPath)
 
-    this.logger.debug('Making AI request', { 
-      endpoint, 
-      prompt: options.prompt, 
-      sessionId: options.sessionId, 
-      models: options.models, 
+    this.logger.debug('Making AI request', {
+      endpoint,
+      prompt: options.prompt,
+      sessionId: options.sessionId,
+      models: options.models,
       stream: isStreaming,
       resume: shouldResume
     })

@@ -519,19 +519,19 @@ export class Ai {
           // Get the last event ID to resume from
           const lastEvent = allEvents[allEvents.length - 1]
           const resumeFromEventId = lastEvent.eventId
-          this.logger.debug({ 
-            sessionId: req.options.sessionId, 
+          this.logger.debug({
+            sessionId: req.options.sessionId,
             lastEventId: resumeFromEventId,
-            totalEvents: allEvents.length 
+            totalEvents: allEvents.length
           }, 'Auto-resuming from last event')
 
           // Try to get events from the last event ID
           const events = await this.history.rangeFromId(req.options.sessionId, resumeFromEventId)
-          
+
           if (events.length > 0) {
             // Create a resumable stream from historical events
             const resumeStream = this.createResumeStream(events, sessionId)
-            return resumeStream as AiStreamResponse
+            return resumeStream as unknown as AiStreamResponse
           } else {
             this.logger.debug({ resumeFromEventId, sessionId }, 'No events found for resume, continuing with normal request')
           }
@@ -625,25 +625,25 @@ export class Ai {
           // Handle streaming response: process history/pub/sub in background
           const streamChannel = `ai-stream:${sessionId}`
           let accumulatedResponse = ''
-          
+
           // Process the cloned stream in background to accumulate response for history and pub/sub
           const processStreamInBackground = async () => {
             try {
               for await (const chunk of historyStream) {
                 // Decode the chunk from Buffer to string
                 const chunkString = chunk.toString('utf8')
-                
+
                 // Parse the event stream format to extract events
                 const events = decodeEventStream(chunkString)
-                
+
                 // Process each event
                 for (const event of events) {
                   const eventId = event.id || createEventId()
-                  
+
                   if (event.event === 'content') {
                     const content = (event.data as any)?.response || (event.data as any)?.content || ''
                     accumulatedResponse += content
-                    
+
                     // Publish streaming event via pub/sub
                     await this.storage.publish(streamChannel, {
                       eventId,
@@ -653,11 +653,11 @@ export class Ai {
                     })
                   } else if (event.event === 'error') {
                     // Store error to history
-                    await this.history.push(sessionId, eventId, { 
-                      prompt: request.prompt, 
+                    await this.history.push(sessionId, eventId, {
+                      prompt: request.prompt,
                       error: event.data
                     }, this.options.limits.historyExpiration)
-                    
+
                     // Publish error event
                     await this.storage.publish(streamChannel, {
                       eventId,
@@ -669,14 +669,14 @@ export class Ai {
                   }
                 }
               }
-              
+
               // Store final accumulated response to history
               const finalEventId = createEventId()
-              await this.history.push(sessionId, finalEventId, { 
-                prompt: request.prompt, 
+              await this.history.push(sessionId, finalEventId, {
+                prompt: request.prompt,
                 response: accumulatedResponse
               }, this.options.limits.historyExpiration)
-              
+
               // Publish final event
               await this.storage.publish(streamChannel, {
                 eventId: finalEventId,
@@ -687,11 +687,11 @@ export class Ai {
             } catch (error: any) {
               // Store error to history
               const errorEventId = createEventId()
-              await this.history.push(sessionId, errorEventId, { 
-                prompt: request.prompt, 
+              await this.history.push(sessionId, errorEventId, {
+                prompt: request.prompt,
                 error: error.message || String(error)
               }, this.options.limits.historyExpiration)
-              
+
               // Publish error event
               await this.storage.publish(streamChannel, {
                 eventId: errorEventId,
@@ -705,7 +705,7 @@ export class Ai {
           // Process stream in background (don't await to avoid blocking the response)
           processStreamInBackground().catch(error => {
             this.logger.error({ error }, 'Failed to process stream for history/pubsub')
-          })
+          });
 
           // Attach sessionId to the stream for the user
           (responseStream as any).sessionId = sessionId
@@ -925,7 +925,7 @@ export class Ai {
           }
 
           const event = events[eventIndex++]
-          
+
           // Create SSE-formatted chunk for the event
           let eventType = 'content'
           let eventData = event
@@ -942,9 +942,9 @@ export class Ai {
           // Format as Server-Sent Event
           const sseChunk = `event: ${eventType}\ndata: ${JSON.stringify(eventData)}\nid: ${event.eventId || createEventId()}\n\n`
           const encodedChunk = new TextEncoder().encode(sseChunk)
-          
+
           controller.enqueue(encodedChunk)
-          
+
           // Schedule next event with a small delay to simulate real streaming
           setTimeout(processNextEvent, 10)
         }
@@ -955,7 +955,7 @@ export class Ai {
     })
 
     // Attach sessionId to the resume stream
-    ;(resumeStream as AiStreamResponse).sessionId = sessionId
+    ;(resumeStream as unknown as AiStreamResponse).sessionId = sessionId
     return resumeStream
   }
 }

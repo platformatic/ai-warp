@@ -1,4 +1,4 @@
- // Types duplicated from @platformatic/ai-provider to keep ai-client dependency-free
+// Types duplicated from @platformatic/ai-provider to keep ai-client dependency-free
 // This package is designed to be standalone and not depend on other Platformatic modules
 export type TimeWindow = number | string
 export type AiSessionId = string

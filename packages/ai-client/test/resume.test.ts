@@ -5,10 +5,10 @@ import { buildClient } from '../src/index.ts'
 // Mock fetch for testing
 const mockFetch = (responses: Array<{ status: number, headers?: Record<string, string>, body?: string, stream?: boolean }>) => {
   let callCount = 0
-  
-  return async (url: string, options: any) => {
+
+  return async (_url: string, _options: any) => {
     const response = responses[callCount++] || responses[responses.length - 1]
-    
+
     const headers = new Headers({
       'content-type': response.stream ? 'text/event-stream' : 'application/json',
       'x-session-id': 'test-session-123',
@@ -19,10 +19,10 @@ const mockFetch = (responses: Array<{ status: number, headers?: Record<string, s
       // Create a mock ReadableStream for SSE
       const encoder = new TextEncoder()
       const chunks = response.body.split('\n\n').filter(chunk => chunk.trim())
-      
+
       let chunkIndex = 0
       const stream = new ReadableStream({
-        start(controller) {
+        start (controller) {
           const sendNextChunk = () => {
             if (chunkIndex < chunks.length) {
               controller.enqueue(encoder.encode(chunks[chunkIndex++] + '\n\n'))
@@ -57,10 +57,10 @@ const mockFetch = (responses: Array<{ status: number, headers?: Record<string, s
 
 test('should pass resume parameter to server by default', async () => {
   let lastRequestBody: any = null
-  
+
   const fetch = async (url: string, options: any) => {
     lastRequestBody = JSON.parse(options.body)
-    
+
     return {
       ok: true,
       status: 200,
@@ -96,10 +96,10 @@ test('should pass resume parameter to server by default', async () => {
 
 test('should pass resume: false when explicitly disabled', async () => {
   let lastRequestBody: any = null
-  
+
   const fetch = async (url: string, options: any) => {
     lastRequestBody = JSON.parse(options.body)
-    
+
     return {
       ok: true,
       status: 200,
@@ -227,7 +227,7 @@ id: uuid-6`
   assert.equal(messages.length, 3)
   assert.equal(messages[0].type, 'content')
   assert.equal(messages[0].content, 'New ')
-  assert.equal(messages[1].type, 'content') 
+  assert.equal(messages[1].type, 'content')
   assert.equal(messages[1].content, 'response')
   assert.equal(messages[2].type, 'done')
   assert.equal(messages[2].response.text, 'New response')
@@ -235,10 +235,10 @@ id: uuid-6`
 
 test('should not include resume parameter for non-streaming requests', async () => {
   let lastRequestBody: any = null
-  
+
   const fetch = async (url: string, options: any) => {
     lastRequestBody = JSON.parse(options.body)
-    
+
     return {
       ok: true,
       status: 200,
