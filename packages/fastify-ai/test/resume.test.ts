@@ -18,7 +18,7 @@ test('should handle resume parameter in stream request', async () => {
   const app = await createApp({ client })
 
   // Mock the AI provider to capture the request
-  app.ai.request = async (request: any, _reply: any) => {
+  app.ai.request = async (request: any, reply: any) => {
     receivedRequest = request
 
     // Return a mock stream
@@ -66,7 +66,7 @@ test('should handle resume: false parameter', async () => {
   const app = await createApp({ client })
 
   // Mock the AI provider
-  app.ai.request = async (request: any, _reply: any) => {
+  app.ai.request = async (request: any, reply: any) => {
     receivedRequest = request
 
     const encoder = new TextEncoder()
@@ -113,7 +113,7 @@ test('should default resume to true when not specified', async () => {
   const app = await createApp({ client })
 
   // Mock the AI provider
-  app.ai.request = async (request: any, _reply: any) => {
+  app.ai.request = async (request: any, reply: any) => {
     receivedRequest = request
 
     const encoder = new TextEncoder()

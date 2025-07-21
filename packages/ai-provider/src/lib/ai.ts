@@ -584,7 +584,7 @@ export class Ai {
           err = undefined
           try {
             providerResponse = await this.requestTimeout(
-              selected.provider.provider.request(selected.model.name, request.prompt, options),
+              selected.provider.provider.request(selected.model.name, req.prompt, options),
               this.options.limits.requestTimeout,
               options.stream
             )
@@ -654,7 +654,7 @@ export class Ai {
                   } else if (event.event === 'error') {
                     // Store error to history
                     await this.history.push(sessionId, eventId, {
-                      prompt: request.prompt,
+                      prompt: req.prompt,
                       error: event.data
                     }, this.options.limits.historyExpiration)
 
@@ -673,7 +673,7 @@ export class Ai {
               // Store final accumulated response to history
               const finalEventId = createEventId()
               await this.history.push(sessionId, finalEventId, {
-                prompt: request.prompt,
+                prompt: req.prompt,
                 response: accumulatedResponse
               }, this.options.limits.historyExpiration)
 
@@ -688,7 +688,7 @@ export class Ai {
               // Store error to history
               const errorEventId = createEventId()
               await this.history.push(sessionId, errorEventId, {
-                prompt: request.prompt,
+                prompt: req.prompt,
                 error: error.message || String(error)
               }, this.options.limits.historyExpiration)
 
@@ -714,7 +714,7 @@ export class Ai {
 
         const contentResponse: AiContentResponse = response as AiContentResponse
         contentResponse.sessionId = sessionId
-        await this.history.push(sessionId, createEventId(), { prompt: request.prompt, response: contentResponse.text }, this.options.limits.historyExpiration)
+        await this.history.push(sessionId, createEventId(), { prompt: req.prompt, response: contentResponse.text }, this.options.limits.historyExpiration)
 
         return contentResponse
       } catch (error: any) { // TODO fix type

@@ -3,11 +3,18 @@ import assert from 'node:assert'
 import Fastify from 'fastify'
 import { buildClient } from '../src/index.ts'
 
+const globalFetch = global.fetch
+
 // Mock fetch for testing
-const mockFetch = (responses: Array<{ status: number, headers?: Record<string, string>, body?: string, stream?: boolean }>) => {
+const mockFetch = (responses: Array<{ status: number, headers?: Record<string, string>, body?: string, stream?: boolean }>, t: any) => {
+  if (!t) {
+    throw new Error('mockFetch must be called with a test instance')
+  }
+
   let callCount = 0
 
-  return async (_url: string, _options: any) => {
+  // @ts-ignore - mock fetch
+  global.fetch = async (_url: string, _options: any) => {
     const response = responses[callCount++] || responses[responses.length - 1]
 
     const headers = new Headers({
@@ -54,6 +61,10 @@ const mockFetch = (responses: Array<{ status: number, headers?: Record<string, s
       json: async () => JSON.parse(response.body || '{}')
     }
   }
+
+  t.after(() => {
+    global.fetch = globalFetch
+  })
 }
 
 test('should pass resume parameter to server by default', async () => {
@@ -154,14 +165,13 @@ event: end
 data: {"response": {"text": "Resumed content", "sessionId": "test-session", "result": "COMPLETE"}}
 id: uuid-3`
 
-  // @ts-ignore - mock fetch
-  global.fetch = mockFetch([
+  mockFetch([
     {
       status: 200,
       stream: true,
       body: resumeStreamBody
     }
-  ])
+  ], t)
 
   const client = buildClient({
     url: 'http://localhost:3000'
@@ -209,14 +219,13 @@ event: end
 data: {"response": {"text": "New response", "sessionId": "test-session", "result": "COMPLETE"}}
 id: uuid-6`
 
-  // @ts-ignore - mock fetch
-  global.fetch = mockFetch([
+  mockFetch([
     {
       status: 200,
       stream: true,
       body: normalStreamBody
     }
-  ])
+  ], t)
 
   const client = buildClient({
     url: 'http://localhost:3000'
@@ -287,7 +296,7 @@ test('should not include resume parameter for non-streaming requests', async (t)
   assert.equal(lastRequestBody.stream, false)
 })
 
-test.skip('should auto-resume interrupted streaming request', async (t) => {
+test('should auto-resume interrupted streaming request', async (t) => {
   const fastify = Fastify()
 
   let requestCount = 0
@@ -345,7 +354,6 @@ test.skip('should auto-resume interrupted streaming request', async (t) => {
     return fastify.close()
   })
 
-
   await fastify.listen({ port: 0 })
   const address = fastify.server.address()
   const port = typeof address === 'object' ? address?.port! : 3000
@@ -379,6 +387,8 @@ test.skip('should auto-resume interrupted streaming request', async (t) => {
     error = e
     // Expected to fail due to connection drop
   }
+
+  console.log(receivedChunks)
 
   // Verify we received partial content before interruption
   assert.ok(receivedChunks.length > 0)
@@ -419,7 +429,7 @@ test.skip('should auto-resume interrupted streaming request', async (t) => {
   assert.equal(requestCount, 2)
 })
 
-test.skip('should handle resume with fresh request when no stored events', async (t) => {
+test('should handle resume with fresh request when no stored events', async (t) => {
   const fastify = Fastify()
   t.after(() => {
     return fastify.close()
