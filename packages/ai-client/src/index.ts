@@ -5,6 +5,8 @@ export function buildClient (options: ClientOptions): Client {
   return new Client(options)
 }
 
+export { consoleLogger, nullLogger } from './console-logger.ts'
+
 export type {
   ClientOptions,
   AskOptions,
