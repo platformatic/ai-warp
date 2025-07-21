@@ -1,5 +1,6 @@
 import { Pool } from 'undici'
-import { ReadableStream, type UnderlyingByteSource } from 'node:stream/web'
+import { Readable, Transform, pipeline } from 'node:stream'
+import { promisify } from 'node:util'
 import type { AiProvider, AiResponseResult } from '../lib/ai.ts'
 import { type ProviderClient, type ProviderClientContext, type ProviderClientOptions, type ProviderOptions, type ProviderRequestOptions, type ProviderResponse, type StreamChunkCallback } from '../lib/provider.ts'
 import { createEventId, encodeEvent, parseEventStream, type AiStreamEvent } from '../lib/event.ts'
@@ -131,7 +132,7 @@ function createGeminiClient (options: GeminiClientOptions): ProviderClient {
       return responseData as GeminiResponse
     },
 
-    async stream (client: any, params: { model: string; request: GeminiRequest; stream: boolean }, context: ProviderClientContext): Promise<ReadableStream> {
+    async stream (client: any, params: { model: string; request: GeminiRequest; stream: boolean }, context: ProviderClientContext): Promise<Readable> {
       const { model, request } = params
       const path = `/v1beta/models/${model}:streamGenerateContent?alt=sse`
 
@@ -144,7 +145,7 @@ function createGeminiClient (options: GeminiClientOptions): ProviderClient {
 
       await checkResponse(response, context, options.providerName, true)
 
-      return response.body as ReadableStream
+      return response.body as Readable
     }
   }
 }
@@ -201,7 +202,18 @@ export class GeminiProvider extends BaseProvider {
 
     if (options.stream) {
       const response = await this.client.stream(this.api, { model, request, stream: true }, this.context)
-      return new ReadableStream(new GeminiByteSource(this.providerName, response, options.onStreamChunk))
+      const transformer = new GeminiStreamTransformer(this.providerName, options.onStreamChunk)
+
+      // Use pipeline to connect the response stream to the transformer
+      const pipelineAsync = promisify(pipeline)
+
+      // Create the pipeline but don't await it - return the transformer stream
+      pipelineAsync(response, transformer).catch((err) => {
+        // Handle pipeline errors by destroying the transformer
+        transformer.destroy(err)
+      })
+
+      return transformer
     }
 
     this.logger.debug({ request }, `${this.providerName} request`)
@@ -227,20 +239,18 @@ export class GeminiProvider extends BaseProvider {
   }
 }
 
-class GeminiByteSource implements UnderlyingByteSource {
-  type: 'bytes' = 'bytes'
+class GeminiStreamTransformer extends Transform {
   providerName: string
-  readable: ReadableStream
   chunkCallback?: StreamChunkCallback
 
-  constructor (providerName: string, readable: ReadableStream, chunkCallback?: StreamChunkCallback) {
+  constructor (providerName: string, chunkCallback?: StreamChunkCallback) {
+    super()
     this.providerName = providerName
-    this.readable = readable
     this.chunkCallback = chunkCallback
   }
 
-  async start (controller: ReadableByteStreamController) {
-    for await (const chunk of this.readable) {
+  async _transform (chunk: Buffer, _encoding: string, callback: (error?: Error | null, data?: any) => void) {
+    try {
       const events = parseEventStream(chunk.toString('utf8'))
       for (const event of events) {
         if (event.event === 'error') {
@@ -251,16 +261,14 @@ class GeminiByteSource implements UnderlyingByteSource {
             event: 'error',
             data: error
           }
-          controller.enqueue(encodeEvent(eventData))
-          controller.close()
-
-          return
+          this.push(encodeEvent(eventData))
+          return callback()
         }
 
         // data only events
         if (!event.event && event.data) {
           if (event.data === '[DONE]') {
-            return
+            return callback()
           }
 
           const data = JSON.parse(event.data)
@@ -275,7 +283,7 @@ class GeminiByteSource implements UnderlyingByteSource {
             event: 'content',
             data: { response }
           }
-          controller.enqueue(encodeEvent(eventData))
+          this.push(encodeEvent(eventData))
 
           const finish = data.candidates?.[0]?.finishReason
           if (finish) {
@@ -284,12 +292,14 @@ class GeminiByteSource implements UnderlyingByteSource {
               event: 'end',
               data: { response: mapResponseResult(finish) }
             }
-            controller.enqueue(encodeEvent(eventData))
-            controller.close()
-            return
+            this.push(encodeEvent(eventData))
+            return callback()
           }
         }
       }
+      callback()
+    } catch (error) {
+      callback(error instanceof Error ? error : new Error(String(error)))
     }
   }
 }
