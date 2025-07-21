@@ -243,7 +243,7 @@ class GeminiStreamTransformer extends Readable {
     this.sourceStream.on('error', this.handleError.bind(this))
   }
 
-  private async handleData(chunk: Buffer) {
+  private async handleData (chunk: Buffer) {
     const events = parseEventStream(chunk.toString('utf8'))
     for (const event of events) {
       if (event.event === 'error') {
@@ -292,15 +292,15 @@ class GeminiStreamTransformer extends Readable {
     }
   }
 
-  private handleEnd() {
+  private handleEnd () {
     this.push(null)
   }
 
-  private handleError(error: Error) {
+  private handleError (error: Error) {
     this.destroy(error)
   }
 
-  _read() {
+  _read () {
     // No-op: data is pushed from source stream events
   }
 }

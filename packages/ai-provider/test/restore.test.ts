@@ -234,26 +234,26 @@ test('should restore model after stream timeout error when enough time has passe
     if (requestCount === 1) {
       await wait(200) // Simulate timeout
       const readable = new Readable({
-        read() {}
+        read () {}
       })
-      
+
       setImmediate(() => {
         readable.push(Buffer.from('{"choices": [{"delta": {"content": "chunk1"}}]}'))
         readable.push(null) // End stream
       })
-      
+
       return readable
     }
-    
+
     const readable = new Readable({
-      read() {}
+      read () {}
     })
-    
+
     setImmediate(() => {
       readable.push(Buffer.from('{"choices": [{"delta": {"content": "restored"}}]}'))
       readable.push(null) // End stream
     })
-    
+
     return readable
   }
 
@@ -308,7 +308,7 @@ test('should restore model after stream timeout error when enough time has passe
     }
   })
 
-  assert.ok(response instanceof Readable)
+  assert.ok(typeof response.pipe === 'function')
   assert.equal(requestCount, 2)
 })
 

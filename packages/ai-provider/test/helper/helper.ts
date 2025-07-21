@@ -15,7 +15,7 @@ export function mockOpenAiStream (chunks: any[]) {
   let chunkIndex = 0
 
   const readable = new Readable({
-    read() {
+    read () {
       // No-op: data is pushed from async iteration
     }
   })

@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { setTimeout as wait } from 'node:timers/promises'
 import { Readable, PassThrough } from 'node:stream'
+import cloneable from 'cloneable-readable'
 import type { Logger } from 'pino'
 import type { FastifyError } from '@fastify/error'
 
@@ -578,23 +579,10 @@ export class Ai {
 
         // @ts-ignore
         if (typeof providerResponse.pipe === 'function' || providerResponse instanceof Readable) {
-          // Create two separate streams using PassThrough
-          const responseStream = new PassThrough()
-          const historyStream = new PassThrough()
-          
-          // Pipe the original stream to both PassThrough streams
-          ;(providerResponse as Readable).on('data', (chunk) => {
-            responseStream.push(chunk)
-            historyStream.push(chunk)
-          })
-          ;(providerResponse as Readable).on('end', () => {
-            responseStream.push(null)
-            historyStream.push(null)
-          })
-          ;(providerResponse as Readable).on('error', (err) => {
-            responseStream.destroy(err)
-            historyStream.destroy(err)
-          })
+          // Clone the stream using cloneable-readable for history processing
+          const cloneableStream = cloneable(providerResponse as Readable)
+          const responseStream = cloneableStream // Return the original
+          const historyStream = cloneableStream.clone() // Create one clone for history
 
           // Process the cloned stream in background to accumulate response for history
           processStream(historyStream)

@@ -127,7 +127,7 @@ test('should be able to perform a prompt with stream', async () => {
     }
   }) as Readable
 
-  assert.ok(response instanceof Readable)
+  assert.ok(typeof response.pipe === 'function')
   // @ts-ignore
   assert.deepEqual(client.stream.mock.calls[0].arguments[1], {
     model: 'gpt-4o-mini',
