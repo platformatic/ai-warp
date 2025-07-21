@@ -289,6 +289,88 @@ const nextResponse = await client.ask({
 });
 ```
 
+## Stream Resume Functionality
+
+The client includes automatic stream resume functionality for fault-tolerant streaming. When a streaming connection is interrupted, you can seamlessly resume from where you left off.
+
+### Automatic Resume (Default Behavior)
+
+By default, streaming requests with a `sessionId` will automatically resume from the last event:
+
+```typescript
+// Start a streaming conversation
+const response1 = await client.ask({
+  prompt: "Write a long story about space exploration",
+  stream: true,
+});
+
+const sessionId = response1.sessionId;
+
+// Consume part of the stream, then connection is interrupted
+for await (const message of response1.stream) {
+  if (message.type === "content") {
+    console.log(message.content);
+    // Connection interrupted here...
+    break;
+  }
+}
+
+// Resume the stream automatically - no configuration needed
+const response2 = await client.ask({
+  prompt: "Continue the story", // This will be ignored for resume
+  sessionId: sessionId,         // Triggers automatic resume
+  stream: true,                 // + streaming = auto-resume
+  // resume: true               // Default behavior
+});
+
+// Continue receiving the remaining content
+for await (const message of response2.stream) {
+  if (message.type === "content") {
+    console.log(message.content); // Continues from where it left off
+  } else if (message.type === "done") {
+    console.log("Story completed!");
+  }
+}
+```
+
+### Manual Resume Control
+
+You can explicitly control resume behavior:
+
+```typescript
+// Disable automatic resume for a fresh response
+const freshResponse = await client.ask({
+  prompt: "Start a new conversation",
+  sessionId: existingSessionId,
+  stream: true,
+  resume: false  // Force new request instead of resume
+});
+
+// Enable resume explicitly (same as default)
+const resumeResponse = await client.ask({
+  prompt: "Continue previous conversation",
+  sessionId: existingSessionId,
+  stream: true,
+  resume: true   // Explicit resume (default behavior)
+});
+```
+
+### Resume Benefits
+
+- **Fault Tolerance**: Automatically recover from network interruptions
+- **Bandwidth Efficiency**: Only streams remaining content, not the full conversation
+- **Zero Configuration**: Works automatically with sessionId + streaming
+- **Graceful Fallback**: If resume fails, automatically falls back to normal requests
+- **No API Complexity**: Resume is handled transparently under the hood
+
+### Resume Behavior Notes
+
+- **Automatic Detection**: Resume happens when `sessionId` + `stream: true` + `resume: true` (default)
+- **Provider Efficiency**: Resume streams don't trigger new AI provider calls
+- **Event-Based**: Resume streams from the last event in the session history
+- **Transparent Operation**: The resume process is completely invisible to your application code
+- **Error Handling**: Resume failures gracefully continue with normal provider requests
+
 ## Logging
 
 The client supports custom logging through the `logger` option. By default, the client uses a silent logger that produces no output.
@@ -430,6 +512,7 @@ Makes a request to the AI service, returning either a stream or a complete respo
 - `models` (array, optional): Array of models in either string format `"provider:model"` or object format `{ provider: string, model: string }`. Models must match the ones defined in the `ai-warp` service.
 - `history` (array, optional): Previous conversation history. Note that `history` and `sessionId` cannot be provided at the same time.
 - `stream` (boolean, optional): Enable streaming (default: true)
+- `resume` (boolean, optional): Enable automatic stream resume when using `sessionId` + `stream: true` (default: true). When enabled, the client will automatically resume from the last event in the session if available. Set to `false` to force a new request instead of resuming.
 
 #### Returns
 

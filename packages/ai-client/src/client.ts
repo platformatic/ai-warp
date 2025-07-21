@@ -29,9 +29,18 @@ export class Client {
   async ask (options: AskOptions & { stream?: false }): Promise<AskResponseContent>
   async ask (options: AskOptions): Promise<AskResponseStream | AskResponseContent> {
     const isStreaming = options.stream !== false
+    const shouldResume = options.resume !== false // Default to true
+
     const endpoint = this.url + (isStreaming ? this.streamPath : this.promptPath)
 
-    this.logger.debug('Making AI request', { endpoint, prompt: options.prompt, sessionId: options.sessionId, models: options.models, stream: isStreaming })
+    this.logger.debug('Making AI request', { 
+      endpoint, 
+      prompt: options.prompt, 
+      sessionId: options.sessionId, 
+      models: options.models, 
+      stream: isStreaming,
+      resume: shouldResume
+    })
 
     try {
       const response = await fetch(endpoint, {
@@ -47,7 +56,8 @@ export class Client {
           temperature: options.temperature,
           models: options.models,
           history: options.history,
-          stream: isStreaming
+          stream: isStreaming,
+          resume: shouldResume
         }),
         signal: AbortSignal.timeout(this.timeout)
       })
