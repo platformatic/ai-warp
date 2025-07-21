@@ -149,7 +149,7 @@ test('Response type structure compatibility', () => {
   ok(mockContentResponse.result, 'Content response should have result')
   ok(mockContentResponse.sessionId, 'Content response should have sessionId')
 
-  const mockStream = new Readable({ read() {} })
+  const mockStream = new Readable({ read () {} })
   const mockStreamResponse: ProviderAiStreamResponse = mockStream as ProviderAiStreamResponse
   mockStreamResponse.sessionId = 'session-123'
 
