@@ -157,8 +157,89 @@ Native support for major AI providers with optimized integrations:
 - **Google Gemini**: Support for Gemini Pro and Gemini Flash models
 - **Extensible Architecture**: Easy to add new providers through the plugin system
 
---- 
-
 ## 🏗️ Architecture Overview
 
+### Distributed Session Storage with Valkey
+
+AI Warp's Valkey integration provides enterprise-grade session management through a sophisticated distributed storage architecture. Sessions are immediately available across all service instances, enabling true horizontal scaling:
+
+```mermaid
+graph TB
+    LB[Load Balancer] --> A1
+    LB --> A2
+    
+    subgraph "AI Warp Service Instance 1"
+        A1[Client Request] --> B1[AI Provider]
+        B1 --> C1[History Manager]
+        C1 --> D1[ValkeyStorage]
+    end
+    
+    subgraph "AI Warp Service Instance 2"
+        A2[Client Request] --> B2[AI Provider]
+        B2 --> C2[History Manager]
+        C2 --> D2[ValkeyStorage]
+    end
+    
+    subgraph "LLM Providers"
+        OpenAI[OpenAI]
+        Gemini[Gemini]
+        DeepSeek[DeepSeek]
+        Others[(...)]
+    end
+    
+    B1 --> OpenAI
+    B1 --> Gemini
+    B1 --> DeepSeek
+    B1 --> Others
+    B2 --> OpenAI
+    B2 --> Gemini
+    B2 --> DeepSeek
+    B2 --> Others
+    
+    V1[(Valkey Database)]
+    
+    D1 --> V1
+    D2 --> V1
+    
+    subgraph "Session Data"
+        S1[Session ID: sess_abc123]
+        S2[List: conversation_history]
+        S3["{prompt: 'Hello', response: 'Hi there!'}"]
+        S4["{prompt: 'How are you?', response: 'I'm doing well'}"]
+    end
+    
+    V1 -.-> S1
+    S1 --> S2
+    S2 --> S3
+    S2 --> S4
+```
+
+**Key Architecture Features:**
+- **Cross-Instance Continuity**: Users can continue conversations on any instance
+- **Automatic Expiration**: Configurable TTL prevents memory bloat
+- **JSON Serialization**: Efficient storage of conversation history
+- **Connection Pooling**: Optimized connection management with automatic reconnection
+
 ![](./docs/architecture-overview.png)
+
+## 🛣️ What's Next?
+
+Our roadmap includes:
+
+- **More Providers**: Anthropic Claude, Cohere, and custom model support
+- **Advanced Routing**: Cost-based and performance-based model selection
+- **Analytics Dashboard**: Real-time monitoring and usage analytics
+- **Plugin Ecosystem**: Custom providers and middleware support
+
+## 🤝 Community & Support
+
+- 📖 [Documentation](https://github.com/platformatic/ai-warp)
+- 💬 [Join our Discord Community](https://discord.gg/platformatic)
+- 🐛 [Report Issues](https://github.com/platformatic/ai-warp/issues)
+- 🐦 [Follow us on Twitter](https://twitter.com/platformatic)
+
+**Built with ❤️ by the Platformatic Team**
+
+## License
+
+Apache-2.0
