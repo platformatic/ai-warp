@@ -192,20 +192,46 @@ const response = await client.ask({
 
 This architecture enables true horizontal scaling - add more AI Warp instances without losing conversation state, and users can seamlessly continue conversations regardless of which instance handles their request.
 
-### 🌊 **Real-Time Streaming**
+### 🌊 **Real-Time Streaming with Automatic Resume**
 
-Deliver instant, responsive AI experiences with Server-Sent Events (SSE) streaming:
+Deliver instant, responsive AI experiences with Server-Sent Events (SSE) streaming, now with automatic resume capability for fault-tolerant streaming:
 
 ```typescript
 const client = buildClient({ url: 'http://localhost:3042' })
 
-for await (const chunk of client.ask({ 
-  prompt: 'Write a story about AI', 
+// Start streaming with session management
+const response1 = await client.ask({ 
+  prompt: 'Write a long story about AI', 
   stream: true 
-})) {
+})
+
+const sessionId = response1.sessionId
+
+// Process stream until connection interruption
+for await (const chunk of response1.stream) {
   console.log(chunk.content) // Real-time response chunks
+  // Connection interrupted here...
+  break
+}
+
+// Automatically resume from where you left off
+const response2 = await client.ask({ 
+  prompt: 'Continue the story',  // Ignored during resume
+  sessionId: sessionId,          // Triggers automatic resume
+  stream: true 
+})
+
+// Continue receiving remaining content seamlessly
+for await (const chunk of response2.stream) {
+  console.log(chunk.content) // Continues exactly where it left off
 }
 ```
+
+**Stream Resume Benefits:**
+- **Zero Configuration**: Resume happens automatically with `sessionId` + streaming
+- **Fault Tolerance**: Recover from network interruptions, timeouts, and connection drops  
+- **Bandwidth Efficiency**: Only streams remaining content, not the full response
+- **Graceful Fallback**: Automatically falls back to normal requests if resume fails
 
 ## Built for Production from Day One
 
