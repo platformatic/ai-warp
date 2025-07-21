@@ -41,38 +41,29 @@ test('should include UUID ids in streaming events', async () => {
     }
   })
 
-  assert.ok(response instanceof ReadableStream)
+  // Check if it's a stream-like object (could be a Readable or cloneable stream)
+  assert.ok(typeof response.pipe === 'function', 'Response should be a stream-like object')
 
-  const reader = response.getReader()
-  const decoder = new TextDecoder()
   const events: Array<{ event?: string, data?: string, id?: string }> = []
+  let currentEvent: { event?: string, data?: string, id?: string } = {}
 
-  try {
-    while (true) {
-      const { done, value } = await reader.read()
-      if (done) break
+  for await (const chunk of response) {
+    const chunkString = chunk.toString('utf8')
+    const lines = chunkString.split('\n')
 
-      const chunk = decoder.decode(value)
-      const lines = chunk.split('\n')
-
-      let currentEvent: { event?: string, data?: string, id?: string } = {}
-
-      for (const line of lines) {
-        if (line.startsWith('event: ')) {
-          currentEvent.event = line.substring(7).trim()
-        } else if (line.startsWith('data: ')) {
-          currentEvent.data = line.substring(6).trim()
-        } else if (line.startsWith('id: ')) {
-          currentEvent.id = line.substring(4).trim()
-        } else if (line === '' && (currentEvent.event || currentEvent.data)) {
-          // Complete event found
-          events.push({ ...currentEvent })
-          currentEvent = {}
-        }
+    for (const line of lines) {
+      if (line.startsWith('event: ')) {
+        currentEvent.event = line.substring(7).trim()
+      } else if (line.startsWith('data: ')) {
+        currentEvent.data = line.substring(6).trim()
+      } else if (line.startsWith('id: ')) {
+        currentEvent.id = line.substring(4).trim()
+      } else if (line === '' && (currentEvent.event || currentEvent.data)) {
+        // Complete event found
+        events.push({ ...currentEvent })
+        currentEvent = {}
       }
     }
-  } finally {
-    reader.releaseLock()
   }
 
   // Should have content events and end event
@@ -149,38 +140,29 @@ test('should include UUID ids in streaming events with valkey storage', async ()
     }
   })
 
-  assert.ok(response instanceof ReadableStream)
+  // Check if it's a stream-like object (could be a Readable or cloneable stream)
+  assert.ok(typeof response.pipe === 'function', 'Response should be a stream-like object')
 
-  const reader = response.getReader()
-  const decoder = new TextDecoder()
   const events: Array<{ event?: string, data?: string, id?: string }> = []
+  let currentEvent: { event?: string, data?: string, id?: string } = {}
 
-  try {
-    while (true) {
-      const { done, value } = await reader.read()
-      if (done) break
+  for await (const chunk of response) {
+    const chunkString = chunk.toString('utf8')
+    const lines = chunkString.split('\n')
 
-      const chunk = decoder.decode(value)
-      const lines = chunk.split('\n')
-
-      let currentEvent: { event?: string, data?: string, id?: string } = {}
-
-      for (const line of lines) {
-        if (line.startsWith('event: ')) {
-          currentEvent.event = line.substring(7).trim()
-        } else if (line.startsWith('data: ')) {
-          currentEvent.data = line.substring(6).trim()
-        } else if (line.startsWith('id: ')) {
-          currentEvent.id = line.substring(4).trim()
-        } else if (line === '' && (currentEvent.event || currentEvent.data)) {
-          // Complete event found
-          events.push({ ...currentEvent })
-          currentEvent = {}
-        }
+    for (const line of lines) {
+      if (line.startsWith('event: ')) {
+        currentEvent.event = line.substring(7).trim()
+      } else if (line.startsWith('data: ')) {
+        currentEvent.data = line.substring(6).trim()
+      } else if (line.startsWith('id: ')) {
+        currentEvent.id = line.substring(4).trim()
+      } else if (line === '' && (currentEvent.event || currentEvent.data)) {
+        // Complete event found
+        events.push({ ...currentEvent })
+        currentEvent = {}
       }
     }
-  } finally {
-    reader.releaseLock()
   }
 
   // Should have content events and end event

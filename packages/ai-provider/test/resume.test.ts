@@ -43,17 +43,13 @@ test('should resume stream from event ID', async () => {
     options: { stream: true }
   })
 
-  assert.ok(originalResponse instanceof ReadableStream)
+  assert.ok(typeof originalResponse.pipe === 'function', 'Response should be a stream-like object')
   const originalSessionId = (originalResponse as any).sessionId
   assert.ok(originalSessionId)
 
-  // Consume the original stream
-  const reader = originalResponse.getReader()
   const chunks: Uint8Array[] = []
-  while (true) {
-    const { done, value } = await reader.read()
-    if (done) break
-    if (value) chunks.push(value)
+  for await (const chunk of originalResponse) {
+    chunks.push(chunk)
   }
 
   // Wait a bit for background processing to complete
@@ -77,16 +73,13 @@ test('should resume stream from event ID', async () => {
     }
   })
 
-  assert.ok(resumedResponse instanceof ReadableStream)
+  assert.ok(typeof resumedResponse.pipe === 'function', 'Response should be a stream-like object')
   assert.equal((resumedResponse as any).sessionId, originalSessionId)
 
   // Consume the resumed stream
-  const resumeReader = resumedResponse.getReader()
   const resumeChunks: Uint8Array[] = []
-  while (true) {
-    const { done, value } = await resumeReader.read()
-    if (done) break
-    if (value) resumeChunks.push(value)
+  for await (const chunk of resumedResponse) {
+    resumeChunks.push(chunk)
   }
 
   // Should have received some chunks from the resume
@@ -132,14 +125,12 @@ test('should make normal request when resume is disabled', async () => {
     options: { stream: true }
   })
 
-  assert.ok(response1 instanceof ReadableStream)
+  assert.ok(typeof response1.pipe === 'function', 'Response should be a stream-like object')
   const sessionId = (response1 as any).sessionId
 
   // Consume first stream
-  const reader1 = response1.getReader()
-  while (true) {
-    const { done } = await reader1.read()
-    if (done) break
+  for await (const _chunk of response1) {
+    // Just consume the stream
   }
 
   // Wait for background processing
@@ -156,7 +147,7 @@ test('should make normal request when resume is disabled', async () => {
     resume: false // Explicitly disable resume
   })
 
-  assert.ok(response2 instanceof ReadableStream)
+  assert.ok(typeof response2.pipe === 'function', 'Response should be a stream-like object')
   assert.equal((response2 as any).sessionId, sessionId)
 
   // Should have made 2 provider calls since resume was disabled
@@ -202,21 +193,14 @@ test('should resume from storage without calling provider API', async () => {
     options: { stream: true }
   })
 
-  assert.ok(originalResponse instanceof ReadableStream)
+  assert.ok(typeof originalResponse.pipe === 'function', 'Response should be a stream-like object')
   const sessionId = (originalResponse as any).sessionId
   assert.ok(sessionId)
 
   // Consume the original stream completely
-  const reader = originalResponse.getReader()
   const allChunks: Uint8Array[] = []
-  try {
-    while (true) {
-      const { done, value } = await reader.read()
-      if (done) break
-      if (value) allChunks.push(value)
-    }
-  } finally {
-    reader.releaseLock()
+  for await (const chunk of originalResponse) {
+    allChunks.push(chunk)
   }
 
   // Verify we have content stored
@@ -240,29 +224,21 @@ test('should resume from storage without calling provider API', async () => {
     }
   })
 
-  assert.ok(resumeResponse instanceof ReadableStream)
+  assert.ok(typeof resumeResponse.pipe === 'function', 'Response should be a stream-like object')
   assert.equal((resumeResponse as any).sessionId, sessionId)
 
   // Verify API was NOT called again (still only 1 call)
   assert.equal(apiCallCount, 1, 'Should NOT call API for resume - should use storage')
 
   // Consume the resume stream
-  const resumeReader = resumeResponse.getReader()
   const resumeChunks: Uint8Array[] = []
-  try {
-    while (true) {
-      const { done, value } = await resumeReader.read()
-      if (done) break
-      if (value) resumeChunks.push(value)
-    }
-  } finally {
-    resumeReader.releaseLock()
+  for await (const chunk of resumeResponse) {
+    resumeChunks.push(chunk)
   }
 
   // Verify we received data from storage
   assert.ok(resumeChunks.length > 0, 'Should receive events from storage')
 
-  // Decode and verify content matches stored data
   const resumeContent = Buffer.concat(resumeChunks).toString()
   assert.ok(resumeContent.includes('Hello'), 'Should contain original content from storage')
   assert.ok(resumeContent.includes('world'), 'Should contain original content from storage')
@@ -311,22 +287,15 @@ test('should call API when resume fails and no stored events exist', async () =>
     }
   })
 
-  assert.ok(response instanceof ReadableStream)
+  assert.ok(typeof response.pipe === 'function', 'Response should be a stream-like object')
 
   // Should have called API since no stored events exist
   assert.equal(apiCallCount, 1, 'Should call API when no stored events exist')
 
   // Consume response to verify it's a fresh response
-  const reader = response.getReader()
   const chunks: Uint8Array[] = []
-  try {
-    while (true) {
-      const { done, value } = await reader.read()
-      if (done) break
-      if (value) chunks.push(value)
-    }
-  } finally {
-    reader.releaseLock()
+  for await (const chunk of response) {
+    chunks.push(chunk)
   }
 
   const content = Buffer.concat(chunks).toString()
@@ -374,14 +343,8 @@ test('should handle explicit resume disabled parameter', async () => {
   })
 
   const sessionId = (originalResponse as any).sessionId
-  const reader = (originalResponse as ReadableStream).getReader()
-  try {
-    while (true) {
-      const { done } = await reader.read()
-      if (done) break
-    }
-  } finally {
-    reader.releaseLock()
+  for await (const _chunk of originalResponse) {
+    // Just consume the stream
   }
 
   assert.equal(apiCallCount, 1, 'Should have made first API call')
@@ -400,7 +363,7 @@ test('should handle explicit resume disabled parameter', async () => {
     resume: false // Explicitly disable resume
   })
 
-  assert.ok(response instanceof ReadableStream)
+  assert.ok(typeof response.pipe === 'function', 'Response should be a stream-like object')
 
   // Should have made second API call since resume was disabled
   assert.equal(apiCallCount, 2, 'Should call API again when resume is disabled')
