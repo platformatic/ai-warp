@@ -1,5 +1,6 @@
 import { mock, test } from 'node:test'
 import assert from 'node:assert'
+import { Readable } from 'node:stream'
 import { setTimeout as wait } from 'node:timers/promises'
 import { Ai, type StreamResponse, type ContentResponse } from '../src/lib/ai.ts'
 import pino from 'pino'
@@ -307,13 +308,17 @@ test('should work with streaming responses and rate limits', async () => {
   const client = {
     ...createDummyClient(),
     stream: async () => {
-      return new ReadableStream({
-        start (controller) {
-          controller.enqueue(new TextEncoder().encode('{"choices": [{"delta": {"content": "chunk1"}}]}'))
-          controller.enqueue(new TextEncoder().encode('{"choices": [{"delta": {"content": "chunk2"}}]}'))
-          controller.close()
-        }
+      const readable = new Readable({
+        read () {}
       })
+
+      setImmediate(() => {
+        readable.push(Buffer.from('{"choices": [{"delta": {"content": "chunk1"}}]}'))
+        readable.push(Buffer.from('{"choices": [{"delta": {"content": "chunk2"}}]}'))
+        readable.push(null) // End stream
+      })
+
+      return readable
     }
   }
 
@@ -347,7 +352,7 @@ test('should work with streaming responses and rate limits', async () => {
     }
   })
 
-  assert.ok(response1 instanceof ReadableStream)
+  assert.ok(typeof response1.pipe === 'function')
 
   // Second streaming request should be blocked
   await assert.rejects(
@@ -414,12 +419,16 @@ test('should timeout streaming request after requestTimeout', async () => {
     stream: async () => {
       // Simulate a slow initial response
       await wait(200)
-      return new ReadableStream({
-        start (controller) {
-          controller.enqueue(new TextEncoder().encode('{"choices": [{"delta": {"content": "chunk1"}}]}'))
-          controller.close()
-        }
+      const readable = new Readable({
+        read () {}
       })
+
+      setImmediate(() => {
+        readable.push(Buffer.from('{"choices": [{"delta": {"content": "chunk1"}}]}'))
+        readable.push(null) // End stream
+      })
+
+      return readable
     }
   }
 
@@ -457,21 +466,30 @@ test('should timeout streaming request between chunks', async () => {
   const client = {
     ...createDummyClient(),
     stream: async () => {
-      // Create an async iterable that simulates delay between chunks
-      const asyncIterable = {
-        async * [Symbol.asyncIterator] () {
+      // Create a Node.js Readable stream that simulates delay between chunks
+      const readable = new Readable({
+        read () {}
+      })
+
+      const pushChunks = async () => {
+        try {
           // Send first chunk immediately
-          yield Buffer.from('data: {"choices": [{"delta": {"content": "chunk1"}}]}\n\n')
+          readable.push(Buffer.from('data: {"choices": [{"delta": {"content": "chunk1"}}]}\n\n'))
 
           // Wait longer than timeout before second chunk
           await new Promise(resolve => setTimeout(resolve, 200))
 
           // This should never be reached due to timeout
-          yield Buffer.from('data: {"choices": [{"delta": {"content": "chunk2"}}]}\n\n')
-          yield Buffer.from('data: [DONE]\n\n')
+          readable.push(Buffer.from('data: {"choices": [{"delta": {"content": "chunk2"}}]}\n\n'))
+          readable.push(Buffer.from('data: [DONE]\n\n'))
+          readable.push(null)
+        } catch (error) {
+          readable.destroy(error)
         }
       }
-      return asyncIterable
+
+      setImmediate(() => pushChunks())
+      return readable
     }
   }
 
@@ -501,19 +519,32 @@ test('should timeout streaming request between chunks', async () => {
     }
   })
 
-  assert.ok(response instanceof ReadableStream)
+  assert.ok(typeof response.pipe === 'function')
 
-  const reader = response.getReader()
+  let receivedFirstChunk = false
+  let errorOccurred = false
 
-  // Should get first chunk
-  const { value: chunk1 } = await reader.read()
-  assert.ok(chunk1)
+  return new Promise((resolve, reject) => {
+    response.on('data', (chunk: Buffer) => {
+      if (!receivedFirstChunk) {
+        receivedFirstChunk = true
+        assert.ok(chunk)
+      }
+    })
 
-  // Should timeout waiting for second chunk
-  await assert.rejects(
-    reader.read(),
-    /PROVIDER_REQUEST_STREAM_TIMEOUT_ERROR/
-  )
+    response.on('error', (error) => {
+      errorOccurred = true
+      // Should timeout waiting for second chunk
+      assert.match(error.message, /Stream timeout after.*ms of inactivity/)
+      resolve(undefined)
+    })
+
+    response.on('end', () => {
+      if (!errorOccurred) {
+        reject(new Error('Expected timeout error but stream ended normally'))
+      }
+    })
+  })
 })
 
 test('should not timeout with fast responses', async () => {
@@ -692,33 +723,45 @@ test('should work with streaming responses and history expiration', async () => 
     options: { stream: true }
   })
 
-  assert.ok(response instanceof ReadableStream)
+  assert.ok(typeof response.pipe === 'function')
   const sessionId = (response as StreamResponse).sessionId
   assert.ok(sessionId)
 
   // Consume the stream
-  const reader = response.getReader()
-  const chunks: Uint8Array[] = []
-  while (true) {
-    const { done, value } = await reader.read()
-    if (done) break
-    if (value) chunks.push(value)
-  }
+  const chunks: Buffer[] = []
 
-  // Wait a bit for the background history processing to complete
-  await wait(50)
+  return new Promise((resolve, reject) => {
+    response.on('data', (chunk: Buffer) => {
+      chunks.push(chunk)
+    })
 
-  // Check that history was stored
-  let history = await ai.history.range(sessionId)
-  assert.equal(history.length, 1)
-  assert.equal(history[0].prompt, 'Streaming request')
+    response.on('end', async () => {
+      try {
+        // Wait a bit for the background history processing to complete
+        await wait(50)
 
-  // Wait for expiration
-  await wait(100)
+        // Check that history was stored
+        let history = await ai.history.range(sessionId)
+        assert.equal(history.length, 1)
+        assert.equal(history[0].prompt, 'Streaming request')
 
-  // History should be expired
-  history = await ai.history.range(sessionId)
-  assert.equal(history.length, 0)
+        // Wait for expiration
+        await wait(100)
+
+        // History should be expired
+        history = await ai.history.range(sessionId)
+        assert.equal(history.length, 0)
+
+        resolve(undefined)
+      } catch (error) {
+        reject(error)
+      }
+    })
+
+    response.on('error', (error) => {
+      reject(error)
+    })
+  })
 })
 
 // Max tokens tests
@@ -806,7 +849,7 @@ test('should handle max tokens limit in streaming response', async () => {
     }
   })
 
-  assert.ok(response instanceof ReadableStream)
+  assert.ok(typeof response.pipe === 'function')
 
   const { content, end } = await consumeStream(response)
 
@@ -896,7 +939,7 @@ test('should handle complete streaming response when max tokens not reached', as
     }
   })
 
-  assert.ok(response instanceof ReadableStream)
+  assert.ok(typeof response.pipe === 'function')
 
   const { content, end } = await consumeStream(response)
 

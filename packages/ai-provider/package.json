@@ -4,7 +4,6 @@
   "version": "0.7.0",
   "description": "The Platformatic AI provider interface",
   "license": "Apache-2.0",
-
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "exports": {
@@ -18,7 +17,6 @@
     "dist",
     "README.md"
   ],
-
   "scripts": {
     "test": "node --test --experimental-strip-types test/*.test.ts",
     "test:coverage": "c8 -c test/config/c8-local.json node --test --env-file=test/config/env --no-warnings test/**.test.ts",
@@ -33,6 +31,7 @@
   "dependencies": {
     "@fastify/deepmerge": "^3.1.0",
     "@fastify/error": "^4.2.0",
+    "cloneable-readable": "^3.0.0",
     "fast-json-stringify": "^6.0.1",
     "iovalkey": "^0.3.3",
     "openai": "^5.7.0",

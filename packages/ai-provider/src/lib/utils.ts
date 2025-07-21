@@ -1,42 +1,32 @@
+import { Readable } from 'node:stream'
 import { InvalidTimeWindowNumberInputError, InvalidTimeWindowStringInputError, InvalidTimeWindowUnitError } from './errors.ts'
 import { decodeEventStream } from './event.ts'
 
 /**
  * Process a cloned stream to accumulate the complete response
  */
-export async function processStream (stream: ReadableStream): Promise<string | undefined> {
-  const reader = stream.getReader()
+export async function processStream (stream: Readable): Promise<string | undefined> {
   let response = ''
 
-  try {
-    while (true) {
-      const { done, value } = await reader.read()
+  for await (const chunk of stream) {
+    // Decode the chunk from Buffer to string
+    const chunkString = chunk.toString('utf8')
 
-      if (done) {
-        break
+    // Parse the event stream format to extract events
+    const events = decodeEventStream(chunkString)
+
+    // Accumulate content from all content events
+    for (const event of events) {
+      if (event.event === 'content') {
+        response += event.data.response
       }
-
-      // Decode the chunk from Uint8Array to string
-      const chunkString = new TextDecoder().decode(value)
-
-      // Parse the event stream format to extract events
-      const events = decodeEventStream(chunkString)
-
-      // Accumulate content from all content events
-      for (const event of events) {
-        if (event.event === 'content') {
-          response += event.data.response
-        }
-        if (event.event === 'error') {
-          return
-        }
+      if (event.event === 'error') {
+        return undefined
       }
     }
-
-    return response
-  } finally {
-    reader.releaseLock()
   }
+
+  return response
 }
 
 export function parseTimeWindow (timeWindow: number | string, key?: string): number {
