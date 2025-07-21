@@ -598,8 +598,8 @@ export class Ai {
             .catch(() => { });
 
           // Attach sessionId to the stream for the user
-          (responseStream as AiStreamResponse).sessionId = sessionId
-          return responseStream as AiStreamResponse
+          (responseStream as any).sessionId = sessionId
+          return responseStream as unknown as AiStreamResponse
         }
 
         const contentResponse: AiContentResponse = response as AiContentResponse

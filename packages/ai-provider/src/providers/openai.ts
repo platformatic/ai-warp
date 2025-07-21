@@ -171,7 +171,7 @@ class OpenAiStreamTransformer extends Transform {
       }
       callback()
     } catch (error) {
-      callback(error)
+      callback(error instanceof Error ? error : new Error(String(error)))
     }
   }
 }

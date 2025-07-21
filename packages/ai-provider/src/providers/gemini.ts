@@ -1,5 +1,5 @@
 import { Pool } from 'undici'
-import { Transform, pipeline } from 'node:stream'
+import { Readable, Transform, pipeline } from 'node:stream'
 import { promisify } from 'node:util'
 import type { AiProvider, AiResponseResult } from '../lib/ai.ts'
 import { type ProviderClient, type ProviderClientContext, type ProviderClientOptions, type ProviderOptions, type ProviderRequestOptions, type ProviderResponse, type StreamChunkCallback } from '../lib/provider.ts'
@@ -296,7 +296,7 @@ class GeminiStreamTransformer extends Transform {
       }
       callback()
     } catch (error) {
-      callback(error)
+      callback(error instanceof Error ? error : new Error(String(error)))
     }
   }
 }
