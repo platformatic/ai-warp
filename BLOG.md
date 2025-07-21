@@ -90,6 +90,9 @@ AI Warp's Valkey integration provides enterprise-grade session management throug
 
 ```mermaid
 graph TB
+    LB[Load Balancer] --> A1
+    LB --> A2
+    
     subgraph "AI Warp Service Instance 1"
         A1[Client Request] --> B1[AI Provider]
         B1 --> C1[History Manager]
