@@ -29,11 +29,21 @@ export type AiModel = {
 export type AiResponseResult = 'COMPLETE' | 'INCOMPLETE_MAX_TOKENS' | 'INCOMPLETE_UNKNOWN'
 //
 
+export type LogDataPrimitive = string | number | boolean | null | undefined | Error
+
+export interface LogDataObject {
+  [key: string]: LogDataValue
+}
+
+export type LogDataValue = LogDataPrimitive | LogDataObject | LogDataValue[]
+
+export type LogData = LogDataValue
+
 export interface Logger {
-  debug(message: string, data?: any): void
-  info(message: string, data?: any): void
-  warn(message: string, data?: any): void
-  error(message: string, data?: any): void
+  debug(message: string, data?: LogData): void
+  info(message: string, data?: LogData): void
+  warn(message: string, data?: LogData): void
+  error(message: string, data?: LogData): void
 }
 
 export interface ClientOptions {
@@ -45,12 +55,18 @@ export interface ClientOptions {
   streamPath?: string
 }
 
+export type ContextValue = string | number | boolean | null | undefined | ContextObject | ContextValue[]
+export interface ContextObject {
+  [key: string]: ContextValue
+}
+export type Context = string | ContextObject | ContextValue[]
+
 export type QueryModel = string | AiModel
 
 export interface AskOptions {
   prompt: string
   sessionId?: AiSessionId
-  context?: string | Record<string, any> | any[]
+  context?: Context
   temperature?: number
   models?: QueryModel[]
   history?: AiChatHistory
@@ -80,7 +96,13 @@ export interface AskResponseStream {
   headers: Headers
 }
 
+export interface AskResponseData {
+  text: string
+  sessionId: AiSessionId
+  result: AiResponseResult
+}
+
 export interface AskResponseContent {
-  content: JSON
+  content: AskResponseData
   headers: Headers
 }
