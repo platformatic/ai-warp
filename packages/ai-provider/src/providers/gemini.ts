@@ -1,5 +1,6 @@
 import { Pool } from 'undici'
-import { Readable } from 'node:stream'
+import { Transform, pipeline } from 'node:stream'
+import { promisify } from 'node:util'
 import type { AiProvider, AiResponseResult } from '../lib/ai.ts'
 import { type ProviderClient, type ProviderClientContext, type ProviderClientOptions, type ProviderOptions, type ProviderRequestOptions, type ProviderResponse, type StreamChunkCallback } from '../lib/provider.ts'
 import { encodeEvent, parseEventStream, type AiStreamEvent } from '../lib/event.ts'
@@ -201,7 +202,18 @@ export class GeminiProvider extends BaseProvider {
 
     if (options.stream) {
       const response = await this.client.stream(this.api, { model, request, stream: true }, this.context)
-      return new GeminiStreamTransformer(this.providerName, response, options.onStreamChunk)
+      const transformer = new GeminiStreamTransformer(this.providerName, options.onStreamChunk)
+
+      // Use pipeline to connect the response stream to the transformer
+      const pipelineAsync = promisify(pipeline)
+
+      // Create the pipeline but don't await it - return the transformer stream
+      pipelineAsync(response, transformer).catch((err) => {
+        // Handle pipeline errors by destroying the transformer
+        transformer.destroy(err)
+      })
+
+      return transformer
     }
 
     this.logger.debug({ request }, `${this.providerName} request`)
@@ -227,81 +239,65 @@ export class GeminiProvider extends BaseProvider {
   }
 }
 
-class GeminiStreamTransformer extends Readable {
+class GeminiStreamTransformer extends Transform {
   providerName: string
-  sourceStream: Readable
   chunkCallback?: StreamChunkCallback
 
-  constructor (providerName: string, sourceStream: Readable, chunkCallback?: StreamChunkCallback) {
+  constructor (providerName: string, chunkCallback?: StreamChunkCallback) {
     super()
     this.providerName = providerName
-    this.sourceStream = sourceStream
     this.chunkCallback = chunkCallback
-
-    this.sourceStream.on('data', this.handleData.bind(this))
-    this.sourceStream.on('end', this.handleEnd.bind(this))
-    this.sourceStream.on('error', this.handleError.bind(this))
   }
 
-  private async handleData (chunk: Buffer) {
-    const events = parseEventStream(chunk.toString('utf8'))
-    for (const event of events) {
-      if (event.event === 'error') {
-        const error = new ProviderResponseNoContentError(`${this.providerName} stream`)
+  async _transform (chunk: Buffer, _encoding: string, callback: (error?: Error | null, data?: any) => void) {
+    try {
+      const events = parseEventStream(chunk.toString('utf8'))
+      for (const event of events) {
+        if (event.event === 'error') {
+          const error = new ProviderResponseNoContentError(`${this.providerName} stream`)
 
-        const eventData: AiStreamEvent = {
-          event: 'error',
-          data: error
-        }
-        this.push(encodeEvent(eventData))
-        this.push(null)
-        return
-      }
-
-      // data only events
-      if (!event.event && event.data) {
-        if (event.data === '[DONE]') {
-          this.push(null)
-          return
-        }
-
-        const data = JSON.parse(event.data)
-        const content = data.candidates?.[0]?.content?.parts?.[0]?.text
-        let response = content ?? ''
-        if (this.chunkCallback) {
-          response = await this.chunkCallback(response)
-        }
-
-        const eventData: AiStreamEvent = {
-          event: 'content',
-          data: { response }
-        }
-        this.push(encodeEvent(eventData))
-
-        const finish = data.candidates?.[0]?.finishReason
-        if (finish) {
           const eventData: AiStreamEvent = {
-            event: 'end',
-            data: { response: mapResponseResult(finish) }
+            event: 'error',
+            data: error
           }
           this.push(encodeEvent(eventData))
-          this.push(null)
-          return
+          return callback()
+        }
+
+        // data only events
+        if (!event.event && event.data) {
+          if (event.data === '[DONE]') {
+            return callback()
+          }
+
+          const data = JSON.parse(event.data)
+          const content = data.candidates?.[0]?.content?.parts?.[0]?.text
+          let response = content ?? ''
+          if (this.chunkCallback) {
+            response = await this.chunkCallback(response)
+          }
+
+          const eventData: AiStreamEvent = {
+            event: 'content',
+            data: { response }
+          }
+          this.push(encodeEvent(eventData))
+
+          const finish = data.candidates?.[0]?.finishReason
+          if (finish) {
+            const eventData: AiStreamEvent = {
+              event: 'end',
+              data: { response: mapResponseResult(finish) }
+            }
+            this.push(encodeEvent(eventData))
+            return callback()
+          }
         }
       }
+      callback()
+    } catch (error) {
+      callback(error)
     }
-  }
-
-  private handleEnd () {
-    this.push(null)
-  }
-
-  private handleError (error: Error) {
-    this.destroy(error)
-  }
-
-  _read () {
-    // No-op: data is pushed from source stream events
   }
 }
 
