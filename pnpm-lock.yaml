@@ -8,24 +8,6 @@ importers:
 
   .: {}
 
-  examples/node-service-fastify-ai:
-    dependencies:
-      '@platformatic/ai-provider':
-        specifier: workspace:*
-        version: link:../../packages/ai-provider
-      '@platformatic/fastify-ai':
-        specifier: workspace:*
-        version: link:../../packages/fastify-ai
-      fastify:
-        specifier: ^5.4.0
-        version: 5.4.0
-      pino:
-        specifier: ^9.7.0
-        version: 9.7.0
-      undici:
-        specifier: ^7.11.0
-        version: 7.11.0
-
   packages/ai-client:
     devDependencies:
       '@platformatic/ai-provider':
@@ -46,6 +28,9 @@ importers:
       eslint-plugin-unused-imports:
         specifier: ^4.1.4
         version: 4.1.4(@typescript-eslint/eslint-plugin@8.37.0(@typescript-eslint/parser@8.37.0(eslint@9.31.0)(typescript@5.8.3))(eslint@9.31.0)(typescript@5.8.3))(eslint@9.31.0)
+      fastify:
+        specifier: ^5.4.0
+        version: 5.4.0
       neostandard:
         specifier: ^0.12.1
         version: 0.12.2(@typescript-eslint/utils@8.37.0(eslint@9.31.0)(typescript@5.8.3))(eslint@9.31.0)(typescript@5.8.3)
@@ -64,6 +49,9 @@ importers:
       '@fastify/error':
         specifier: ^4.2.0
         version: 4.2.0
+      cloneable-readable:
+        specifier: ^3.0.0
+        version: 3.0.0
       fast-json-stringify:
         specifier: ^6.0.1
         version: 6.0.1
@@ -1141,6 +1129,9 @@ packages:
   clone@1.0.4:
     resolution: {integrity: sha512-JQHZ2QMW6l3aH/j6xCqQThY/9OH4D/9ls34cgkUBiEeocRTU04tHfKPBsUK1PqZCUQM7GiA0IIXJSuXHI64Kbg==}
     engines: {node: '>=0.8'}
+
+  cloneable-readable@3.0.0:
+    resolution: {integrity: sha512-Lkfd9IRx1nfiBr7UHNxJSl/x7DOeUfYmxzCkxYJC2tyc/9vKgV75msgLGurGQsak/NvJDHMWcshzEXRlxfvhqg==}
 
   close-with-grace@2.2.0:
     resolution: {integrity: sha512-OdcFxnxTm/AMLPHA4Aq3J1BLpkojXP7I4G5QBQLN5TT55ED/rk04rAoDbtfNnfZ988kGXPxh1bdRLeIU9bz/lA==}
@@ -4082,6 +4073,10 @@ snapshots:
       wrap-ansi: 7.0.0
 
   clone@1.0.4: {}
+
+  cloneable-readable@3.0.0:
+    dependencies:
+      readable-stream: 4.7.0
 
   close-with-grace@2.2.0: {}
 

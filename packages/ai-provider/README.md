@@ -7,8 +7,10 @@ Core implementation for AI communication with multiple providers, offering unifi
 - **Multi-Provider Support**: OpenAI, DeepSeek, and Google Gemini
 - **Automatic Fallback**: Seamless switching between providers when one fails
 - **Session Management**: Persistent conversation history with multiple storage backends
+- **Auto-Resume**: Seamless stream resumption from interruption points using UUID event IDs
+- **Hash-Based Storage**: Efficient O(1) event access with Redis hash operations
 - **Rate Limiting**: Per-model rate limiting with automatic restoration
-- **Streaming Support**: Real-time response streaming
+- **Streaming Support**: Real-time response streaming with UUID event identification
 - **Error Recovery**: Intelligent error handling with configurable retry policies
 
 ## 📦 Installation
@@ -67,13 +69,14 @@ const streamResponse = await ai.request({
   }
 })
 
-const reader = streamResponse.getReader()
-while (true) {
-  const { done, value } = await reader.read()
-  if (done) break
-  
-  const chunk = new TextDecoder().decode(value)
-  console.log('Chunk:', chunk)
+// Process Node.js stream with for await loop
+try {
+  for await (const chunk of streamResponse) {
+    console.log('Chunk:', chunk.toString())
+  }
+  console.log('Stream finished')
+} catch (err) {
+  console.error('Stream error:', err)
 }
 
 await ai.close()
@@ -219,10 +222,60 @@ const followUp = await ai.request({
 
 #### Stream Response (Streaming)
 
-ReadableStream with attached `sessionId` property for session management.
+Node.js Readable stream with attached `sessionId` property for session management.
 
 ```javascript
-// Process streaming response
+// Process streaming response with for await loop
+try {
+  for await (const chunk of streamResponse) {
+    const data = chunk.toString()
+    // Process chunk (may contain multiple SSE events)
+    console.log('Received:', data)
+  }
+  console.log('Stream completed')
+} catch (err) {
+  console.error('Stream error:', err)
+}
+}
+```
+
+## 🔄 Auto-Resume Functionality
+
+The AI provider includes advanced auto-resume capabilities that automatically recover interrupted streaming conversations:
+
+### Automatic Stream Resumption
+
+When a streaming request is interrupted, the system can automatically resume from the last successfully received event:
+
+```javascript
+// First streaming request
+const stream1 = await ai.request({
+  prompt: 'Write a long story about space exploration',
+  options: {
+    stream: true,
+    sessionId: 'conversation-123'
+  }
+})
+
+// If interrupted, resume automatically with same sessionId
+const stream2 = await ai.request({
+  prompt: 'Continue the story', // This prompt is ignored for resume
+  options: {
+    stream: true,
+    sessionId: 'conversation-123', // Same session triggers auto-resume
+    resume: true                   // Explicitly enable resume (default: true)
+  }
+})
+
+// Only missing events will be streamed
+```
+
+### UUID Event Identification
+
+All streaming events include unique UUID identifiers for precise resumption:
+
+```javascript
+// Streaming events include UUID IDs
 const reader = streamResponse.getReader()
 const decoder = new TextDecoder()
 
@@ -231,9 +284,108 @@ while (true) {
   if (done) break
   
   const chunk = decoder.decode(value)
-  // Process chunk (may contain multiple SSE events)
+  // Example SSE format:
+  // id: f47ac10b-58cc-4372-a567-0e02b2c3d479
+  // event: content
+  // data: {"response": "Text chunk"}
 }
 ```
+
+### Resume Configuration
+
+Control resume behavior per request:
+
+```javascript
+// Disable resume for fresh response
+const response = await ai.request({
+  prompt: 'New conversation',
+  options: {
+    sessionId: 'existing-session',
+    stream: true,
+    resume: false  // Force new request instead of resume
+  }
+})
+
+// Resume is enabled by default when sessionId + stream = true
+const autoResumeResponse = await ai.request({
+  prompt: 'Continue',
+  options: {
+    sessionId: 'existing-session',
+    stream: true
+    // resume: true (default)
+  }
+})
+```
+
+## 🗄️ Storage Architecture
+
+### Hash-Based Event Storage
+
+The new storage system uses Redis hash operations for O(1) event access:
+
+```javascript
+// Storage structure: sessionId -> { eventUUID: eventData }
+{
+  "session-123": {
+    "f47ac10b-58cc-4372-a567-0e02b2c3d479": {
+      "timestamp": 1642789200000,
+      "type": "content",
+      "data": "First chunk"
+    },
+    "6ba7b810-9dad-11d1-80b4-00c04fd430c8": {
+      "timestamp": 1642789201000,
+      "type": "content", 
+      "data": "Second chunk"
+    }
+  }
+}
+```
+
+### Storage Backends
+
+#### Memory Storage (Default)
+
+Uses EventEmitter for pub/sub operations:
+
+```javascript
+const ai = new Ai({
+  // ... other options
+  storage: {
+    type: 'memory'  // Default storage type
+  }
+})
+```
+
+#### Valkey/Redis Storage
+
+Production-ready with Redis hash commands and dedicated pub/sub:
+
+```javascript
+const ai = new Ai({
+  // ... other options
+  storage: {
+    type: 'valkey',
+    valkey: {
+      host: 'localhost',
+      port: 6379,
+      username: 'default',
+      password: 'your-password',
+      database: 0
+    }
+  }
+})
+```
+
+### Storage Operations
+
+The storage interface provides hash-based operations:
+
+- `hashSet(sessionId, eventId, value, expiration)` - Store event with UUID key
+- `hashGetAll(sessionId)` - Retrieve all events for session
+- `hashGet(sessionId, eventId)` - Get specific event by UUID
+- `rangeFromId(sessionId, fromEventId)` - Get events starting from UUID
+- `publish(channel, data)` - Publish real-time events
+- `subscribe(channel, callback)` - Subscribe to event streams
 
 ## 🔄 Advanced Features
 

@@ -1,6 +1,7 @@
 import type { FastifyReply, FastifyRequest } from 'fastify'
 import fp from 'fastify-plugin'
 import type { Logger } from 'pino'
+import type { Readable } from 'node:stream'
 import { Ai } from '@platformatic/ai-provider'
 import type { AiOptions, AiModel, AiResponseResult, AiChatHistory, AiSessionId } from '@platformatic/ai-provider'
 
@@ -19,6 +20,7 @@ export type FastifyAiRequest = {
   stream?: boolean
   history?: AiChatHistory
   sessionId?: AiSessionId
+  resume?: boolean
 }
 
 export type ContentResponse = {
@@ -27,7 +29,7 @@ export type ContentResponse = {
   sessionId: AiSessionId
 }
 
-export type FastifyAiResponse = ContentResponse | ReadableStream
+export type FastifyAiResponse = ContentResponse | Readable
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -57,6 +59,7 @@ export default fp(async (fastify, options: AiPluginOptions) => {
       const response = await ai.request({
         models: request.models,
         prompt: request.prompt,
+        resume: request.resume,
         options: {
           context: request.context,
           temperature: request.temperature,
@@ -64,7 +67,7 @@ export default fp(async (fastify, options: AiPluginOptions) => {
           history: request.history,
           sessionId: request.sessionId
         }
-      })
+      } as any)
       reply.header(options.headerSessionIdName!, response.sessionId)
 
       if (request.stream) {

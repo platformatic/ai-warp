@@ -50,5 +50,13 @@ test('should be able to perform a basic prompt with stream', async () => {
 
   assert.equal(response.statusCode, 200)
   assert.equal(response.headers['content-type'], 'text/event-stream')
-  assert.equal(response.body, 'event: content\ndata: {"response":"All"}\n\nevent: content\ndata: {"response":" good"}\n\nevent: end\ndata: {"response":"COMPLETE"}\n\n')
+
+  // Check that the response contains the expected content and events, but be flexible about UUIDs
+  assert.ok(response.body.includes('event: content'))
+  assert.ok(response.body.includes('data: {"response":"All"}'))
+  assert.ok(response.body.includes('data: {"response":" good"}'))
+  assert.ok(response.body.includes('event: end'))
+  assert.ok(response.body.includes('data: {"response":"COMPLETE"}'))
+  // Check that UUIDs are present
+  assert.ok(response.body.includes('id: '))
 })

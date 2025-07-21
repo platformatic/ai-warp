@@ -28,7 +28,7 @@ Never lose conversation context again. AI Warp maintains perfect conversation co
 // Resume any conversation instantly
 const response = await client.ask({
   prompt: 'What did we discuss about AI safety?',
-  sessionId: 'sess_abc123xyz'  // Continues exactly where you left off
+  sessionId: 'a81bc81b-cafe-4e5d-abff-90865d1e13b1'  // Continues exactly where you left off
 })
 ```
 
@@ -153,7 +153,7 @@ graph TB
 - **Cross-Instance Continuity**: Users can continue conversations on any instance
 
 **Session Lifecycle:**
-1. **Session Creation**: Auto-generated unique session ID (`sess_abc123xyz`)
+1. **Session Creation**: Auto-generated unique session ID (`a81bc81b-cafe-4e5d-abff-90865d1e13b1`)
 2. **History Storage**: Each conversation turn is stored as JSON in Redis Lists using `LPUSH`
 3. **Context Retrieval**: Previous conversation retrieved with `LRANGE` for AI context
 4. **Automatic Cleanup**: Sessions expire based on configured TTL (default: 24 hours)
@@ -167,13 +167,13 @@ One of AI Warp's most powerful features is seamless session resumption. Here's h
 // Client resumes conversation with existing session ID
 const response = await client.ask({
   prompt: 'What did we discuss about earlier?',
-  sessionId: 'sess_abc123xyz'  // Previously stored session ID
+  sessionId: 'a81bc81b-cafe-4e5d-abff-90865d1e13b1'  // Previously stored session ID
 })
 ```
 
 **Behind the Scenes:**
 1. **Session Validation**: AI Warp validates the session ID exists in Valkey
-2. **History Retrieval**: Complete conversation history is fetched using `LRANGE sess_abc123xyz 0 -1`
+2. **History Retrieval**: Complete conversation history is fetched using `LRANGE a81bc81b-cafe-4e5d-abff-90865d1e13b1 0 -1`
 3. **Context Reconstruction**: Previous conversation turns are provided to the AI model as context
 4. **Contextual Response**: AI responds with full awareness of previous conversation
 5. **History Update**: New conversation turn is added to the existing session
@@ -239,11 +239,38 @@ npx wattpm@latest create
 
 Select `@platformatic/ai-warp`, configure your API keys, and you're running a production-ready AI service in under 2 minutes.
 
-### Or Install the Client
+```txt
+Hello Alice, welcome to Watt 2.72.0!
+? Where would you like to create your project? warp-service
+? Which package manager do you want to use? npm
+? Which kind of service do you want to create? @platformatic/ai-warp
+? What is the name of the service? ai
+? What AI providers would you like to use? OpenAI, Gemini
+? What is your OpenAI API key? [hidden]
+? What is your Gemini API key? [hidden]
+? Do you want to create another service? no
+? Do you want to use TypeScript? no
+? What port do you want to use? 3042
+```
+
+Start the service
 
 ```bash
+cd warp-service
+npm start
+```
+
+### Install the Client
+
+In another directory, create the client application
+
+```bash
+mkdir warp-client
+cd warp-client
 npm install @platformatic/ai-client
 ```
+
+Create a `client.js` file with
 
 ```typescript
 import { buildClient } from '@platformatic/ai-client'

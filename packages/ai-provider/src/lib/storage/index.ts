@@ -19,8 +19,12 @@ export type AiStorageOptions = {
 export type Storage = {
   valueGet: (key: string) => Promise<any>
   valueSet: (key: string, value: any) => Promise<void>
-  listPush: (key: string, value: any, expiration: number) => Promise<void>
-  listRange: (key: string) => Promise<any[]>
+  hashSet: (key: string, field: string, value: any, expiration: number) => Promise<void>
+  hashGetAll: (key: string) => Promise<Record<string, any>>
+  hashGet: (key: string, field: string) => Promise<any>
+  publish: (channel: string, message: any) => Promise<void>
+  subscribe: (channel: string, callback: (message: any) => void) => Promise<void>
+  unsubscribe: (channel: string) => Promise<void>
   close: () => Promise<void>
 }
 

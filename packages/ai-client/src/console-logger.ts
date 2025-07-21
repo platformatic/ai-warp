@@ -1,28 +1,28 @@
-import type { Logger } from './types.ts'
+import type { Logger, LogData } from './types.ts'
 
 export const consoleLogger: Logger = {
-  debug: (message: string, data?: any) => {
+  debug: (message: string, data?: LogData) => {
     if (data) {
       console.log(message, data)
     } else {
       console.log(message)
     }
   },
-  info: (message: string, data?: any) => {
+  info: (message: string, data?: LogData) => {
     if (data) {
       console.log(message, data)
     } else {
       console.log(message)
     }
   },
-  warn: (message: string, data?: any) => {
+  warn: (message: string, data?: LogData) => {
     if (data) {
       console.warn(message, data)
     } else {
       console.warn(message)
     }
   },
-  error: (message: string, data?: any) => {
+  error: (message: string, data?: LogData) => {
     if (data) {
       console.error(message, data)
     } else {

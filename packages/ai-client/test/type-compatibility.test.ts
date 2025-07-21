@@ -1,5 +1,6 @@
 import { test } from 'node:test'
 import { strictEqual, ok } from 'node:assert'
+import { Readable } from 'node:stream'
 
 import type {
   AiProvider as ClientAiProvider,
@@ -148,8 +149,8 @@ test('Response type structure compatibility', () => {
   ok(mockContentResponse.result, 'Content response should have result')
   ok(mockContentResponse.sessionId, 'Content response should have sessionId')
 
-  const mockStream = new ReadableStream()
-  const mockStreamResponse: ProviderAiStreamResponse = mockStream as ProviderAiStreamResponse
+  const mockStream = new Readable({ read () {} })
+  const mockStreamResponse: ProviderAiStreamResponse = mockStream as unknown as ProviderAiStreamResponse
   mockStreamResponse.sessionId = 'session-123'
 
   ok(mockStreamResponse, 'Stream response should exist')

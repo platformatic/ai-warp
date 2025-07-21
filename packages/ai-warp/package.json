@@ -1,10 +1,9 @@
 {
   "name": "@platformatic/ai-warp",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "type": "module",
   "description": "The Platformatic warp AI service",
   "license": "Apache-2.0",
-
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "exports": {
@@ -22,14 +21,12 @@
     "create-ai-warp": "./dist/cli/create.js",
     "start-ai-warp": "./dist/cli/start.js"
   },
-
   "scripts": {
     "service-create": "pnpm build && node ./dist/cli/create.js",
     "service-start": "pnpm build && node ./dist/cli/start.js -c ./ai-warp-app/platformatic.json",
     "build:config": "pnpm run build && node --experimental-strip-types src/lib/schema.ts --dump-schema  > schema.json && json2ts > config.d.ts < schema.json",
-
-    "test": "node --test --experimental-strip-types test/*.test.ts",
-    "test:coverage": "c8 -c test/config/c8-local.json node --test --env-file=test/config/env --no-warnings test/**.test.ts",
+    "test": "pnpm build && node --test --experimental-strip-types test/*.test.ts",
+    "test:coverage": "pnpm build && c8 -c test/config/c8-local.json node --test --env-file=test/config/env --no-warnings test/**.test.ts",
     "lint": "eslint src test",
     "lint:fix": "eslint src test --fix",
     "build": "tsc -p tsconfig.build.json && cp config.d.ts dist/",

@@ -1,4 +1,5 @@
 import undici from 'undici'
+import { Readable } from 'node:stream'
 import { OptionError, ProviderExceededQuotaError, ProviderResponseError } from '../../lib/errors.ts'
 import type { ProviderClient, ProviderClientContext, ProviderClientOptions } from '../../lib/provider.ts'
 import type { OpenAiClientOptions, OpenAIRequest } from '../openai.ts'
@@ -63,14 +64,13 @@ export function createOpenAiClient (options: OpenAiClientOptions) {
 
       return responseData
     },
-    stream: async (client, request: OpenAIRequest, context: ProviderClientContext): Promise<ReadableStream> => { // TODO types
+    stream: async (client, request: OpenAIRequest, context: ProviderClientContext): Promise<Readable> => {
       context.logger.debug({ path: apiPath, request }, 'OpenAI undici stream request')
 
       const response = await client.pool.request({
         path: apiPath,
         method: 'POST',
         headers: client.headers,
-        opaque: new ReadableStream(),
         body: JSON.stringify({
           model: request.model,
           messages: request.messages,
@@ -83,7 +83,7 @@ export function createOpenAiClient (options: OpenAiClientOptions) {
 
       await checkResponseFn(response, context, providerName)
 
-      return response.body as ReadableStream
+      return response.body as Readable
     }
   }
 
