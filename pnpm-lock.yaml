@@ -8,24 +8,6 @@ importers:
 
   .: {}
 
-  examples/node-service-fastify-ai:
-    dependencies:
-      '@platformatic/ai-provider':
-        specifier: workspace:*
-        version: link:../../packages/ai-provider
-      '@platformatic/fastify-ai':
-        specifier: workspace:*
-        version: link:../../packages/fastify-ai
-      fastify:
-        specifier: ^5.4.0
-        version: 5.4.0
-      pino:
-        specifier: ^9.7.0
-        version: 9.7.0
-      undici:
-        specifier: ^7.11.0
-        version: 7.11.0
-
   packages/ai-client:
     devDependencies:
       '@platformatic/ai-provider':
@@ -46,6 +28,9 @@ importers:
       eslint-plugin-unused-imports:
         specifier: ^4.1.4
         version: 4.1.4(@typescript-eslint/eslint-plugin@8.37.0(@typescript-eslint/parser@8.37.0(eslint@9.31.0)(typescript@5.8.3))(eslint@9.31.0)(typescript@5.8.3))(eslint@9.31.0)
+      fastify:
+        specifier: ^5.4.0
+        version: 5.4.0
       neostandard:
         specifier: ^0.12.1
         version: 0.12.2(@typescript-eslint/utils@8.37.0(eslint@9.31.0)(typescript@5.8.3))(eslint@9.31.0)(typescript@5.8.3)

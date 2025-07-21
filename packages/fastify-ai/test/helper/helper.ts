@@ -1,6 +1,6 @@
 import pino, { type Logger } from 'pino'
 import fastify from 'fastify'
-import ai, { type AiPluginOptions } from '../../src/index.ts'
+import ai, { type AiPluginOptions, type AiChatHistory } from '../../src/index.ts'
 
 export async function createApp ({ client, logger }: { client: any, logger?: Logger }) {
   if (!logger) {
@@ -29,7 +29,7 @@ export async function createApp ({ client, logger }: { client: any, logger?: Log
     url: '/prompt',
     method: 'POST',
     handler: async (request, reply) => {
-      const { prompt, context, temperature, history, sessionId } = request.body as { prompt: string, context: string, temperature: number, history: AiChatHistory, sessionId: string }
+      const { prompt, context, temperature, history, sessionId, resume } = request.body as { prompt: string, context: string, temperature: number, history: AiChatHistory, sessionId: string, resume: boolean }
       const response = await app.ai.request({
         request,
         prompt,
@@ -37,8 +37,9 @@ export async function createApp ({ client, logger }: { client: any, logger?: Log
         temperature,
         history,
         sessionId,
+        resume,
         stream: false
-      }, reply)
+      } as any, reply)
 
       return reply.send(response)
     }
@@ -48,7 +49,7 @@ export async function createApp ({ client, logger }: { client: any, logger?: Log
     url: '/stream',
     method: 'POST',
     handler: async (request, reply) => {
-      const { prompt, context, temperature, history, sessionId } = request.body as { prompt: string, context: string, temperature: number, history: AiChatHistory, sessionId: string }
+      const { prompt, context, temperature, history, sessionId, resume } = request.body as { prompt: string, context: string, temperature: number, history: AiChatHistory, sessionId: string, resume: boolean }
       const response = await app.ai.request({
         request,
         prompt,
@@ -56,8 +57,9 @@ export async function createApp ({ client, logger }: { client: any, logger?: Log
         temperature,
         history,
         sessionId,
+        resume,
         stream: true
-      }, reply)
+      } as any, reply)
 
       return reply.send(response)
     }

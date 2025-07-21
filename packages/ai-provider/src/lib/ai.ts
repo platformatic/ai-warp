@@ -7,9 +7,10 @@ import type { FastifyError } from '@fastify/error'
 
 import { type AiChatHistory, type Provider, type ProviderClient, type ProviderOptions, type ProviderRequestOptions, type ProviderResponse, type AiSessionId, createAiProvider } from './provider.ts'
 import { createStorage, type Storage, type AiStorageOptions } from './storage/index.ts'
-import { parseTimeWindow, processStream } from './utils.ts'
+import { parseTimeWindow } from './utils.ts'
 import { HistoryGetError, ModelStateError, OptionError, ProviderNoModelsAvailableError, ProviderRateLimitError, ProviderRequestStreamTimeoutError, ProviderRequestTimeoutError } from './errors.ts'
 import { DEFAULT_HISTORY_EXPIRATION, DEFAULT_MAX_RETRIES, DEFAULT_RATE_LIMIT_MAX, DEFAULT_RATE_LIMIT_TIME_WINDOW, DEFAULT_REQUEST_TIMEOUT, DEFAULT_RESTORE_PROVIDER_COMMUNICATION_ERROR, DEFAULT_RESTORE_PROVIDER_EXCEEDED_QUOTA_ERROR, DEFAULT_RESTORE_RATE_LIMIT, DEFAULT_RESTORE_REQUEST_TIMEOUT, DEFAULT_RESTORE_RETRY, DEFAULT_RETRY_INTERVAL, DEFAULT_STORAGE } from './config.ts'
+import { createEventId, decodeEventStream } from './event.ts'
 
 // supported providers
 export type AiProvider = 'openai' | 'deepseek' | 'gemini'
@@ -89,6 +90,7 @@ export type Request = {
 
   prompt: string
   options?: ProviderRequestOptions
+  resume?: boolean
 }
 
 type ValidatedRequest = {
@@ -504,6 +506,42 @@ export class Ai {
 
     this.logger.debug({ request }, 'AI request')
 
+    const sessionId: AiSessionId = req.options.sessionId ?? await this.createSessionId()
+
+    // Handle stream resume functionality
+    const shouldResume = request.resume !== false // Default to true
+
+    // If resume is enabled and we have a sessionId, try to auto-resume from the last event
+    if (shouldResume && req.options.sessionId && req.options.stream) {
+      try {
+        const allEvents = await this.history.range(req.options.sessionId)
+        if (allEvents.length > 0) {
+          // Get the last event ID to resume from
+          const lastEvent = allEvents[allEvents.length - 1]
+          const resumeFromEventId = lastEvent.eventId
+          this.logger.debug({
+            sessionId: req.options.sessionId,
+            lastEventId: resumeFromEventId,
+            totalEvents: allEvents.length
+          }, 'Auto-resuming from last event')
+
+          // Try to get events from the last event ID
+          const events = await this.history.rangeFromId(req.options.sessionId, resumeFromEventId)
+
+          if (events.length > 0) {
+            // Create a resumable stream from historical events
+            const resumeStream = this.createResumeStream(events, sessionId)
+            return resumeStream as AiStreamResponse
+          } else {
+            this.logger.debug({ resumeFromEventId, sessionId }, 'No events found for resume, continuing with normal request')
+          }
+        }
+      } catch (error: any) {
+        // If we can't get events or resume fails, continue with normal request
+        this.logger.debug({ sessionId: req.options.sessionId, error }, 'Could not auto-resume, continuing with normal request')
+      }
+    }
+
     const models: QueryModel[] = req.models
     const skipModels: string[] = []
 
@@ -515,7 +553,6 @@ export class Ai {
 
     let response!: Response
     const history: AiChatHistory | undefined = req.options.history
-    const sessionId: AiSessionId = req.options.sessionId ?? await this.createSessionId()
 
     while (selected) {
       this.logger.debug({ model: selected.model.name }, 'Selected model')
@@ -547,18 +584,19 @@ export class Ai {
           err = undefined
           try {
             providerResponse = await this.requestTimeout(
-              selected.provider.provider.request(selected.model.name, request.prompt, options),
+              selected.provider.provider.request(selected.model.name, req.prompt, options),
               this.options.limits.requestTimeout,
               options.stream
             )
             break
-          } catch (error: any) { // TODO fix type
-            err = error
+          } catch (error: unknown) { // Fixed type - catch variables must be any or unknown
+            const errorWithCode = error as FastifyError
+            err = errorWithCode
 
             // do not retry on timeout errors and empty response
-            if (error.code && (error.code === 'PROVIDER_REQUEST_TIMEOUT_ERROR' ||
-              error.code === 'PROVIDER_REQUEST_STREAM_TIMEOUT_ERROR' ||
-              error.code === 'PROVIDER_RESPONSE_MAX_TOKENS_ERROR')) {
+            if (errorWithCode.code && (errorWithCode.code === 'PROVIDER_REQUEST_TIMEOUT_ERROR' ||
+              errorWithCode.code === 'PROVIDER_REQUEST_STREAM_TIMEOUT_ERROR' ||
+              errorWithCode.code === 'PROVIDER_RESPONSE_MAX_TOKENS_ERROR')) {
               break
             }
 
@@ -585,17 +623,90 @@ export class Ai {
           const responseStream = cloneableStream // Return the original
           const historyStream = cloneableStream.clone() // Create one clone for history
 
-          // Process the cloned stream in background to accumulate response for history
-          processStream(historyStream)
-            .then(response => {
-              if (!response) {
-                this.logger.error({ err }, 'Failed to clone stream, skipping history store')
-                return
+          // Handle streaming response: process history/pub/sub in background
+          const streamChannel = `ai-stream:${sessionId}`
+          let accumulatedResponse = ''
+
+          // Process the cloned stream in background to accumulate response for history and pub/sub
+          const processStreamInBackground = async () => {
+            try {
+              for await (const chunk of historyStream) {
+                // Decode the chunk from Buffer to string
+                const chunkString = chunk.toString('utf8')
+
+                // Parse the event stream format to extract events
+                const events = decodeEventStream(chunkString)
+
+                // Process each event
+                for (const event of events) {
+                  const eventId = event.id || createEventId()
+
+                  if (event.event === 'content') {
+                    const content = (event.data as any)?.response || (event.data as any)?.content || ''
+                    accumulatedResponse += content
+
+                    // Publish streaming event via pub/sub
+                    await this.storage.publish(streamChannel, {
+                      eventId,
+                      type: 'content',
+                      sessionId,
+                      data: event.data
+                    })
+                  } else if (event.event === 'error') {
+                    // Store error to history
+                    await this.history.push(sessionId, eventId, {
+                      prompt: req.prompt,
+                      error: event.data
+                    }, this.options.limits.historyExpiration)
+
+                    // Publish error event
+                    await this.storage.publish(streamChannel, {
+                      eventId,
+                      type: 'error',
+                      sessionId,
+                      data: event.data
+                    })
+                    return
+                  }
+                }
               }
-              this.history.push(sessionId, { prompt: request.prompt, response }, this.options.limits.historyExpiration)
-            })
-          // processStream should not throw
-            .catch(() => { });
+
+              // Store final accumulated response to history
+              const finalEventId = createEventId()
+              await this.history.push(sessionId, finalEventId, {
+                prompt: req.prompt,
+                response: accumulatedResponse
+              }, this.options.limits.historyExpiration)
+
+              // Publish final event
+              await this.storage.publish(streamChannel, {
+                eventId: finalEventId,
+                type: 'complete',
+                sessionId,
+                data: { response: accumulatedResponse }
+              })
+            } catch (error: any) {
+              // Store error to history
+              const errorEventId = createEventId()
+              await this.history.push(sessionId, errorEventId, {
+                prompt: req.prompt,
+                error: error.message || String(error)
+              }, this.options.limits.historyExpiration)
+
+              // Publish error event
+              await this.storage.publish(streamChannel, {
+                eventId: errorEventId,
+                type: 'error',
+                sessionId,
+                data: { message: error.message || String(error) }
+              })
+            }
+          }
+
+          // Process stream in background (don't await to avoid blocking the response)
+          processStreamInBackground().catch(error => {
+            this.logger.error({ error }, 'Failed to process stream for history/pubsub')
+          });
 
           // Attach sessionId to the stream for the user
           (responseStream as any).sessionId = sessionId
@@ -604,25 +715,26 @@ export class Ai {
 
         const contentResponse: AiContentResponse = response as AiContentResponse
         contentResponse.sessionId = sessionId
-        await this.history.push(sessionId, { prompt: request.prompt, response: contentResponse.text }, this.options.limits.historyExpiration)
+        await this.history.push(sessionId, createEventId(), { prompt: req.prompt, response: contentResponse.text }, this.options.limits.historyExpiration)
 
         return contentResponse
-      } catch (error: any) { // TODO fix type
-      // skip:
-      // - storage errors
-      // - PROVIDER_RESPONSE_MAX_TOKENS_ERROR (options error)
-      // update state if errors are one of:
-        if (error.code !== 'PROVIDER_RATE_LIMIT_ERROR' &&
-        error.code !== 'PROVIDER_REQUEST_TIMEOUT_ERROR' &&
-        error.code !== 'PROVIDER_REQUEST_STREAM_TIMEOUT_ERROR' &&
-        error.code !== 'PROVIDER_RESPONSE_ERROR' &&
-        error.code !== 'PROVIDER_RESPONSE_NO_CONTENT' &&
-        error.code !== 'PROVIDER_EXCEEDED_QUOTA_ERROR'
+      } catch (error: unknown) { // Fixed type - catch variables must be any or unknown
+        const errorWithCode = error as FastifyError
+        // skip:
+        // - storage errors
+        // - PROVIDER_RESPONSE_MAX_TOKENS_ERROR (options error)
+        // update state if errors are one of:
+        if (errorWithCode.code !== 'PROVIDER_RATE_LIMIT_ERROR' &&
+          errorWithCode.code !== 'PROVIDER_REQUEST_TIMEOUT_ERROR' &&
+          errorWithCode.code !== 'PROVIDER_REQUEST_STREAM_TIMEOUT_ERROR' &&
+          errorWithCode.code !== 'PROVIDER_RESPONSE_ERROR' &&
+          errorWithCode.code !== 'PROVIDER_RESPONSE_NO_CONTENT' &&
+          errorWithCode.code !== 'PROVIDER_EXCEEDED_QUOTA_ERROR'
         ) {
           throw error
         }
 
-        err = error
+        err = errorWithCode
       }
 
       if (err) {
@@ -800,6 +912,54 @@ export class Ai {
 
     return timeoutTransform
   }
+
+  private createResumeStream (events: any[], sessionId: AiSessionId): Readable {
+    let eventIndex = 0
+
+    const resumeStream = new Readable({
+      read () {
+        // Process events sequentially with a small delay to simulate streaming
+        const processNextEvent = () => {
+          if (eventIndex >= events.length) {
+            // All events processed
+            this.push(null)
+            return
+          }
+
+          const event = events[eventIndex++]
+
+          // Create SSE-formatted chunk for the event
+          let eventType = 'content'
+          let eventData = event
+
+          // Handle different event types based on stored data structure
+          if (event.error) {
+            eventType = 'error'
+            eventData = { message: event.error }
+          } else if (event.response) {
+            eventType = 'content'
+            eventData = { response: event.response }
+          }
+
+          // Format as Server-Sent Event
+          const sseChunk = `event: ${eventType}\ndata: ${JSON.stringify(eventData)}\nid: ${event.eventId || createEventId()}\n\n`
+          const encodedChunk = Buffer.from(sseChunk, 'utf8')
+
+          this.push(encodedChunk)
+
+          // Schedule next event with a small delay to simulate real streaming
+          setTimeout(processNextEvent, 10)
+        }
+
+        // Start processing
+        processNextEvent()
+      }
+    })
+
+    // Attach sessionId to the resume stream
+    ;(resumeStream as any).sessionId = sessionId
+    return resumeStream
+  }
 }
 
 export function createModelState (modelName: string): ModelState {
@@ -833,11 +993,37 @@ class History {
     this.storage = storage
   }
 
-  async push (key: string, value: any, expiration: number) {
-    return await this.storage.listPush(key, value, expiration)
+  async push (sessionId: string, eventId: string, value: any, expiration: number) {
+    // Add eventId and timestamp to the stored value for resume functionality
+    const eventData = {
+      ...value,
+      eventId,
+      timestamp: Date.now()
+    }
+    return await this.storage.hashSet(sessionId, eventId, eventData, expiration)
   }
 
-  async range (key: string) {
-    return await this.storage.listRange(key)
+  async range (sessionId: string) {
+    const hash = await this.storage.hashGetAll(sessionId)
+
+    // Convert hash to array and sort by timestamp to maintain order
+    return Object.values(hash).sort((a: any, b: any) => a.timestamp - b.timestamp)
+  }
+
+  async rangeFromId (sessionId: string, fromEventId: string) {
+    const hash = await this.storage.hashGetAll(sessionId)
+
+    // Convert to array and sort by timestamp
+    const events = Object.values(hash).sort((a: any, b: any) => a.timestamp - b.timestamp)
+
+    // Find the index of the fromEventId
+    const fromIndex = events.findIndex((event: any) => event.eventId === fromEventId)
+
+    // Return events from that index onwards, or empty array if not found
+    return fromIndex >= 0 ? events.slice(fromIndex) : []
+  }
+
+  async getEvent (sessionId: string, eventId: string) {
+    return await this.storage.hashGet(sessionId, eventId)
   }
 }

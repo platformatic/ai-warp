@@ -1,4 +1,4 @@
-import type { AskOptions, ClientOptions, StreamMessage, AskResponse, Logger, AskResponseStream, AskResponseContent } from './types.ts'
+import type { AskOptions, ClientOptions, StreamMessage, AskResponse, Logger, AskResponseStream, AskResponseContent, AskResponseData } from './types.ts'
 import { nullLogger } from './console-logger.ts'
 
 const DEFAULT_PROMPT_PATH = '/api/v1/prompt'
@@ -29,9 +29,18 @@ export class Client {
   async ask (options: AskOptions & { stream?: false }): Promise<AskResponseContent>
   async ask (options: AskOptions): Promise<AskResponseStream | AskResponseContent> {
     const isStreaming = options.stream !== false
+    const shouldResume = options.resume !== false // Default to true
+
     const endpoint = this.url + (isStreaming ? this.streamPath : this.promptPath)
 
-    this.logger.debug('Making AI request', { endpoint, prompt: options.prompt, sessionId: options.sessionId, models: options.models, stream: isStreaming })
+    this.logger.debug('Making AI request', {
+      endpoint,
+      prompt: options.prompt,
+      sessionId: options.sessionId,
+      models: options.models,
+      stream: isStreaming,
+      resume: shouldResume
+    })
 
     try {
       const response = await fetch(endpoint, {
@@ -47,7 +56,8 @@ export class Client {
           temperature: options.temperature,
           models: options.models,
           history: options.history,
-          stream: isStreaming
+          stream: isStreaming,
+          resume: shouldResume
         }),
         signal: AbortSignal.timeout(this.timeout)
       })
@@ -71,7 +81,7 @@ export class Client {
         }
       } else {
         return {
-          content: await response.json() as JSON,
+          content: await response.json() as AskResponseData,
           headers: response.headers
         }
       }
@@ -84,7 +94,7 @@ export class Client {
         this.logger.error('AI request error', { error: error.message, stack: error.stack })
         throw error
       }
-      this.logger.error('Unknown AI request error', { error })
+      this.logger.error('Unknown AI request error', { error: String(error) })
       throw new Error('Unknown error occurred')
     }
   }
@@ -153,6 +163,32 @@ interface ParsedEvent {
   data?: string
 }
 
+interface SSEContentData {
+  response?: string
+}
+
+interface SSEEndData {
+  response: AskResponse
+}
+
+interface SSEErrorData {
+  message?: string
+  error?: string
+}
+
+interface SSEResponseData {
+  response?: string | {
+    content?: string
+    model?: string
+    sessionId?: string
+  }
+  content?: string
+  error?: string
+  message?: string
+}
+
+type SSEData = SSEContentData | SSEEndData | SSEErrorData | SSEResponseData
+
 function parseEvent (eventText: string): ParsedEvent | null {
   const lines = eventText.split('\n')
   const event: ParsedEvent = {}
@@ -173,11 +209,11 @@ function convertEventToMessage (event: ParsedEvent): StreamMessage | null {
     return null
   }
 
-  let data: any
+  let data: SSEData | string
   let isPlainText = false
 
   try {
-    data = JSON.parse(event.data)
+    data = JSON.parse(event.data) as SSEData
   } catch {
     isPlainText = true
     data = event.data.trim()
@@ -186,55 +222,63 @@ function convertEventToMessage (event: ParsedEvent): StreamMessage | null {
   if (isPlainText) {
     return {
       type: 'content',
-      content: data
+      content: data as string
     }
   }
+
+  // Type guard to ensure data is an object
+  if (typeof data !== 'object' || data === null) {
+    return null
+  }
+
+  const sseData = data as SSEData
 
   if (event.event) {
     switch (event.event) {
       case 'content':
         return {
           type: 'content',
-          content: data.response || ''
+          content: (sseData as SSEContentData).response || ''
         }
 
       case 'end':
         return {
           type: 'done',
-          response: data.response as AskResponse
+          response: (sseData as SSEEndData).response
         }
 
       case 'error':
         return {
           type: 'error',
-          error: new Error(data.message || 'Unknown error')
+          error: new Error((sseData as SSEErrorData).message || 'Unknown error')
         }
 
       default:
         return null
     }
   } else {
-    if (data.error || data.message) {
+    const responseData = sseData as SSEResponseData
+    if (responseData.error || responseData.message) {
       return {
         type: 'error',
-        error: new Error(data.error || data.message || 'Unknown error')
+        error: new Error(responseData.error || responseData.message || 'Unknown error')
       }
-    } else if (data.response) {
-      if (typeof data.response === 'object' && (data.response.model || data.response.sessionId)) {
+    } else if (responseData.response) {
+      if (typeof responseData.response === 'object' && (responseData.response.model || responseData.response.sessionId)) {
         return {
           type: 'done',
-          response: data.response as AskResponse
+          response: responseData.response as AskResponse
         }
       } else {
         return {
           type: 'content',
-          content: typeof data.response === 'string' ? data.response : data.response.content || ''
+          content: typeof responseData.response === 'string' ? responseData.response : responseData.response.content || ''
         }
       }
-    } else if (data.content) {
+    } else if (responseData.content) {
       return {
         type: 'content',
-        content: data.content
+        content: responseData.content
       }
     }
     return null

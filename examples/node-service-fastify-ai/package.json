@@ -10,6 +10,9 @@
   "author": "Platformatic Inc. <oss@platformatic.dev> (https://platformatic.dev)",
   "dependencies": {
     "@platformatic/ai-provider": "workspace:*",
+    "@platformatic/ai-client": "workspace:*",
+    "@platformatic/fastify-ai": "workspace:*",
+    "@platformatic/ai-client": "workspace:*",
     "@platformatic/fastify-ai": "workspace:*",
     "fastify": "^5.4.0",
     "pino": "^9.7.0",

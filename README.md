@@ -120,6 +120,15 @@ Get immediate responses with Server-Sent Events (SSE) streaming:
 - **Multiple Message Types**: Handle content, error, and completion messages
 - **Event-based Architecture**: Support for both event-based and data-only SSE formats
 
+### 🔄 **Intelligent Stream Resume**
+Automatically recover from interrupted streaming requests without losing progress:
+- **Connection Recovery**: Resume interrupted streams from the exact point of failure
+- **Automatic Fallback**: Seamlessly falls back to fresh responses when resume data is unavailable
+- **Session-based Continuity**: Uses session IDs to track and resume interrupted conversations
+- **Network Resilience**: Handle network drops, connection timeouts, and client-side interruptions gracefully
+- **Zero Data Loss**: Ensure users don't lose progress during long AI response generations
+- **Configurable Resume**: Enable/disable resume functionality per request with `resume` parameter (defaults to `true`)
+
 ### 📈 **Enterprise-grade Scalability**
 Built for high-throughput production environments:
 - **Connection Pooling**: Efficient HTTP connection management using `undici`
