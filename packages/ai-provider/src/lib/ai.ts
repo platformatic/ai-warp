@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { setTimeout as wait } from 'node:timers/promises'
-import { Readable, PassThrough } from 'node:stream'
+import { Readable, Transform } from 'node:stream'
 import cloneable from 'cloneable-readable'
 import type { Logger } from 'pino'
 import type { FastifyError } from '@fastify/error'
@@ -578,8 +578,9 @@ export class Ai {
         }
 
         // @ts-ignore
-        if (typeof providerResponse.pipe === 'function' || providerResponse instanceof Readable) {
+        if (typeof providerResponse.pipe === 'function') {
           // Clone the stream using cloneable-readable for history processing
+          // @ts-ignore
           const cloneableStream = cloneable(providerResponse as Readable)
           const responseStream = cloneableStream // Return the original
           const historyStream = cloneableStream.clone() // Create one clone for history
@@ -757,7 +758,6 @@ export class Ai {
   }
 
   private wrapStreamWithTimeout (stream: Readable, timeout: number): Readable {
-    const wrappedStream = new PassThrough()
     let timeoutId: NodeJS.Timeout | undefined
 
     const resetTimeout = () => {
@@ -766,32 +766,39 @@ export class Ai {
       }
 
       timeoutId = setTimeout(() => {
-        wrappedStream.destroy(new ProviderRequestStreamTimeoutError(timeout))
+        timeoutTransform.destroy(new ProviderRequestStreamTimeoutError(timeout))
       }, timeout).unref()
     }
 
+    const timeoutTransform = new Transform({
+      transform (chunk: Buffer, _encoding: string, callback: (error?: Error | null, data?: any) => void) {
+        resetTimeout()
+        callback(null, chunk)
+      },
+
+      flush (callback: (error?: Error | null, data?: any) => void) {
+        if (timeoutId) {
+          clearTimeout(timeoutId)
+        }
+        callback()
+      }
+    })
+
+    // Set up initial timeout
     resetTimeout()
 
-    stream.on('data', (chunk) => {
-      resetTimeout()
-      wrappedStream.push(chunk)
-    })
-
-    stream.on('end', () => {
-      if (timeoutId) {
-        clearTimeout(timeoutId)
-      }
-      wrappedStream.push(null)
-    })
-
+    // Handle source stream errors
     stream.on('error', (error) => {
       if (timeoutId) {
         clearTimeout(timeoutId)
       }
-      wrappedStream.destroy(error)
+      timeoutTransform.destroy(error)
     })
 
-    return wrappedStream
+    // Pipe the source stream through the timeout transform
+    stream.pipe(timeoutTransform)
+
+    return timeoutTransform
   }
 }
 
