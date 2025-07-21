@@ -105,6 +105,22 @@ graph TB
         C2 --> D2[ValkeyStorage]
     end
     
+    subgraph "LLM Providers"
+        OpenAI[OpenAI]
+        Gemini[Gemini]
+        DeepSeek[DeepSeek]
+        Others[(...)]
+    end
+    
+    B1 --> OpenAI
+    B1 --> Gemini
+    B1 --> DeepSeek
+    B1 --> Others
+    B2 --> OpenAI
+    B2 --> Gemini
+    B2 --> DeepSeek
+    B2 --> Others
+    
     subgraph "Valkey Cluster"
         V1[(Valkey Node 1)]
         V2[(Valkey Node 2)]
