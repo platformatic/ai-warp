@@ -1438,3 +1438,153 @@ test('client handles JSON data that is not an object to trigger type guard', asy
   // Should receive no messages - this should trigger the type guard return null at lines 231-232
   strictEqual(messages.length, 0)
 })
+
+test('client handles flush case with remaining buffer data', async (_) => {
+  const server = createServer((req, res) => {
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      Connection: 'keep-alive'
+    })
+
+    // Send data without ending double newline to test flush case
+    res.write('data: {"response": "Buffered message"}')
+    res.end() // End stream without \n\n to trigger flush
+  })
+
+  server.listen(0)
+  await once(server, 'listening')
+  const port = (server.address() as any).port
+
+  const client = buildClient({
+    url: `http://localhost:${port}`,
+    logger: silentLogger
+  })
+
+  const response = await client.ask({ prompt: 'Hello', stream: true })
+  const messages = []
+  for await (const message of response.stream) {
+    messages.push(message)
+  }
+
+  strictEqual(messages.length, 1)
+  deepStrictEqual(messages[0], { type: 'content', content: 'Buffered message' })
+
+  server.close()
+  await once(server, 'close')
+})
+
+test('client handles SSE data with no matching properties', async (_) => {
+  const server = createServer((req, res) => {
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      Connection: 'keep-alive'
+    })
+
+    // Send JSON data that doesn't match any expected properties
+    res.write('data: {"someUnknownProperty": "unknown value"}\n\n')
+    res.write('data: {"anotherProperty": 123}\n\n')
+    res.write('data: {"nested": {"object": "value"}}\n\n')
+    res.write('data: {"emptyArray": []}\n\n')
+    res.end()
+  })
+
+  server.listen(0)
+  await once(server, 'listening')
+  const port = (server.address() as any).port
+
+  const client = buildClient({
+    url: `http://localhost:${port}`,
+    logger: silentLogger
+  })
+
+  const response = await client.ask({ prompt: 'Hello', stream: true })
+  const messages = []
+  for await (const message of response.stream) {
+    messages.push(message)
+  }
+
+  // Should receive no messages since the data doesn't match any expected format
+  strictEqual(messages.length, 0)
+
+  server.close()
+  await once(server, 'close')
+})
+
+test('client handles JSON data that returns null from convertEventToMessage', async (_) => {
+  const server = createServer((req, res) => {
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      Connection: 'keep-alive'
+    })
+
+    // Send valid JSON but with no expected properties to trigger the final return null in convertEventToMessage
+    // This should hit the final return null at lines 231-232
+    res.write('data: {}\n\n') // Empty object - no error, message, response, or content fields
+    res.write('data: {"randomField": true, "someValue": 42}\n\n') // Object with random fields
+    res.write('data: {"justAnObject": {"with": "nested", "properties": null}}\n\n') // Nested object with no expected fields
+    res.end()
+  })
+
+  server.listen(0)
+  await once(server, 'listening')
+  const port = (server.address() as any).port
+
+  const client = buildClient({
+    url: `http://localhost:${port}`,
+    logger: silentLogger
+  })
+
+  const response = await client.ask({ prompt: 'Hello', stream: true })
+  const messages = []
+  for await (const message of response.stream) {
+    messages.push(message)
+  }
+
+  // Should receive no messages - this should trigger the final return null at lines 231-232
+  strictEqual(messages.length, 0)
+
+  server.close()
+  await once(server, 'close')
+})
+
+test('client handles JSON data that is not an object to trigger type guard', async (_) => {
+  const server = createServer((req, res) => {
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      Connection: 'keep-alive'
+    })
+
+    // Send JSON data that parses to non-object types to trigger the type guard at lines 231-232
+    res.write('data: null\n\n') // JSON null - should trigger typeof data !== 'object' || !data
+    res.write('data: "just a string"\n\n') // JSON string - should trigger typeof data !== 'object'
+    res.write('data: 42\n\n') // JSON number - should trigger typeof data !== 'object'
+    res.write('data: true\n\n') // JSON boolean - should trigger typeof data !== 'object'
+    res.write('data: [1, 2, 3]\n\n') // JSON array - arrays are objects in JS but may trigger different behavior
+    res.end()
+  })
+
+  server.listen(0)
+  await once(server, 'listening')
+  const port = (server.address() as any).port
+
+  const client = buildClient({
+    url: `http://localhost:${port}`,
+    logger: silentLogger
+  })
+
+  const response = await client.ask({ prompt: 'Hello', stream: true })
+  const messages = []
+  for await (const message of response.stream) {
+    messages.push(message)
+  }
+
+  // Should receive no messages - this should trigger the type guard return null at lines 231-232
+  strictEqual(messages.length, 0)
+
+  server.close()
+  await once(server, 'close')
+})
