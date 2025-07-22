@@ -1,33 +1,6 @@
-import { Readable } from 'node:stream'
-import { InvalidTimeWindowNumberInputError, InvalidTimeWindowStringInputError, InvalidTimeWindowUnitError } from './errors.ts'
-import { decodeEventStream } from './event.ts'
+import { InvalidTimeWindowNumberInputError, InvalidTimeWindowStringInputError } from './errors.ts'
 
-/**
- * Process a cloned stream to accumulate the complete response
- */
-export async function processStream (stream: Readable): Promise<string | undefined> {
-  let response = ''
-
-  for await (const chunk of stream) {
-    // Decode the chunk from Buffer to string
-    const chunkString = chunk.toString('utf8')
-
-    // Parse the event stream format to extract events
-    const events = decodeEventStream(chunkString)
-
-    // Accumulate content from all content events
-    for (const event of events) {
-      if (event.event === 'content') {
-        response += event.data.response
-      }
-      if (event.event === 'error') {
-        return undefined
-      }
-    }
-  }
-
-  return response
-}
+type TimeWindowUnit = 'ms' | 's' | 'm' | 'h' | 'd'
 
 export function parseTimeWindow (timeWindow: number | string, key?: string): number {
   if (typeof timeWindow === 'number') {
@@ -44,7 +17,7 @@ export function parseTimeWindow (timeWindow: number | string, key?: string): num
   }
 
   const value = parseInt(match[1], 10)
-  const unit = match[2]
+  const unit = match[2] as TimeWindowUnit
 
   switch (unit) {
     case 'ms': return value
@@ -52,6 +25,5 @@ export function parseTimeWindow (timeWindow: number | string, key?: string): num
     case 'm': return value * 60 * 1000
     case 'h': return value * 60 * 60 * 1000
     case 'd': return value * 24 * 60 * 60 * 1000
-    default: throw new InvalidTimeWindowUnitError(unit)
   }
 }

@@ -1,10 +1,11 @@
 import { test } from 'node:test'
 import assert from 'node:assert'
 import { Ai, type AiContentResponse, type AiStreamResponse } from '../src/lib/ai.ts'
-import { createDummyClient, mockOpenAiStream } from './helper/helper.ts'
+import { consumeStream, createDummyClient, mockOpenAiStream } from './helper/helper.ts'
 import pino from 'pino'
 import { DEFAULT_HISTORY_EXPIRATION, DEFAULT_MAX_RETRIES, DEFAULT_RATE_LIMIT_MAX, DEFAULT_REQUEST_TIMEOUT, DEFAULT_RESTORE_RATE_LIMIT, DEFAULT_RETRY_INTERVAL, DEFAULT_STORAGE, DEFAULT_RESTORE_REQUEST_TIMEOUT, DEFAULT_RESTORE_RETRY, DEFAULT_RATE_LIMIT_TIME_WINDOW, DEFAULT_RESTORE_PROVIDER_COMMUNICATION_ERROR, DEFAULT_RESTORE_PROVIDER_EXCEEDED_QUOTA_ERROR } from '../src/lib/config.ts'
 import { parseTimeWindow } from '../src/lib/utils.ts'
+import { Readable } from 'node:stream'
 
 const logger = pino({ level: 'silent' })
 const apiKey = 'test'
@@ -146,6 +147,82 @@ test('request - should throw error when model is not found', async () => {
   }), {
     code: 'OPTION_ERROR',
     message: 'Option error: Request model deepseek:deepseek-chat not defined'
+  })
+})
+
+test('request - should handle error from provider', async () => {
+  const client = {
+    ...createDummyClient(),
+    request: async () => {
+      throw new Error('Provider API error')
+    }
+  }
+
+  const ai = new Ai({
+    logger,
+    providers: {
+      openai: {
+        apiKey,
+        client
+      }
+    },
+    models: [{
+      provider: 'openai',
+      model: 'gpt-4o-mini'
+    }],
+  })
+  await ai.init()
+
+  await assert.rejects(async () => {
+    await ai.request({
+      models: ['openai:gpt-4o-mini'],
+      prompt: 'Can you help me to with math?',
+      options: {
+        context: 'You are a nice helpful assistant.',
+      }
+    })
+  }, {
+    message: 'Provider API error'
+  })
+})
+
+test('request - should handle error from provider on stream', async () => {
+  const client = {
+    ...createDummyClient(),
+    stream: async () => {
+      return mockOpenAiStream([], { message: 'Provider stream error' })
+    }
+  }
+
+  const ai = new Ai({
+    logger,
+    providers: {
+      openai: {
+        apiKey,
+        client
+      }
+    },
+    models: [{
+      provider: 'openai',
+      model: 'gpt-4o-mini'
+    }],
+  })
+  await ai.init()
+
+  const response = await ai.request({
+    models: ['openai:gpt-4o-mini'],
+    prompt: 'Can you help me to with math?',
+    options: {
+      context: 'You are a nice helpful assistant.',
+      temperature: 0.5,
+      stream: true
+    }
+  }) as Readable
+
+  assert.rejects(async () => {
+    await consumeStream(response)
+  }, {
+    message: 'Provider stream error'
   })
 })
 
