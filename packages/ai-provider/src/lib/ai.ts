@@ -97,6 +97,7 @@ type ValidatedRequest = {
   models: QueryModel[]
   prompt: string
   options: ProviderRequestOptions
+  resume: boolean
 }
 
 export type AiResponseResult = 'COMPLETE' | 'INCOMPLETE_MAX_TOKENS' | 'INCOMPLETE_UNKNOWN'
@@ -457,6 +458,7 @@ export class Ai {
     }
 
     const validatedRequest: ValidatedRequest = {
+      resume: request.resume ?? true, // default resume is true
       models: [],
       prompt: request.prompt,
       options: {
@@ -503,45 +505,22 @@ export class Ai {
 
   async request(request: Request): Promise<Response> {
     const req = await this.validateRequest(request)
-
     this.logger.debug({ request }, 'AI request')
 
-    const sessionId: AiSessionId = req.options.sessionId ?? await this.createSessionId()
-
-    // Handle stream resume functionality
-    const shouldResume = request.resume !== false // Default to true
-
     // If resume is enabled and we have a sessionId, try to auto-resume from the last event
-    if (shouldResume && req.options.sessionId && req.options.stream) {
+    if (request.resume && req.options.sessionId && req.options.stream) {
       try {
-        const allEvents = await this.history.range(req.options.sessionId)
-        if (allEvents.length > 0) {
-          // Get the last event ID to resume from
-          const lastEvent = allEvents[allEvents.length - 1]
-          const resumeFromEventId = lastEvent.eventId
-          this.logger.debug({
-            sessionId: req.options.sessionId,
-            lastEventId: resumeFromEventId,
-            totalEvents: allEvents.length
-          }, 'Auto-resuming from last event')
-
-          // Try to get events from the last event ID
-          const events = await this.history.rangeFromId(req.options.sessionId, resumeFromEventId)
-
-          if (events.length > 0) {
-            // Create a resumable stream from historical events
-            const resumeStream = this.createResumeStream(events, sessionId)
-            return resumeStream as AiStreamResponse
-          } else {
-            this.logger.debug({ resumeFromEventId, sessionId }, 'No events found for resume, continuing with normal request')
-          }
+        const resumeStream = await this.resumeRequest(req)
+        if (resumeStream) {
+          return resumeStream
         }
-      } catch (error: any) {
-        // If we can't get events or resume fails, continue with normal request
-        this.logger.debug({ sessionId: req.options.sessionId, error }, 'Could not auto-resume, continuing with normal request')
+        this.logger.debug({ sessionId: req.options.sessionId }, 'No events found for resume, continuing with normal request')
+      } catch (err: any) {
+        this.logger.error({ sessionId: req.options.sessionId, err }, 'Error auto-resuming, continuing with normal request')
       }
     }
 
+    const sessionId: AiSessionId = req.options.sessionId ?? await this.createSessionId()
     const models: QueryModel[] = req.models
     const skipModels: string[] = []
 
@@ -594,9 +573,7 @@ export class Ai {
             err = errorWithCode
 
             // do not retry on timeout errors and empty response
-            if (errorWithCode.code && (errorWithCode.code === 'PROVIDER_REQUEST_TIMEOUT_ERROR' ||
-              errorWithCode.code === 'PROVIDER_REQUEST_STREAM_TIMEOUT_ERROR' ||
-              errorWithCode.code === 'PROVIDER_RESPONSE_MAX_TOKENS_ERROR')) {
+            if(this.isErrorRetryable(errorWithCode)) {
               break
             }
 
@@ -621,7 +598,6 @@ export class Ai {
           // Attach sessionId to the stream for the user
           responseStream.sessionId = sessionId
           return responseStream
-
         }
 
         const contentResponse: AiContentResponse = response as AiContentResponse
@@ -629,19 +605,9 @@ export class Ai {
         await this.history.push(sessionId, createEventId(), { prompt: req.prompt, response: contentResponse.text }, this.options.limits.historyExpiration)
 
         return contentResponse
-      } catch (error: unknown) { // Fixed type - catch variables must be any or unknown
+      } catch (error: any) {
         const errorWithCode = error as FastifyError
-        // skip:
-        // - storage errors
-        // - PROVIDER_RESPONSE_MAX_TOKENS_ERROR (options error)
-        // update state if errors are one of:
-        if (errorWithCode.code !== 'PROVIDER_RATE_LIMIT_ERROR' &&
-          errorWithCode.code !== 'PROVIDER_REQUEST_TIMEOUT_ERROR' &&
-          errorWithCode.code !== 'PROVIDER_REQUEST_STREAM_TIMEOUT_ERROR' &&
-          errorWithCode.code !== 'PROVIDER_RESPONSE_ERROR' &&
-          errorWithCode.code !== 'PROVIDER_RESPONSE_NO_CONTENT' &&
-          errorWithCode.code !== 'PROVIDER_EXCEEDED_QUOTA_ERROR'
-        ) {
+        if (!this.updateModelStateOnError(errorWithCode)) {
           throw error
         }
 
@@ -676,6 +642,30 @@ export class Ai {
 
     // never happen, but makes typescript happy
     return response
+  }
+
+  async resumeRequest(req: ValidatedRequest): Promise<AiStreamResponse | undefined> {
+    const sessionId = req.options.sessionId!
+    const allEvents = await this.history.range(sessionId)
+    if (allEvents.length > 0) {
+      // Get the last event ID to resume from
+      const lastEvent = allEvents[allEvents.length - 1]
+      const resumeFromEventId = lastEvent.eventId
+      this.logger.debug({
+        sessionId,
+        lastEventId: resumeFromEventId,
+        totalEvents: allEvents.length
+      }, 'Auto-resuming from last event')
+
+      // Try to get events from the last event ID
+      const events = await this.history.rangeFromId(sessionId, resumeFromEventId)
+
+      if (events.length > 0) {
+        // Create a resumable stream from historical events
+        const resumeStream = this.createResumeStream(events, sessionId)
+        return resumeStream as AiStreamResponse
+      }
+    }
   }
 
   async handleStreamingResponse(providerResponse: ProviderResponse, sessionId: AiSessionId, prompt: string): Promise<AiStreamResponse> {
@@ -766,6 +756,33 @@ export class Ai {
 
     return responseStream
   }
+
+  isErrorRetryable(error: FastifyError) {
+    return error.code && (error.code === 'PROVIDER_REQUEST_TIMEOUT_ERROR' ||
+      error.code === 'PROVIDER_REQUEST_STREAM_TIMEOUT_ERROR' ||
+      error.code === 'PROVIDER_RESPONSE_MAX_TOKENS_ERROR')
+  }
+
+  /**
+   * Update state if errors are one of:
+   * - PROVIDER_RATE_LIMIT_ERROR
+   * - PROVIDER_REQUEST_TIMEOUT_ERROR
+   * - PROVIDER_REQUEST_STREAM_TIMEOUT_ERROR
+   * - PROVIDER_RESPONSE_ERROR
+   * - PROVIDER_RESPONSE_NO_CONTENT
+   * - PROVIDER_EXCEEDED_QUOTA_ERROR
+   * skip:
+   * - storage errors
+   * - PROVIDER_RESPONSE_MAX_TOKENS_ERROR (options error)
+   */
+  updateModelStateOnError(errorWithCode: FastifyError) {
+        return errorWithCode.code !== 'PROVIDER_RATE_LIMIT_ERROR' &&
+          errorWithCode.code !== 'PROVIDER_REQUEST_TIMEOUT_ERROR' &&
+          errorWithCode.code !== 'PROVIDER_REQUEST_STREAM_TIMEOUT_ERROR' &&
+          errorWithCode.code !== 'PROVIDER_RESPONSE_ERROR' &&
+          errorWithCode.code !== 'PROVIDER_RESPONSE_NO_CONTENT' &&
+          errorWithCode.code !== 'PROVIDER_EXCEEDED_QUOTA_ERROR'
+        }
 
   async setModelState(modelName: string, providerState: ProviderState, modelState: ModelState, operationTimestamp: number) {
     if (!modelState) {
