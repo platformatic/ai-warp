@@ -470,7 +470,8 @@ test('GeminiProvider - should handle stream error', async () => {
     providers: {
       gemini: {
         apiKey,
-        client      }
+        client
+      }
     },
     models: [{
       provider: 'gemini',
@@ -494,7 +495,7 @@ test('GeminiProvider - should handle stream error', async () => {
   await new Promise<void>((resolve, reject) => {
     let errorReceived = false
     let streamEnded = false
-    
+
     response.on('data', (chunk: Buffer) => {
       const eventData = chunk.toString('utf8')
       if (eventData.includes('event: error')) {
