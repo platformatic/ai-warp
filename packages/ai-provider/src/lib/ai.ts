@@ -7,7 +7,7 @@ import type { FastifyError } from '@fastify/error'
 import { type AiChatHistory, type Provider, type ProviderClient, type ProviderOptions, type ProviderRequestOptions, type ProviderResponse, type AiSessionId, createAiProvider } from './provider.ts'
 import { createStorage, type Storage, type AiStorageOptions } from './storage/index.ts'
 import { isStream, parseTimeWindow } from './utils.ts'
-import { HistoryGetError, ModelStateError, OptionError, ProviderNoModelsAvailableError, ProviderRateLimitError, ProviderRequestStreamTimeoutError, ProviderRequestTimeoutError } from './errors.ts'
+import { HistoryGetError, ModelStateError, OptionError, ProviderNoModelsAvailableError, ProviderRateLimitError, ProviderRequestStreamTimeoutError, ProviderRequestTimeoutError, StorageRetrieveError } from './errors.ts'
 import { DEFAULT_HISTORY_EXPIRATION, DEFAULT_MAX_RETRIES, DEFAULT_RATE_LIMIT_MAX, DEFAULT_RATE_LIMIT_TIME_WINDOW, DEFAULT_REQUEST_TIMEOUT, DEFAULT_RESTORE_PROVIDER_COMMUNICATION_ERROR, DEFAULT_RESTORE_PROVIDER_EXCEEDED_QUOTA_ERROR, DEFAULT_RESTORE_RATE_LIMIT, DEFAULT_RESTORE_REQUEST_TIMEOUT, DEFAULT_RESTORE_RETRY, DEFAULT_RETRY_INTERVAL, DEFAULT_STORAGE } from './config.ts'
 import { createEventId, decodeEventStream, encodeEvent } from './event.ts'
 
@@ -531,22 +531,19 @@ export class Ai {
 
   // Get the content from the history
   async getResponseContent (sessionId: AiSessionId): Promise<AiContentResponse> {
-    // TODO !! try {
-    const history = await this.history.range(sessionId)
-
-    // TODO !! Check end and error events
-    // const endEvent = history.find((event: any) => event.event === 'end')
-    const contentEvents = history.filter((event: any) => event.event === 'content')
-    const text = contentEvents.map((event: any) => event.data.response).join('')
-
-    return ({
-      text,
-      result: 'COMPLETE',
-      sessionId
-    })
-
     // TODO ensure events are chronological
-    // }
+    try {
+      const history = await this.history.range(sessionId)
+
+      const endEvent = history.find((event: any) => event.event === 'end')
+      const contentEvents = history.filter((event: any) => event.event === 'content')
+      const text = contentEvents.map((event: any) => event.data.response).join('')
+
+      return ({
+        text,
+        result: endEvent?.data.response || 'COMPLETE',
+        sessionId
+      })
 
     // Check for error events
     // TODO
@@ -555,11 +552,9 @@ export class Ai {
     //   // TODO contentError
     //   throw new FastifyError(errorEvent.data, 500)
     // }
-    // } catch (error) {
-    //   // TODO contentError
-    //   // throw new FastifyError(errorEvent.data, 500)
-    //   throw error
-    // }
+    } catch {
+      throw new StorageRetrieveError()
+    }
   }
 
   async createResponseStream (sessionId: AiSessionId, request: ValidatedRequest): Promise<AiStreamResponse> {
@@ -742,18 +737,6 @@ export class Ai {
       }
     }
 
-    // // Write error to storage for the stream to pick up
-    // const errorEvent = {
-    //   id: createEventId(),
-    //   event: 'error',
-    //   data: error
-    // }
-    // this.history.push(sessionId, errorEvent.id, errorEvent, this.options.limits.historyExpiration).catch((err: any) => {
-    //   this.logger.error({ err, sessionId }, 'Failed to write error to storage')
-    // })
-
-    // This should never be reached, but TypeScript needs it
-    // TODO !!
     throw new Error('Unexpected end of providerRequest')
   }
 
@@ -846,7 +829,7 @@ export class Ai {
       // Store error to history
       const errorEvent = {
         event: 'error',
-        data: { message: error.message || String(error) }
+        data: { code: error.code, message: error.message }
       }
       await this.history.push(sessionId, createEventId(), errorEvent, this.options.limits.historyExpiration)
     }

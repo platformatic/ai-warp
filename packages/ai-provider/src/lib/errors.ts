@@ -5,6 +5,7 @@ export const ProviderResponseError = createError<string>('PROVIDER_RESPONSE_ERRO
 export const ProviderExceededQuotaError = createError<string>('PROVIDER_EXCEEDED_QUOTA_ERROR', 'Ai Provider Response: %s')
 export const ModelStateError = createError<string>('MODEL_STATE_ERROR', 'Model state error: %s')
 export const HistoryGetError = createError<string>('HISTORY_GET_ERROR', 'Failed to get history')
+export const StorageRetrieveError = createError<string>('STORAGE_RETRIEVE_ERROR', 'Failed to retrieve data from storage')
 
 export const ProviderNotFoundError = createError<string>('PROVIDER_NOT_FOUND_ERROR', 'Provider %s not found')
 export const ModelProviderNotFoundError = createError<string>('MODEL_PROVIDER_NOT_FOUND_ERROR', 'Model provider not found %s')

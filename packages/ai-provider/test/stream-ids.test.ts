@@ -1,4 +1,4 @@
-import { test, mock } from 'node:test'
+import { test } from 'node:test'
 import assert from 'node:assert'
 import pino from 'pino'
 import { Ai, type AiStreamResponse } from '../src/index.ts'
@@ -8,13 +8,13 @@ import { isStream } from '../src/lib/utils.ts'
 test('should include UUID ids in streaming events', async () => {
   const client = {
     ...createDummyClient(),
-    stream: mock.fn(async () => {
+    stream: async () => {
       return mockOpenAiStream([
         { choices: [{ delta: { content: 'Hello' } }] },
         { choices: [{ delta: { content: ' world' } }] },
         { choices: [{ delta: { content: '!' }, finish_reason: 'stop' }] }
       ])
-    })
+    }
   }
 
   const ai = new Ai({
@@ -95,13 +95,13 @@ test('should include UUID ids in streaming events', async () => {
 test('should include UUID ids in streaming events with valkey storage', async () => {
   const client = {
     ...createDummyClient(),
-    stream: mock.fn(async () => {
+    stream: async () => {
       return mockOpenAiStream([
         { choices: [{ delta: { content: 'Hello' } }] },
         { choices: [{ delta: { content: ' world' } }] },
         { choices: [{ delta: { content: '!' }, finish_reason: 'stop' }] }
       ])
-    })
+    }
   }
 
   const ai = new Ai({

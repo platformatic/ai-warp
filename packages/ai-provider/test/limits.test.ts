@@ -1,4 +1,4 @@
-import { mock, test } from 'node:test'
+import { test } from 'node:test'
 import assert from 'node:assert'
 import { Readable } from 'node:stream'
 import { setTimeout as wait } from 'node:timers/promises'
@@ -814,7 +814,7 @@ test('should handle max tokens limit in non-streaming response', async () => {
 test('should handle max tokens limit in streaming response', async () => {
   const client = {
     ...createDummyClient(),
-    stream: mock.fn(async (api: any, request: any) => {
+    stream: async (api: any, request: any) => {
       assert.equal(request.max_tokens, 50)
       return mockOpenAiStream([
         { choices: [{ delta: { content: 'This is' } }] },
@@ -822,7 +822,7 @@ test('should handle max tokens limit in streaming response', async () => {
         { choices: [{ delta: { content: ' response' } }] },
         { choices: [{ delta: {}, finish_reason: 'length' }] }
       ])
-    })
+    }
   }
 
   const ai = new Ai({
@@ -905,14 +905,14 @@ test('should handle complete response when max tokens not reached', async () => 
 test('should handle complete streaming response when max tokens not reached', async () => {
   const client = {
     ...createDummyClient(),
-    stream: mock.fn(async (api: any, request: any) => {
+    stream: async (api: any, request: any) => {
       assert.equal(request.max_tokens, 1000)
       return mockOpenAiStream([
         { choices: [{ delta: { content: 'Complete' } }] },
         { choices: [{ delta: { content: ' response.' } }] },
         { choices: [{ delta: {}, finish_reason: 'stop' }] }
       ])
-    })
+    }
   }
 
   const ai = new Ai({

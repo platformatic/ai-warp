@@ -186,13 +186,13 @@ for (const storage of storages) {
   test(`should be able to perform a prompt with stream with ${storage.type} storage`, { only: true }, async () => {
     const client = {
       ...createDummyClient(),
-      stream: mock.fn(async () => {
+      stream: async () => {
         return mockOpenAiStream([
           { choices: [{ delta: { content: 'Sure,' } }] },
           { choices: [{ delta: { content: ' I can help you' } }] },
           { choices: [{ delta: { content: ' with math.' }, finish_reason: 'stop' }] }
         ])
-      })
+      }
     }
 
     const ai = new Ai({
