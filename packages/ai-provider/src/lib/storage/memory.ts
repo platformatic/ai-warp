@@ -44,12 +44,20 @@ export class MemoryStorage implements Storage {
     return this.hash.get(key, field)
   }
 
+  async createSubscription (_sessionId: string) {
+    // nothing to do
+  }
+
+  async removeSubscription (_sessionId: string) {
+    // nothing to do
+  }
+
   async subscribe (channel: string, callback: (message: any) => void) {
     this.pubsub.subscribe(channel, callback)
   }
 
-  async unsubscribe (channel: string) {
-    this.pubsub.unsubscribe(channel)
+  async unsubscribe (channel: string, callback: (message: any) => void) {
+    this.pubsub.unsubscribe(channel, callback)
   }
 }
 
@@ -160,12 +168,7 @@ class PubSubStorage extends EventEmitter {
     this.on(channel, callback)
   }
 
-  unsubscribe (channel: string, callback?: (message: any) => void) {
-    if (callback) {
-      this.off(channel, callback)
-    } else {
-      // Remove all listeners for the channel
-      this.removeAllListeners(channel)
-    }
+  unsubscribe (channel: string, callback: (message: any) => void) {
+    this.off(channel, callback)
   }
 }

@@ -505,17 +505,23 @@ export class Ai {
     const r = await this.validateRequest(request)
 
     const sessionId: AiSessionId = r.options.sessionId ?? await this.createSessionId()
+    this.history.listen(sessionId)
 
     if (r.options.stream) {
       const stream = await this.createResponseStream(sessionId, r)
-      this.makeProviderRequest(sessionId, r).catch((error: any) => {
-        this.logger.error({ error, sessionId }, 'ai request stream error')
-      })
+      this.makeProviderRequest(sessionId, r)
+        .then(() => {
+          this.history.remove(sessionId)
+        })
+        .catch((error: any) => {
+          this.logger.error({ error, sessionId }, 'ai request stream error')
+        })
       return stream
     }
 
     try {
       await this.makeProviderRequest(sessionId, r)
+      this.history.remove(sessionId)
       return this.getResponseContent(sessionId)
     } catch (error) {
       this.logger.error({ error, sessionId }, 'ai request no stream error')
@@ -560,13 +566,10 @@ export class Ai {
     const stream = new Readable({
       objectMode: false,
       read () { }
-    })
+    }) as AiStreamResponse
+    stream.sessionId = sessionId
 
-      // Add sessionId to the stream
-      ; (stream as AiStreamResponse).sessionId = sessionId
-
-    // Subscribe to storage updates for this session
-    await this.storage.subscribe(sessionId, (event) => {
+    const subscription = (event: any) => {
       try {
         if (event.event === 'content') {
           const encodedEvent = encodeEvent(event)
@@ -575,16 +578,22 @@ export class Ai {
           const encodedEvent = encodeEvent(event)
           stream.push(encodedEvent)
           stream.push(null) // End the stream
+          this.storage.unsubscribe(sessionId, subscription)
         } else if (event.event === 'error') {
           const encodedEvent = encodeEvent(event)
           stream.push(encodedEvent)
           stream.destroy(event.data as Error)
+          this.storage.unsubscribe(sessionId, subscription)
         }
       } catch (error) {
         this.logger.error({ error, sessionId }, 'Failed to process storage event')
         stream.destroy(error as Error)
+        this.storage.unsubscribe(sessionId, subscription)
       }
-    })
+    }
+
+    // Subscribe to storage updates for this session
+    await this.storage.subscribe(sessionId, subscription)
 
     // Handle resume if needed
     if (request.resume && request.options.sessionId) {
@@ -794,66 +803,6 @@ export class Ai {
         reject(error)
       })
     })
-  }
-
-  async resumeStream (sessionId: AiSessionId): Promise<AiStreamResponse | undefined> {
-    try {
-      const existingHistory = await this.history.range(sessionId)
-      if (!existingHistory || existingHistory.length === 0) {
-        return undefined
-      }
-
-      // Create a new stream for resuming
-      const stream = new Readable({
-        objectMode: false,
-        read () { }
-      })
-
-        // Add sessionId to the stream
-        ; (stream as AiStreamResponse).sessionId = sessionId
-
-      // Subscribe to storage updates for this session
-      await this.storage.subscribe(sessionId, (event) => {
-        try {
-          if (event.event === 'content') {
-            const encodedEvent = encodeEvent(event)
-            stream.push(encodedEvent)
-          } else if (event.event === 'end') {
-            const encodedEvent = encodeEvent(event)
-            stream.push(encodedEvent)
-            stream.push(null) // End the stream
-          } else if (event.event === 'error') {
-            const encodedEvent = encodeEvent(event)
-            stream.push(encodedEvent)
-            stream.destroy(event.data as Error)
-          }
-        } catch (error) {
-          this.logger.error({ error, sessionId }, 'Failed to process storage event')
-          stream.destroy(error as Error)
-        }
-      })
-
-      // Replay existing events
-      for (const event of existingHistory) {
-        if (event.event === 'content' || event.event === 'end' || event.event === 'error') {
-          const encodedEvent = encodeEvent(event)
-          stream.push(encodedEvent)
-
-          if (event.event === 'end') {
-            stream.push(null)
-            break
-          } else if (event.event === 'error') {
-            stream.destroy(event.data as Error)
-            break
-          }
-        }
-      }
-
-      return stream as AiStreamResponse
-    } catch (error) {
-      this.logger.error({ error, sessionId }, 'Failed to resume stream')
-      return undefined
-    }
   }
 
   async handleStreamResponse (sessionId: AiSessionId, prompt: string, providerResponse: Readable) {
@@ -1104,6 +1053,14 @@ class History {
     this.storage = storage
   }
 
+  async listen (sessionId: string) {
+    return await this.storage.createSubscription(sessionId)
+  }
+
+  async remove (sessionId: string) {
+    return await this.storage.removeSubscription(sessionId)
+  }
+
   async push (sessionId: string, eventId: string, value: any, expiration: number) {
     // Add eventId and timestamp to the stored value for resume functionality
     const eventData = {
@@ -1128,7 +1085,7 @@ class History {
     const events = Object.values(hash).sort((a: any, b: any) => a.timestamp - b.timestamp)
 
     // Find the index of the fromEventId
-    const fromIndex = events.findIndex((event: any) => event.eventId === fromEventId)
+    const fromIndex = events.findIndex((event: any) => event.id === fromEventId)
 
     // Return events from that index onwards, or empty array if not found
     return fromIndex >= 0 ? events.slice(fromIndex) : []

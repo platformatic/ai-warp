@@ -23,7 +23,9 @@ export type Storage = {
   hashGetAll: (key: string) => Promise<Record<string, any>>
   hashGet: (key: string, field: string) => Promise<any>
   subscribe: (sessionId: string, callback: (message: any) => void) => Promise<void>
-  unsubscribe: (sessionId: string) => Promise<void>
+  unsubscribe: (sessionId: string, callback: (message: any) => void) => Promise<void>
+  createSubscription: (sessionId: string) => Promise<void>
+  removeSubscription: (sessionId: string) => Promise<void>
   close: () => Promise<void>
 }
 

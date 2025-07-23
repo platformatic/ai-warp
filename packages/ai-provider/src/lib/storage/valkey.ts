@@ -12,7 +12,9 @@ const defaultValkeyOptions: ValkeyOptions = {
 export class ValkeyStorage implements Storage {
   private options: AiStorageOptions
   private client!: Redis
+  private pubsub!: Redis
   private subscriptions: EventEmitter
+  private subscriptionsCount: Record<string, number> = {}
 
   constructor (options: AiStorageOptions) {
     // TODO validate options
@@ -32,49 +34,33 @@ export class ValkeyStorage implements Storage {
     }
 
     this.client = new Redis(connectionConfig)
+    this.pubsub = new Redis(connectionConfig)
 
-    try {
-      await this.client.config('SET', 'notify-keyspace-events', 'KE')
-    } catch (error) {
-      // TODO this.logger.error({ error }, 'Failed to set keyspace notifications')
-      console.error('Failed to set keyspace notifications in valkey init', error)
-    }
-
-    // Subscribe to all keyspace events
-    this.client.subscribe(`__keyspace@${connectionConfig.db}__:*`)
-
-    this.client.on('message', async (sessionId, event) => {
-      if (event !== 'hset') {
-        return
-      }
-      try {
-        const value = await this.valueGet(sessionId)
-        this.subscriptions.emit(sessionId, value)
-      } catch (error) {
-        // TODO this.logger.error({ error }, 'Failed to get value')
-        console.error('Failed to get value in valkey subscription', error)
-      }
+    this.pubsub.on('message', (sessionId, event) => {
+      this.subscriptions.emit(sessionId, event)
     })
   }
 
   async close () {
     await this.client.quit()
+    await this.pubsub.quit()
   }
 
   async valueGet (key: string) {
     try {
       const value = await this.client.get(key)
-      if (value === null) {
-        return undefined
+      if (!value) {
+        return
       }
 
       // Try to parse as JSON, fallback to string if it fails
       try {
         return JSON.parse(value)
       } catch {
-        return value
+
       }
     } catch (error) {
+      console.error('valkey valueGet error', key, error)
       const errorMessage = error instanceof Error ? error.message : String(error)
       throw new StorageGetError(key, errorMessage)
     }
@@ -95,9 +81,7 @@ export class ValkeyStorage implements Storage {
       const serializedValue = typeof value === 'string' ? value : JSON.stringify(value)
       await this.client.hset(key, field, serializedValue)
       await this.client.expire(key, Math.ceil(expiration / 1000))
-
-      // Publish the event to notify subscribers
-      this.subscriptions.emit(key, value)
+      await this.pubsub.publish(key, value)
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error)
       throw new StorageListPushError(key, errorMessage)
@@ -127,9 +111,7 @@ export class ValkeyStorage implements Storage {
   async hashGet (key: string, field: string) {
     try {
       const value = await this.client.hget(key, field)
-      if (value === null) {
-        return undefined
-      }
+      if (!value) { return }
 
       try {
         return JSON.parse(value)
@@ -142,6 +124,21 @@ export class ValkeyStorage implements Storage {
     }
   }
 
+  async createSubscription (sessionId: string) {
+    if (!this.subscriptionsCount[sessionId]) {
+      this.subscriptionsCount[sessionId] = 0
+      await this.pubsub.subscribe(sessionId)
+    }
+    this.subscriptionsCount[sessionId]++
+  }
+
+  async removeSubscription (sessionId: string) {
+    this.subscriptionsCount[sessionId]--
+    if (this.subscriptionsCount[sessionId] === 0) {
+      await this.pubsub.unsubscribe(sessionId)
+    }
+  }
+
   async subscribe (sessionId: string, callback: (message: any) => void) {
     try {
       this.subscriptions.on(sessionId, callback)
@@ -151,9 +148,9 @@ export class ValkeyStorage implements Storage {
     }
   }
 
-  async unsubscribe (sessionId: string) {
+  async unsubscribe (sessionId: string, callback: (message: any) => void) {
     try {
-      this.subscriptions.removeAllListeners(sessionId)
+      this.subscriptions.off(sessionId, callback)
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error)
       throw new StorageGetError(sessionId, errorMessage)

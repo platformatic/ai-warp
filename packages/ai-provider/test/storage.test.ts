@@ -56,7 +56,7 @@ for (const storage of storages) {
     assert.equal((response).text, 'All good')
   })
 
-  test('should be able to perform a prompt with options', async () => {
+  test(`should be able to perform a prompt with options with ${storage.type} storage`, async () => {
     const client = {
       ...createDummyClient(),
       request: mock.fn(async () => {
@@ -110,7 +110,7 @@ for (const storage of storages) {
     assert.equal((response).text, 'All good')
   })
 
-  test('should be able to perform a prompt with history', async () => {
+  test(`should be able to perform a prompt with history with ${storage.type} storage`, async () => {
     const client = {
       ...createDummyClient(),
       request: mock.fn(async () => {
@@ -183,7 +183,7 @@ for (const storage of storages) {
     assert.equal((response).text, 'Sure, I can help you with math.')
   })
 
-  test('should be able to perform a prompt with stream', async () => {
+  test(`should be able to perform a prompt with stream with ${storage.type} storage`, { only: true }, async () => {
     const client = {
       ...createDummyClient(),
       stream: mock.fn(async () => {
@@ -222,7 +222,6 @@ for (const storage of storages) {
     }) as AiStreamResponse
 
     const { content } = await consumeStream(response)
-
     assert.equal(content.join(''), 'Sure, I can help you with math.')
 
     //  @ts-ignore
@@ -244,8 +243,3 @@ for (const storage of storages) {
     })
   })
 }
-
-// for type of memory, valkey
-// check models state
-// check history by session id
-// non existing session id
