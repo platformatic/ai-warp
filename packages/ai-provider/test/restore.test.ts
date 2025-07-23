@@ -2,9 +2,10 @@ import { mock, test } from 'node:test'
 import assert from 'node:assert'
 import { Readable } from 'node:stream'
 import { setTimeout as wait } from 'node:timers/promises'
-import { Ai, type ContentResponse } from '../src/lib/ai.ts'
+import { Ai, type AiStreamResponse, type ContentResponse } from '../src/lib/ai.ts'
 import pino from 'pino'
 import { createDummyClient, setModelState } from './helper/helper.ts'
+import { isStream } from '../src/lib/utils.ts'
 
 const apiKey = 'test'
 const logger = pino({ level: 'silent' })
@@ -306,9 +307,9 @@ test('should restore model after stream timeout error when enough time has passe
     options: {
       stream: true
     }
-  })
+  }) as AiStreamResponse
 
-  assert.ok(typeof response.pipe === 'function')
+  assert.ok(isStream(response))
   assert.equal(requestCount, 2)
 })
 

@@ -27,3 +27,7 @@ export function parseTimeWindow (timeWindow: number | string, key?: string): num
     case 'd': return value * 24 * 60 * 60 * 1000
   }
 }
+
+export function isStream (item: any) {
+  return typeof item?.pipe === 'function'
+}
