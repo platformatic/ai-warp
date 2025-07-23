@@ -1,6 +1,7 @@
 import { Redis } from 'iovalkey'
 import type { AiStorageOptions, Storage, ValkeyOptions } from './index.ts'
 import { StorageGetError, StorageListPushError, StorageListRangeError, StorageSetError } from '../errors.ts'
+import EventEmitter from 'node:events'
 
 const defaultValkeyOptions: ValkeyOptions = {
   host: 'localhost',
@@ -9,14 +10,18 @@ const defaultValkeyOptions: ValkeyOptions = {
 }
 
 export class ValkeyStorage implements Storage {
-  private client: Redis
-  private subscriber: Redis
-  private subscriptions: Map<string, (message: any) => void>
+  private options: AiStorageOptions
+  private client!: Redis
+  private subscriptions: EventEmitter
 
   constructor (options: AiStorageOptions) {
     // TODO validate options
+    this.options = options
+    this.subscriptions = new EventEmitter()
+  }
 
-    const valkeyOptions = options.valkey || {} // TODO when validated
+  async init () {
+    const valkeyOptions = this.options.valkey || {}
 
     const connectionConfig = {
       host: valkeyOptions.host || defaultValkeyOptions.host,
@@ -27,25 +32,30 @@ export class ValkeyStorage implements Storage {
     }
 
     this.client = new Redis(connectionConfig)
-    this.subscriber = new Redis(connectionConfig)
-    this.subscriptions = new Map()
 
-    // Handle subscriber messages
-    this.subscriber.on('message', (channel, message) => {
-      const callback = this.subscriptions.get(channel)
-      if (callback) {
-        try {
-          const parsedMessage = JSON.parse(message)
-          callback(parsedMessage)
-        } catch {
-          callback(message)
-        }
+    try {
+      await this.client.config('SET', 'notify-keyspace-events', 'KE')
+    } catch (error) {
+      // TODO !! this.logger.error({ error }, 'Failed to set keyspace notifications')
+    }
+
+    // Subscribe to all keyspace events
+    this.client.subscribe(`__keyspace@${connectionConfig.db}__:*`)
+
+    this.client.on('message', async (sessionId, event) => {
+      if(event !== 'hset') {
+        return
+      }
+      try {
+        const value = await this.valueGet(sessionId)
+        this.subscriptions.emit(sessionId, value)
+      } catch (error) {
+        // TODO this.logger.error({ error }, 'Failed to get value')
       }
     })
   }
 
   async close () {
-    await this.subscriber.quit()
     await this.client.quit()
   }
 
@@ -127,33 +137,21 @@ export class ValkeyStorage implements Storage {
     }
   }
 
-  async publish (channel: string, message: any) {
+  async subscribe (sessionId: string, callback: (message: any) => void) {
     try {
-      const serializedMessage = typeof message === 'string' ? message : JSON.stringify(message)
-      await this.client.publish(channel, serializedMessage)
+      this.subscriptions.on(sessionId, callback)
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error)
-      throw new StorageSetError(channel, errorMessage)
+      throw new StorageGetError(sessionId, errorMessage)
     }
   }
 
-  async subscribe (channel: string, callback: (message: any) => void) {
+  async unsubscribe (sessionId: string) {
     try {
-      this.subscriptions.set(channel, callback)
-      await this.subscriber.subscribe(channel)
+      this.subscriptions.off(sessionId) // TODO !!
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error)
-      throw new StorageGetError(channel, errorMessage)
-    }
-  }
-
-  async unsubscribe (channel: string) {
-    try {
-      this.subscriptions.delete(channel)
-      await this.subscriber.unsubscribe(channel)
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error)
-      throw new StorageGetError(channel, errorMessage)
+      throw new StorageGetError(sessionId, errorMessage)
     }
   }
 }

@@ -1,7 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { setTimeout as wait } from 'node:timers/promises'
 import { Readable, Transform } from 'node:stream'
-import cloneable from 'cloneable-readable'
 import type { Logger } from 'pino'
 import type { FastifyError } from '@fastify/error'
 
@@ -266,7 +265,6 @@ export class Ai {
     }, {})
   }
 
-  // TODO
   async close () {
     const tasks = []
     for (const provider of this.providers.values()) {
@@ -504,26 +502,26 @@ export class Ai {
   }
 
   async request (request: Request): Promise<Response> {
-    const req = await this.validateRequest(request)
+    // TODO !!
+    const r = await this.validateRequest(request)
 
-    this.logger.debug({ request }, 'AI request')
+    const sessionId: AiSessionId = r.sessionId ?? await this.createSessionId()
+    
+    this.providerRequest(sessionId, r).catch(error => {
+      this.logger.error({ error }, 'Failed to request')
+      throw error
+    })
 
-    // Handle stream resume functionality
-    // If resume is enabled and we have a sessionId, try to auto-resume from the last event
-    if (req.resume && req.options.sessionId && req.options.stream) {
-      try {
-        const resumeStream = await this.resumeStream(req.options.sessionId)
-        if (resumeStream) {
-          return resumeStream
-        }
-      } catch (error: any) {
-        // If we can't get events or resume fails, continue with normal request
-        this.logger.debug({ sessionId: req.options.sessionId, error }, 'Could not auto-resume, continuing with normal request')
-      }
-    }
+    // TODO !! AiContentResponse if options.stream is false: wait till the end, read the whole history and send it at once
+    return this.requestStream(r)
+  }
 
-    const sessionId: AiSessionId = req.options.sessionId ?? await this.createSessionId()
-    const models: QueryModel[] = req.models
+  async requestStream (request: ValidatedRequest): Promise<AiStreamResponse> {
+    // TODO !! stream from storage by sessionId (and resume if needed)
+  }
+
+  async providerRequest (sessionId: AiSessionId, request: ValidatedRequest) {
+    const models: QueryModel[] = request.models
     const skipModels: string[] = []
 
     let selected = await this.selectModel(models)
@@ -532,14 +530,13 @@ export class Ai {
       throw new ProviderNoModelsAvailableError(models.map(m => typeof m === 'string' ? m : `${m.provider}:${m.model}`).join(', '))
     }
 
-    let response!: Response
-    const history: AiChatHistory | undefined = req.options.history
+    const history: AiChatHistory | undefined = request.options.history
     const options = {
-      context: req.options.context,
-      temperature: req.options.temperature,
-      stream: req.options.stream,
+      context: request.options.context,
+      temperature: request.options.temperature,
+      stream: request.options.stream,
       history,
-      maxTokens: req.options.maxTokens ?? this.options.limits.maxTokens
+      maxTokens: request.options.maxTokens ?? this.options.limits.maxTokens
     }
 
     while (selected) {
@@ -547,7 +544,7 @@ export class Ai {
       const operationTimestamp = Date.now()
 
       // set maxTokens from model limits or options
-      options.maxTokens = selected.settings.limits.maxTokens ?? req.options.maxTokens ?? this.options.limits.maxTokens
+      options.maxTokens = selected.settings.limits.maxTokens ?? request.options.maxTokens ?? this.options.limits.maxTokens
       const rateLimit = { max: selected.settings.limits.rate.max, timeWindow: selected.settings.limits.rate.timeWindow }
 
       let providerResponse!: ProviderResponse
@@ -563,7 +560,7 @@ export class Ai {
           err = undefined
           try {
             providerResponse = await this.requestTimeout(
-              selected.provider.provider.request(selected.model.name, req.prompt, options),
+              selected.provider.provider.request(selected.model.name, request.prompt, options),
               this.options.limits.requestTimeout,
               options.stream
             )
@@ -586,25 +583,19 @@ export class Ai {
             }
           }
         } while (retry && err)
-        response = providerResponse as Response
 
         if (err) {
+          // non retryable error
           throw err
         }
 
         if (isStream(providerResponse)) {
-          const responseStream = await this.handleStreamResponse(sessionId, req.prompt, providerResponse as Readable)
-
-          // Attach sessionId to the stream for the user
-          responseStream.sessionId = sessionId
-          return responseStream
+          // TODO !! write to storage 
         }
 
-        const contentResponse: AiContentResponse = response as AiContentResponse
-        contentResponse.sessionId = sessionId
-        await this.history.push(sessionId, createEventId(), { prompt: req.prompt, response: contentResponse.text }, this.options.limits.historyExpiration)
+        // TODO !! write to storage the whole response
 
-        return contentResponse
+        return
       } catch (error: any) {
         const errorWithCode = error as FastifyError
         if (!this.isErrorToUpdateModelState(errorWithCode)) {
@@ -635,127 +626,15 @@ export class Ai {
         }
       }
     }
-
-    // never happen, but makes typescript happy
-    return response
   }
 
   async resumeStream (sessionId: AiSessionId): Promise<AiStreamResponse | undefined> {
-    const allEvents = await this.history.range(sessionId)
-    if (allEvents?.length > 0) {
-      // Get the last event ID to resume from
-      const lastEvent = allEvents[allEvents.length - 1]
-      const resumeFromEventId = lastEvent.eventId
-      this.logger.debug({
-        sessionId,
-        lastEventId: resumeFromEventId,
-        totalEvents: allEvents.length
-      }, 'Auto-resuming from last event')
+    // TODO !!
 
-      // Try to get events from the last event ID
-      const events = await this.history.rangeFromId(sessionId, resumeFromEventId)
-
-      if (events.length > 0) {
-        // Create a resumable stream from historical events
-        const resumeStream = this.createResumeStream(events, sessionId)
-        return resumeStream as AiStreamResponse
-      }
-    }
   }
 
   async handleStreamResponse (sessionId: AiSessionId, prompt: string, providerResponse: Readable) {
-    // Clone the stream using cloneable-readable for history processing
-    // @ts-ignore
-    const cloneableStream = cloneable(providerResponse as Readable)
-    const responseStream = cloneableStream as unknown as AiStreamResponse // Return the original
-    const historyStream = cloneableStream.clone() // Create one clone for history
-
-    // Handle streaming response: process history/pub/sub in background
-    const streamChannel = `ai-stream:${sessionId}`
-    let accumulatedResponse = ''
-
-    // Process the cloned stream in background to accumulate response for history and pub/sub
-    const processStreamInBackground = async () => {
-      try {
-        for await (const chunk of historyStream) {
-          // Decode the chunk from Buffer to string
-          const chunkString = chunk.toString('utf8')
-
-          // Parse the event stream format to extract events
-          const events = decodeEventStream(chunkString)
-
-          // Process each event
-          for (const event of events) {
-            const eventId = event.id || createEventId()
-
-            if (event.event === 'content') {
-              const content = (event.data as any)?.response || (event.data as any)?.content || ''
-              accumulatedResponse += content
-
-              // Publish streaming event via pub/sub
-              await this.storage.publish(streamChannel, {
-                eventId,
-                type: 'content',
-                sessionId,
-                data: event.data
-              })
-            } else if (event.event === 'error') {
-              // Store error to history
-              await this.history.push(sessionId, eventId, {
-                prompt,
-                error: event.data
-              }, this.options.limits.historyExpiration)
-
-              // Publish error event
-              await this.storage.publish(streamChannel, {
-                eventId,
-                type: 'error',
-                sessionId,
-                data: event.data
-              })
-              return
-            }
-          }
-        }
-
-        // Store final accumulated response to history
-        const finalEventId = createEventId()
-        await this.history.push(sessionId, finalEventId, {
-          prompt,
-          response: accumulatedResponse
-        }, this.options.limits.historyExpiration)
-
-        // Publish final event
-        await this.storage.publish(streamChannel, {
-          eventId: finalEventId,
-          type: 'complete',
-          sessionId,
-          data: { response: accumulatedResponse }
-        })
-      } catch (error: any) {
-        // Store error to history
-        const errorEventId = createEventId()
-        await this.history.push(sessionId, errorEventId, {
-          prompt,
-          error: error.message || String(error)
-        }, this.options.limits.historyExpiration)
-
-        // Publish error event
-        await this.storage.publish(streamChannel, {
-          eventId: errorEventId,
-          type: 'error',
-          sessionId,
-          data: { message: error.message || String(error) }
-        })
-      }
-    }
-
-    // Process stream in background (don't await to avoid blocking the response)
-    processStreamInBackground().catch(error => {
-      this.logger.error({ error }, 'Failed to process stream for history/pubsub')
-    })
-
-    return responseStream
+    // TODO write to storage the whole response    
   }
 
   async setModelState (modelName: string, providerState: ProviderState, modelState: ModelState, operationTimestamp: number) {
@@ -905,54 +784,6 @@ export class Ai {
     stream.pipe(timeoutTransform)
 
     return timeoutTransform
-  }
-
-  private createResumeStream (events: any[], sessionId: AiSessionId): Readable {
-    let eventIndex = 0
-
-    const resumeStream = new Readable({
-      read () {
-        // Process events sequentially with a small delay to simulate streaming
-        const processNextEvent = () => {
-          if (eventIndex >= events.length) {
-            // All events processed
-            this.push(null)
-            return
-          }
-
-          const event = events[eventIndex++]
-
-          // Create SSE-formatted chunk for the event
-          let eventType = 'content'
-          let eventData = event
-
-          // Handle different event types based on stored data structure
-          if (event.error) {
-            eventType = 'error'
-            eventData = { message: event.error }
-          } else if (event.response) {
-            eventType = 'content'
-            eventData = { response: event.response }
-          }
-
-          // Format as Server-Sent Event
-          const sseChunk = `event: ${eventType}\ndata: ${JSON.stringify(eventData)}\nid: ${event.eventId || createEventId()}\n\n`
-          const encodedChunk = Buffer.from(sseChunk, 'utf8')
-
-          this.push(encodedChunk)
-
-          // Schedule next event with a small delay to simulate real streaming
-          setTimeout(processNextEvent, 10)
-        }
-
-        // Start processing
-        processNextEvent()
-      }
-    })
-
-      // Attach sessionId to the resume stream
-      ; (resumeStream as any).sessionId = sessionId
-    return resumeStream
   }
 
   // TODO user grants
