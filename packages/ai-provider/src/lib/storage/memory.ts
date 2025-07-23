@@ -26,6 +26,9 @@ export class MemoryStorage implements Storage {
 
   async hashSet (key: string, field: string, value: any, expiration: number) {
     this.hash.set(key, field, value, expiration)
+    
+    // Publish the event to notify subscribers
+    this.pubsub.publish(key, value)
   }
 
   async hashGetAll (key: string) {

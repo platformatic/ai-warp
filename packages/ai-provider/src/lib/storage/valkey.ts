@@ -92,7 +92,10 @@ export class ValkeyStorage implements Storage {
     try {
       const serializedValue = typeof value === 'string' ? value : JSON.stringify(value)
       await this.client.hset(key, field, serializedValue)
-      await this.client.expire(key, expiration / 1000)
+      await this.client.expire(key, Math.ceil(expiration / 1000))
+      
+      // Publish the event to notify subscribers
+      this.subscriptions.emit(key, value)
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error)
       throw new StorageListPushError(key, errorMessage)
@@ -148,7 +151,7 @@ export class ValkeyStorage implements Storage {
 
   async unsubscribe (sessionId: string) {
     try {
-      this.subscriptions.off(sessionId) // TODO !!
+      this.subscriptions.removeAllListeners(sessionId)
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error)
       throw new StorageGetError(sessionId, errorMessage)
