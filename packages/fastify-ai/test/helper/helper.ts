@@ -2,7 +2,7 @@ import pino, { type Logger } from 'pino'
 import fastify from 'fastify'
 import ai, { type AiPluginOptions, type AiChatHistory } from '../../src/index.ts'
 
-export async function createApp ({ client, logger }: { client: any, logger?: Logger }) {
+export async function createApp ({ client, logger, customOptions }: { client: any, logger?: Logger, customOptions?: Partial<AiPluginOptions> }) {
   if (!logger) {
     logger = pino({ level: 'silent' })
   }
@@ -20,7 +20,8 @@ export async function createApp ({ client, logger }: { client: any, logger?: Log
         provider: 'openai',
         model: 'gpt-4o-mini'
       }
-    ]
+    ],
+    ...customOptions
   }
 
   await app.register(ai, options as AiPluginOptions)

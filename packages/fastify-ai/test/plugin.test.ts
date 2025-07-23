@@ -60,3 +60,74 @@ test('should be able to perform a basic prompt with stream', async () => {
   // Check that UUIDs are present
   assert.ok(response.body.includes('id: '))
 })
+
+test('should be able to retrieve chat history', async () => {
+  const client = createDummyClient()
+
+  const app = await createApp({ client })
+
+  // Call the real retrieveHistory function - this covers the function execution
+  const history = await app.ai.retrieveHistory('test-session-id')
+
+  // The history should be an array (empty by default with our dummy client)
+  assert.ok(Array.isArray(history))
+
+  await app.close()
+})
+
+test('should use custom headerSessionIdName when provided', async () => {
+  const client = {
+    ...createDummyClient(),
+    request: async () => {
+      return { choices: [{ message: { content: 'Test response' }, finish_reason: 'stop' }] }
+    }
+  }
+
+  const customHeaderName = 'x-custom-session'
+  const app = await createApp({
+    client,
+    customOptions: {
+      headerSessionIdName: customHeaderName
+    }
+  })
+
+  const response = await app.inject({
+    method: 'POST',
+    url: '/prompt',
+    body: {
+      prompt: 'Hello'
+    }
+  })
+
+  assert.equal(response.statusCode, 200)
+  assert.ok(response.headers[customHeaderName])
+
+  await app.close()
+})
+
+test('should call ai.close() when fastify closes', async () => {
+  let closeCalled = false
+
+  const client = {
+    ...createDummyClient(),
+    close: async () => {
+      closeCalled = true
+    }
+  }
+
+  const app = await createApp({ client })
+
+  // Mock the ai.close method to track if it's called
+  const originalClose = (app as any).ai.close
+  if (originalClose) {
+    (app as any).ai.close = async () => {
+      closeCalled = true
+      await originalClose()
+    }
+  }
+
+  // Close the fastify app which should trigger the onClose hook
+  await app.close()
+
+  assert.equal(closeCalled, true)
+})
