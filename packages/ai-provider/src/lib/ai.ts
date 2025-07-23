@@ -506,58 +506,40 @@ export class Ai {
 
     const sessionId: AiSessionId = r.options.sessionId ?? await this.createSessionId()
 
-    // For streaming requests, we need to ensure provider client methods are called
-    // synchronously for test verification, then continue processing in background
     if (r.options.stream) {
-      // Get the stream first
-      const stream = await this.requestStream(sessionId, r)
-      
-      // Start the provider request synchronously to ensure mocks are called
-      // We need to call the provider client method immediately for test verification
-      await this.startProviderRequestSync(sessionId, r).catch((error: any) => {
-        this.logger.error({ error, sessionId }, 'Failed to request')
-        // Write error to storage for the stream to pick up
-        const errorEvent = {
-          id: createEventId(),
-          event: 'error',
-          data: error
-        }
-        this.history.push(sessionId, errorEvent.id, errorEvent, this.options.limits.historyExpiration).catch((err: any) => {
-          this.logger.error({ err, sessionId }, 'Failed to write error to storage')
-        })
+      const stream = await this.createResponseStream(sessionId, r)
+      this.makeProviderRequest(sessionId, r).catch((error: any) => {
+        this.logger.error({ error, sessionId }, 'ai request stream error')
       })
-
       return stream
     }
 
-    // For non-streaming requests, wait for completion and return content response from storage
     try {
-      await this.providerRequest(sessionId, r)
-      return this.requestContent(sessionId, r)
+      await this.makeProviderRequest(sessionId, r)
+      return this.getResponseContent(sessionId)
     } catch (error) {
-      this.logger.error({ error, sessionId }, 'Failed to request')
+      this.logger.error({ error, sessionId }, 'ai request no stream error')
       throw error
     }
   }
 
-  async requestContent (sessionId: AiSessionId, request: ValidatedRequest): Promise<AiContentResponse> {
-    // try {
+  // Get the content from the history
+  async getResponseContent (sessionId: AiSessionId): Promise<AiContentResponse> {
+    // TODO !! try {
     const history = await this.history.range(sessionId)
 
-    // Check if we have an end event
+    // TODO !! Check end and error events
     // const endEvent = history.find((event: any) => event.event === 'end')
-    // if (endEvent) {
-    // Collect all content events
     const contentEvents = history.filter((event: any) => event.event === 'content')
     const text = contentEvents.map((event: any) => event.data.response).join('')
 
     return ({
       text,
-      result: 'COMPLETE', // TODO incomplete, error
+      result: 'COMPLETE',
       sessionId
     })
 
-    // TODO check events are chronological
+    // TODO ensure events are chronological
     // }
 
     // Check for error events
@@ -574,7 +556,7 @@ export class Ai {
     // }
   }
 
-  async requestStream (sessionId: AiSessionId, request: ValidatedRequest): Promise<AiStreamResponse> {
+  async createResponseStream (sessionId: AiSessionId, request: ValidatedRequest): Promise<AiStreamResponse> {
     const stream = new Readable({
       objectMode: false,
       read () { }
@@ -632,73 +614,7 @@ export class Ai {
     return stream as AiStreamResponse
   }
 
-  async startProviderRequestSync (sessionId: AiSessionId, request: ValidatedRequest): Promise<void> {
-    // This method ensures provider client methods are called synchronously for test verification
-    // then continues processing in the background for the detached architecture
-    
-    const models: QueryModel[] = request.models
-    let selected = await this.selectModel(models)
-    if (!selected) {
-      this.logger.warn({ models }, 'No models available')
-      throw new ProviderNoModelsAvailableError(models.map(m => typeof m === 'string' ? m : `${m.provider}:${m.model}`).join(', '))
-    }
-
-    const history: AiChatHistory | undefined = request.options.history
-    const options = {
-      context: request.options.context,
-      temperature: request.options.temperature,
-      stream: request.options.stream,
-      history,
-      maxTokens: request.options.maxTokens ?? this.options.limits.maxTokens
-    }
-
-    // Set maxTokens from model limits or options
-    options.maxTokens = selected.settings.limits.maxTokens ?? request.options.maxTokens ?? this.options.limits.maxTokens
-    const rateLimit = { max: selected.settings.limits.rate.max, timeWindow: selected.settings.limits.rate.timeWindow }
-
-    try {
-      await this.checkRateLimit(selected, rateLimit)
-      await this.updateModelStateRateLimit(selected.model.name, selected.provider, selected.model.rateLimit)
-
-      // Call the provider client method synchronously to trigger mocks
-      const providerPromise = selected.provider.provider.request(selected.model.name, request.prompt, options)
-      
-      // Now continue processing in the background
-      const providerResponse = await this.requestTimeout(
-        providerPromise,
-        this.options.limits.requestTimeout,
-        options.stream
-      )
-
-      if (isStream(providerResponse)) {
-        await this.handleStreamResponse(sessionId, request.prompt, providerResponse as Readable)
-      } else {
-        // Handle non-streaming response
-        const contentEvent = {
-          id: createEventId(),
-          event: 'content',
-          data: { response: (providerResponse as any).text || '' }
-        }
-        await this.history.push(sessionId, contentEvent.id, contentEvent, this.options.limits.historyExpiration)
-
-        const endEvent = {
-          id: createEventId(),
-          event: 'end',
-          data: { response: (providerResponse as any).result || 'COMPLETE' }
-        }
-        await this.history.push(sessionId, endEvent.id, endEvent, this.options.limits.historyExpiration)
-      }
-    } catch (error: any) {
-      const errorWithCode = error as FastifyError
-      if (this.isErrorToUpdateModelState(errorWithCode)) {
-        selected.model.state = this.modelErrorState(errorWithCode)
-        await this.setModelState(selected.model.name, selected.provider, selected.model, Date.now())
-      }
-      throw error
-    }
-  }
-
-  async providerRequest (sessionId: AiSessionId, request: ValidatedRequest): Promise<ProviderResponse> {
+  async makeProviderRequest (sessionId: AiSessionId, request: ValidatedRequest): Promise<ProviderResponse> {
     const models: QueryModel[] = request.models
     const skipModels: string[] = []
 
@@ -773,18 +689,16 @@ export class Ai {
         } else {
           // Handle non-streaming response
           const contentEvent = {
-            id: createEventId(),
             event: 'content',
             data: { response: (providerResponse as any).text || '' }
           }
-          await this.history.push(sessionId, contentEvent.id, contentEvent, this.options.limits.historyExpiration)
+          await this.history.push(sessionId, createEventId(), contentEvent, this.options.limits.historyExpiration)
 
           const endEvent = {
-            id: createEventId(),
             event: 'end',
             data: { response: (providerResponse as any).result || 'COMPLETE' }
           }
-          await this.history.push(sessionId, endEvent.id, endEvent, this.options.limits.historyExpiration)
+          await this.history.push(sessionId, createEventId(), endEvent, this.options.limits.historyExpiration)
         }
 
         return providerResponse
@@ -819,7 +733,18 @@ export class Ai {
       }
     }
 
+    // // Write error to storage for the stream to pick up
+    // const errorEvent = {
+    //   id: createEventId(),
+    //   event: 'error',
+    //   data: error
+    // }
+    // this.history.push(sessionId, errorEvent.id, errorEvent, this.options.limits.historyExpiration).catch((err: any) => {
+    //   this.logger.error({ err, sessionId }, 'Failed to write error to storage')
+    // })
+
     // This should never be reached, but TypeScript needs it
+    // TODO !!
     throw new Error('Unexpected end of providerRequest')
   }
 
@@ -932,115 +857,50 @@ export class Ai {
   }
 
   async handleStreamResponse (sessionId: AiSessionId, prompt: string, providerResponse: Readable) {
-    let buffer = ''
+    try {
+      for await (const chunk of providerResponse) {
+        // Decode the chunk from Buffer to string
+        const chunkString = chunk.toString('utf8')
 
-    providerResponse.on('data', async (chunk: Buffer) => {
-      try {
-        const chunkStr = chunk.toString()
-        buffer += chunkStr
+        // Parse the event stream format to extract events
+        const events = decodeEventStream(chunkString)
 
-        // Process complete lines from buffer
-        const lines = buffer.split('\n')
-        buffer = lines.pop() || '' // Keep incomplete line in buffer
+        // Process each event
+        for (const event of events) {
+          const eventId = event.id || createEventId()
 
-        for (const line of lines) {
-          if (line.trim()) {
-            // Parse OpenAI stream format: "data: {...}"
-            if (line.startsWith('data: ')) {
-              const dataStr = line.substring(6).trim()
-              
-              // Skip [DONE] marker
-              if (dataStr === '[DONE]') {
-                continue
-              }
+          if (event.event === 'content') {
+            const content = (event.data as any)?.response || ''
 
-              try {
-                const data = JSON.parse(dataStr)
-                
-                // Extract content from OpenAI format
-                if (data.choices && data.choices[0] && data.choices[0].delta && data.choices[0].delta.content) {
-                  const contentEvent = {
-                    id: createEventId(),
-                    event: 'content',
-                    data: { response: data.choices[0].delta.content }
-                  }
-                  await this.history.push(sessionId, contentEvent.id, contentEvent, this.options.limits.historyExpiration)
-                }
-
-                // Check for finish reason
-                if (data.choices && data.choices[0] && data.choices[0].finish_reason) {
-                  const endEvent = {
-                    id: createEventId(),
-                    event: 'end',
-                    data: { response: 'COMPLETE' }
-                  }
-                  await this.history.push(sessionId, endEvent.id, endEvent, this.options.limits.historyExpiration)
-                }
-              } catch (parseError) {
-                // Ignore JSON parse errors for malformed chunks
-              }
+            const contentEvent = {
+              event: 'content',
+              data: { response: content }
             }
-          }
-        }
-      } catch (error) {
-        this.logger.error({ error, sessionId }, 'Failed to process stream chunk')
-      }
-    })
-
-    providerResponse.on('end', async () => {
-      try {
-        // Process any remaining buffer content
-        if (buffer.trim()) {
-          const line = buffer.trim()
-          if (line.startsWith('data: ')) {
-            const dataStr = line.substring(6).trim()
-            if (dataStr !== '[DONE]') {
-              try {
-                const data = JSON.parse(dataStr)
-                if (data.choices && data.choices[0] && data.choices[0].delta && data.choices[0].delta.content) {
-                  const contentEvent = {
-                    id: createEventId(),
-                    event: 'content',
-                    data: { response: data.choices[0].delta.content }
-                  }
-                  await this.history.push(sessionId, contentEvent.id, contentEvent, this.options.limits.historyExpiration)
-                }
-              } catch (parseError) {
-                // Ignore parse errors
-              }
+            await this.history.push(sessionId, eventId, contentEvent, this.options.limits.historyExpiration)
+          } else if (event.event === 'error') {
+            const errorEvent = {
+              event: 'error',
+              data: event.data
             }
+            await this.history.push(sessionId, createEventId(), errorEvent, this.options.limits.historyExpiration)
+            return
           }
         }
-
-        // Write end event if not already present
-        const history = await this.history.range(sessionId)
-        const hasEndEvent = history.some((event: any) => event.event === 'end')
-
-        if (!hasEndEvent) {
-          const endEvent = {
-            id: createEventId(),
-            event: 'end',
-            data: { response: 'COMPLETE' }
-          }
-          await this.history.push(sessionId, endEvent.id, endEvent, this.options.limits.historyExpiration)
-        }
-      } catch (error) {
-        this.logger.error({ error, sessionId }, 'Failed to process stream end')
       }
-    })
 
-    providerResponse.on('error', async (error) => {
-      try {
-        const errorEvent = {
-          id: createEventId(),
-          event: 'error',
-          data: error
-        }
-        await this.history.push(sessionId, errorEvent.id, errorEvent, this.options.limits.historyExpiration)
-      } catch (err) {
-        this.logger.error({ err, sessionId }, 'Failed to write error event to storage')
+      // Final event
+      await this.history.push(sessionId, createEventId(), {
+        event: 'end',
+        data: { response: 'COMPLETE' }
+      }, this.options.limits.historyExpiration)
+    } catch (error: any) {
+      // Store error to history
+      const errorEvent = {
+        event: 'error',
+        data: { message: error.message || String(error) }
       }
-    })
+      await this.history.push(sessionId, createEventId(), errorEvent, this.options.limits.historyExpiration)
+    }
   }
 
   async setModelState (modelName: string, providerState: ProviderState, modelState: ModelState, operationTimestamp: number) {
@@ -1248,7 +1108,7 @@ class History {
     // Add eventId and timestamp to the stored value for resume functionality
     const eventData = {
       ...value,
-      eventId,
+      id: eventId,
       timestamp: Date.now()
     }
     return await this.storage.hashSet(sessionId, eventId, eventData, expiration)

@@ -97,7 +97,7 @@ export function mockGeminiStream (chunks: any[], error?: any) {
   return readable
 }
 
-export async function consumeStream (response: Readable) {
+export async function consumeStream (response: Readable): Promise<{ content: string[], end: string }> {
   const content: string[] = []
   let end: string = ''
 
@@ -105,6 +105,7 @@ export async function consumeStream (response: Readable) {
     // The response is a Readable stream that emits Server-sent events
     response.on('data', (chunk: Buffer) => {
       const eventData = chunk.toString('utf8')
+
       // Parse Server-sent events format
       const lines = eventData.split('\n')
 

@@ -36,7 +36,8 @@ export class ValkeyStorage implements Storage {
     try {
       await this.client.config('SET', 'notify-keyspace-events', 'KE')
     } catch (error) {
-      // TODO !! this.logger.error({ error }, 'Failed to set keyspace notifications')
+      // TODO this.logger.error({ error }, 'Failed to set keyspace notifications')
+      console.error('Failed to set keyspace notifications in valkey init', error)
     }
 
     // Subscribe to all keyspace events
@@ -51,6 +52,7 @@ export class ValkeyStorage implements Storage {
         this.subscriptions.emit(sessionId, value)
       } catch (error) {
         // TODO this.logger.error({ error }, 'Failed to get value')
+        console.error('Failed to get value in valkey subscription', error)
       }
     })
   }

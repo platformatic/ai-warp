@@ -12,6 +12,10 @@ export class MemoryStorage implements Storage {
     this.pubsub = new PubSubStorage()
   }
 
+  async init () {
+    // nothing to do
+  }
+
   async close () {
     // nothing to do
   }
@@ -26,7 +30,7 @@ export class MemoryStorage implements Storage {
 
   async hashSet (key: string, field: string, value: any, expiration: number) {
     this.hash.set(key, field, value, expiration)
-    
+
     // Publish the event to notify subscribers
     // The value should be the event data that was stored
     this.pubsub.publish(key, value)
@@ -38,10 +42,6 @@ export class MemoryStorage implements Storage {
 
   async hashGet (key: string, field: string) {
     return this.hash.get(key, field)
-  }
-
-  async publish (channel: string, message: any) {
-    this.pubsub.publish(channel, message)
   }
 
   async subscribe (channel: string, callback: (message: any) => void) {
