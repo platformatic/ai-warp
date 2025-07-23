@@ -1,4 +1,5 @@
 import { Readable } from 'node:stream'
+import { setTimeout as wait } from 'node:timers/promises'
 import { Ai, createModelState, type AiProvider, type ModelStateErrorReason, type ModelStatus, type ProviderState } from '../../src/lib/ai.ts'
 
 export function createDummyClient () {
@@ -11,7 +12,7 @@ export function createDummyClient () {
 }
 
 // Mock the readable stream to emit chunks that will result in 'All good'
-export function mockOpenAiStream (chunks: any[]) {
+export function mockOpenAiStream (chunks: any[], error?: any) {
   let chunkIndex = 0
 
   const readable = new Readable({
@@ -30,7 +31,57 @@ export function mockOpenAiStream (chunks: any[]) {
         readable.push(Buffer.from(data))
 
         // Small delay to simulate streaming
-        await new Promise(resolve => setTimeout(resolve, 10))
+        await wait(10)
+      }
+      if (error) {
+        const data = `event: error\ndata: ${JSON.stringify(error)}\n\n`
+        readable.push(Buffer.from(data))
+
+        // Small delay to simulate streaming
+        await wait(10)
+      }
+      // Send [DONE] to end the stream
+      readable.push(Buffer.from('data: [DONE]\n\n'))
+      readable.push(null) // End the stream
+    } catch (error) {
+      readable.destroy(error)
+    }
+  }
+
+  // Start pushing chunks asynchronously
+  setImmediate(() => pushChunks())
+
+  return readable
+}
+
+// Mock Gemini stream helper function
+export function mockGeminiStream (chunks: any[], error?: any) {
+  let chunkIndex = 0
+
+  const readable = new Readable({
+    read () {
+      // No-op: data is pushed from async iteration
+    }
+  })
+
+  // Simulate async streaming by pushing chunks
+  const pushChunks = async () => {
+    try {
+      while (chunkIndex < chunks.length) {
+        const chunk = chunks[chunkIndex++]
+        // Send in Gemini stream format - raw data lines
+        const data = `data: ${JSON.stringify(chunk)}\n\n`
+        readable.push(Buffer.from(data))
+
+        // Small delay to simulate streaming
+        await wait(10)
+      }
+      if (error) {
+        const data = `event: error\ndata: ${JSON.stringify(error)}\n\n`
+        readable.push(Buffer.from(data))
+
+        // Small delay to simulate streaming
+        await wait(10)
       }
       // Send [DONE] to end the stream
       readable.push(Buffer.from('data: [DONE]\n\n'))

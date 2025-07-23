@@ -23,7 +23,7 @@ test('buildClient creates a client with ask method', (_) => {
   ok(typeof client.ask === 'function')
 })
 
-test('client.ask sends correct request and handles streaming response', async (_) => {
+test('client.ask sends correct request and handles streaming response', async (t) => {
   let capturedRequestBody: any = null
   let capturedHeaders: any = null
 
@@ -48,6 +48,10 @@ test('client.ask sends correct request and handles streaming response', async (_
       res.write('event: end\ndata: {"response": {"content": "Hello world!", "model": "test", "sessionId": "123"}}\n\n')
       res.end()
     })
+  })
+
+  t.after(async () => {
+    await server.close()
   })
 
   server.listen(0)
@@ -95,12 +99,9 @@ test('client.ask sends correct request and handles streaming response', async (_
       sessionId: '123'
     }
   })
-
-  server.close()
-  await once(server, 'close')
 })
 
-test('client handles models as object format', async (_) => {
+test('client handles models as object format', async (t) => {
   let capturedRequestBody: any = null
 
   const server = createServer((req, res) => {
@@ -121,6 +122,10 @@ test('client handles models as object format', async (_) => {
       res.write('event: end\ndata: {"response": {"content": "Hello", "model": "gpt-4"}}\n\n')
       res.end()
     })
+  })
+
+  t.after(async () => {
+    await server.close()
   })
 
   server.listen(0)
@@ -145,12 +150,9 @@ test('client handles models as object format', async (_) => {
 
   deepStrictEqual(capturedRequestBody?.models, [{ provider: 'openai', model: 'gpt-4' }])
   strictEqual(messages.length, 2)
-
-  server.close()
-  await once(server, 'close')
 })
 
-test('client handles models as string format', async (_) => {
+test('client handles models as string format', async (t) => {
   let capturedRequestBody: any = null
 
   const server = createServer((req, res) => {
@@ -171,6 +173,10 @@ test('client handles models as string format', async (_) => {
       res.write('event: end\ndata: {"response": {"content": "Hello", "model": "gpt-4"}}\n\n')
       res.end()
     })
+  })
+
+  t.after(async () => {
+    await server.close()
   })
 
   server.listen(0)
@@ -195,12 +201,9 @@ test('client handles models as string format', async (_) => {
 
   deepStrictEqual(capturedRequestBody?.models, ['openai:gpt-4'])
   strictEqual(messages.length, 2)
-
-  server.close()
-  await once(server, 'close')
 })
 
-test('client handles mixed model formats', async (_) => {
+test('client handles mixed model formats', async (t) => {
   let capturedRequestBody: any = null
 
   const server = createServer((req, res) => {
@@ -221,6 +224,10 @@ test('client handles mixed model formats', async (_) => {
       res.write('event: end\ndata: {"response": {"content": "Hello", "model": "gpt-4"}}\n\n')
       res.end()
     })
+  })
+
+  t.after(async () => {
+    await server.close()
   })
 
   server.listen(0)
@@ -253,12 +260,9 @@ test('client handles mixed model formats', async (_) => {
     'gemini:gemini-2.5-flash'
   ])
   strictEqual(messages.length, 2)
-
-  server.close()
-  await once(server, 'close')
 })
 
-test('client handles multiple models', async (_) => {
+test('client handles multiple models', async (t) => {
   let capturedRequestBody: any = null
 
   const server = createServer((req, res) => {
@@ -279,6 +283,10 @@ test('client handles multiple models', async (_) => {
       res.write('event: end\ndata: {"response": {"content": "Hello", "model": "gpt-4"}}\n\n')
       res.end()
     })
+  })
+
+  t.after(async () => {
+    await server.close()
   })
 
   server.listen(0)
@@ -311,15 +319,16 @@ test('client handles multiple models', async (_) => {
     { provider: 'deepseek', model: 'deepseek-chat' }
   ])
   strictEqual(messages.length, 2)
-
-  server.close()
-  await once(server, 'close')
 })
 
-test('client handles HTTP errors', async (_) => {
+test('client handles HTTP errors', async (t) => {
   const server = createServer((req, res) => {
     res.writeHead(500, { 'Content-Type': 'text/plain' })
     res.end('Internal Server Error')
+  })
+
+  t.after(async () => {
+    await server.close()
   })
 
   server.listen(0)
@@ -338,13 +347,14 @@ test('client handles HTTP errors', async (_) => {
     ok(error.message.includes('HTTP 500'))
     ok(error.message.includes('Internal Server Error'))
   }
-
-  server.close()
-  await once(server, 'close')
 })
 
-test('client handles timeout', async (_) => {
+test('client handles timeout', async (t) => {
   const server = createServer((_req, _res) => {
+  })
+
+  t.after(async () => {
+    await server.close()
   })
 
   server.listen(0)
@@ -364,12 +374,9 @@ test('client handles timeout', async (_) => {
     ok(error instanceof Error)
     strictEqual(error.message, 'Request timeout')
   }
-
-  server.close()
-  await once(server, 'close')
 })
 
-test('client handles mixed JSON and plain text SSE data', async (_) => {
+test('client handles mixed JSON and plain text SSE data', async (t) => {
   const server = createServer((req, res) => {
     res.writeHead(200, {
       'Content-Type': 'text/event-stream',
@@ -381,6 +388,10 @@ test('client handles mixed JSON and plain text SSE data', async (_) => {
     res.write('event: content\ndata: invalid-json\n\n')
     res.write('event: content\ndata: {"response": "After error"}\n\n')
     res.end()
+  })
+
+  t.after(async () => {
+    await server.close()
   })
 
   server.listen(0)
@@ -401,12 +412,9 @@ test('client handles mixed JSON and plain text SSE data', async (_) => {
   deepStrictEqual(messages[0], { type: 'content', content: 'Valid' })
   deepStrictEqual(messages[1], { type: 'content', content: 'invalid-json' })
   deepStrictEqual(messages[2], { type: 'content', content: 'After error' })
-
-  server.close()
-  await once(server, 'close')
 })
 
-test('client handles AI provider Server-Sent Events', async (_) => {
+test('client handles AI provider Server-Sent Events', async (t) => {
   const server = createServer((req, res) => {
     res.writeHead(200, {
       'Content-Type': 'text/event-stream',
@@ -418,6 +426,10 @@ test('client handles AI provider Server-Sent Events', async (_) => {
     res.write('event: error\ndata: {"message": "Test error"}\n\n')
     res.write('event: end\ndata: {"response": {"content": "Final response", "model": "test"}}\n\n')
     res.end()
+  })
+
+  t.after(async () => {
+    await server.close()
   })
 
   server.listen(0)
@@ -438,12 +450,9 @@ test('client handles AI provider Server-Sent Events', async (_) => {
   deepStrictEqual(messages[0], { type: 'content', content: 'Content message' })
   deepStrictEqual(messages[1], { type: 'error', error: new Error('Test error') })
   deepStrictEqual(messages[2], { type: 'done', response: { content: 'Final response', model: 'test' } })
-
-  server.close()
-  await once(server, 'close')
 })
 
-test('client handles data-only SSE messages (no event field)', async (_) => {
+test('client handles data-only SSE messages (no event field)', async (t) => {
   const server = createServer((req, res) => {
     res.writeHead(200, {
       'Content-Type': 'text/event-stream',
@@ -456,6 +465,10 @@ test('client handles data-only SSE messages (no event field)', async (_) => {
     res.write('data: {"content": "Third message with different structure"}\n\n')
     res.write('data: {"response": {"content": "Final", "model": "test-model"}}\n\n')
     res.end()
+  })
+
+  t.after(async () => {
+    await server.close()
   })
 
   server.listen(0)
@@ -483,12 +496,9 @@ test('client handles data-only SSE messages (no event field)', async (_) => {
       model: 'test-model'
     }
   })
-
-  server.close()
-  await once(server, 'close')
 })
 
-test('client handles mixed event and data-only SSE messages', async (_) => {
+test('client handles mixed event and data-only SSE messages', async (t) => {
   const server = createServer((req, res) => {
     res.writeHead(200, {
       'Content-Type': 'text/event-stream',
@@ -503,6 +513,10 @@ test('client handles mixed event and data-only SSE messages', async (_) => {
     res.write('data: {"error": "Something went wrong"}\n\n')
     res.write('event: end\ndata: {"response": {"content": "Complete", "model": "test"}}\n\n')
     res.end()
+  })
+
+  t.after(async () => {
+    await server.close()
   })
 
   server.listen(0)
@@ -526,12 +540,9 @@ test('client handles mixed event and data-only SSE messages', async (_) => {
   deepStrictEqual(messages[3], { type: 'content', content: 'Different structure' })
   deepStrictEqual(messages[4], { type: 'error', error: new Error('Something went wrong') })
   deepStrictEqual(messages[5], { type: 'done', response: { content: 'Complete', model: 'test' } })
-
-  server.close()
-  await once(server, 'close')
 })
 
-test('client handles data-only messages with various formats', async (_) => {
+test('client handles data-only messages with various formats', async (t) => {
   const server = createServer((req, res) => {
     res.writeHead(200, {
       'Content-Type': 'text/event-stream',
@@ -544,6 +555,10 @@ test('client handles data-only messages with various formats', async (_) => {
     res.write('data: {"response": {"sessionId": "abc123", "model": "gpt-4"}}\n\n')
     res.write('data: {"unknown": "field"}\n\n')
     res.end()
+  })
+
+  t.after(async () => {
+    await server.close()
   })
 
   server.listen(0)
@@ -564,12 +579,9 @@ test('client handles data-only messages with various formats', async (_) => {
   deepStrictEqual(messages[0], { type: 'content', content: 'Nested response' })
   deepStrictEqual(messages[1], { type: 'error', error: new Error('Error-like but not error field') })
   deepStrictEqual(messages[2], { type: 'done', response: { sessionId: 'abc123', model: 'gpt-4' } })
-
-  server.close()
-  await once(server, 'close')
 })
 
-test('client handles plain text data-only messages', async (_) => {
+test('client handles plain text data-only messages', async (t) => {
   const server = createServer((req, res) => {
     res.writeHead(200, {
       'Content-Type': 'text/event-stream',
@@ -582,6 +594,10 @@ test('client handles plain text data-only messages', async (_) => {
     res.write('data: {"response": "Valid JSON"}\n\n')
     res.write('data: Another plain message\n\n')
     res.end()
+  })
+
+  t.after(async () => {
+    await server.close()
   })
 
   server.listen(0)
@@ -603,12 +619,9 @@ test('client handles plain text data-only messages', async (_) => {
   deepStrictEqual(messages[1], { type: 'content', content: 'Some plain text' })
   deepStrictEqual(messages[2], { type: 'content', content: 'Valid JSON' })
   deepStrictEqual(messages[3], { type: 'content', content: 'Another plain message' })
-
-  server.close()
-  await once(server, 'close')
 })
 
-test('client handles null response body', async (_) => {
+test('client handles null response body', async (t) => {
   const server = createServer((req, res) => {
     res.writeHead(200, {
       'Content-Type': 'text/event-stream',
@@ -616,6 +629,10 @@ test('client handles null response body', async (_) => {
       Connection: 'keep-alive'
     })
     res.end()
+  })
+
+  t.after(async () => {
+    await server.close()
   })
 
   server.listen(0)
@@ -644,15 +661,16 @@ test('client handles null response body', async (_) => {
   } finally {
     global.fetch = originalFetch
   }
-
-  server.close()
-  await once(server, 'close')
 })
 
-test('client handles unknown error type', async (_) => {
+test('client handles unknown error type', async (t) => {
   const server = createServer((req, res) => {
     res.writeHead(200)
     res.end()
+  })
+
+  t.after(async () => {
+    await server.close()
   })
 
   server.listen(0)
@@ -678,12 +696,9 @@ test('client handles unknown error type', async (_) => {
   } finally {
     global.fetch = originalFetch
   }
-
-  server.close()
-  await once(server, 'close')
 })
 
-test('client handles events with no data field', async (_) => {
+test('client handles events with no data field', async (t) => {
   const server = createServer((req, res) => {
     res.writeHead(200, {
       'Content-Type': 'text/event-stream',
@@ -695,6 +710,10 @@ test('client handles events with no data field', async (_) => {
     res.write('event: error\n\n')
     res.write('data: {"response": "Valid message"}\n\n')
     res.end()
+  })
+
+  t.after(async () => {
+    await server.close()
   })
 
   server.listen(0)
@@ -713,12 +732,9 @@ test('client handles events with no data field', async (_) => {
 
   strictEqual(messages.length, 1)
   deepStrictEqual(messages[0], { type: 'content', content: 'Valid message' })
-
-  server.close()
-  await once(server, 'close')
 })
 
-test('client handles unknown event types', async (_) => {
+test('client handles unknown event types', async (t) => {
   const server = createServer((req, res) => {
     res.writeHead(200, {
       'Content-Type': 'text/event-stream',
@@ -730,6 +746,10 @@ test('client handles unknown event types', async (_) => {
     res.write('event: custom\ndata: {"something": "else"}\n\n')
     res.write('event: content\ndata: {"response": "Valid event"}\n\n')
     res.end()
+  })
+
+  t.after(async () => {
+    await server.close()
   })
 
   server.listen(0)
@@ -748,12 +768,9 @@ test('client handles unknown event types', async (_) => {
 
   strictEqual(messages.length, 1)
   deepStrictEqual(messages[0], { type: 'content', content: 'Valid event' })
-
-  server.close()
-  await once(server, 'close')
 })
 
-test('client uses provided logger', async (_) => {
+test('client uses provided logger', async (t) => {
   const logs: Array<{ level: string; message: string; data?: any }> = []
 
   const mockLogger: Logger = {
@@ -786,6 +803,10 @@ test('client uses provided logger', async (_) => {
     res.end()
   })
 
+  t.after(async () => {
+    await server.close()
+  })
+
   server.listen(0)
   await once(server, 'listening')
   const port = (server.address() as any).port
@@ -807,12 +828,9 @@ test('client uses provided logger', async (_) => {
   ok(logs.length > 0, 'Logger should have been called')
   ok(logs.some(log => log.level === 'debug' && log.message === 'Making AI request'), 'Should log debug message for request')
   ok(logs.some(log => log.level === 'info' && log.message === 'AI request successful'), 'Should log info message for success')
-
-  server.close()
-  await once(server, 'close')
 })
 
-test('client uses default logger when none provided', async (_) => {
+test('client uses default logger when none provided', async (t) => {
   const server = createServer((req, res) => {
     res.writeHead(200, {
       'Content-Type': 'text/event-stream',
@@ -822,6 +840,10 @@ test('client uses default logger when none provided', async (_) => {
 
     res.write('data: {"response": "Test message"}\n\n')
     res.end()
+  })
+
+  t.after(async () => {
+    await server.close()
   })
 
   server.listen(0)
@@ -840,12 +862,9 @@ test('client uses default logger when none provided', async (_) => {
 
   strictEqual(messages.length, 1)
   deepStrictEqual(messages[0], { type: 'content', content: 'Test message' })
-
-  server.close()
-  await once(server, 'close')
 })
 
-test('client uses abstract-logging when no logger provided', async (_) => {
+test('client uses abstract-logging when no logger provided', async (t) => {
   const server = createServer((req, res) => {
     res.writeHead(200, {
       'Content-Type': 'text/event-stream',
@@ -855,6 +874,10 @@ test('client uses abstract-logging when no logger provided', async (_) => {
 
     res.write('data: {"response": "Test message"}\n\n')
     res.end()
+  })
+
+  t.after(async () => {
+    await server.close()
   })
 
   server.listen(0)
@@ -873,12 +896,9 @@ test('client uses abstract-logging when no logger provided', async (_) => {
 
   strictEqual(messages.length, 1)
   deepStrictEqual(messages[0], { type: 'content', content: 'Test message' })
-
-  server.close()
-  await once(server, 'close')
 })
 
-test('client handles non-streaming response', async (_) => {
+test('client handles non-streaming response', async (t) => {
   let capturedRequestBody: any = null
 
   const server = createServer((req, res) => {
@@ -899,6 +919,10 @@ test('client handles non-streaming response', async (_) => {
         sessionId: 'user-123'
       }))
     })
+  })
+
+  t.after(async () => {
+    await server.close()
   })
 
   server.listen(0)
@@ -927,15 +951,16 @@ test('client handles non-streaming response', async (_) => {
     model: 'gpt-4',
     sessionId: 'user-123'
   })
-
-  server.close()
-  await once(server, 'close')
 })
 
-test('client handles non-streaming response with error', async (_) => {
+test('client handles non-streaming response with error', async (t) => {
   const server = createServer((req, res) => {
     res.writeHead(500, { 'Content-Type': 'application/json' })
     res.end(JSON.stringify({ error: 'Internal server error' }))
+  })
+
+  t.after(async () => {
+    await server.close()
   })
 
   server.listen(0)
@@ -957,12 +982,9 @@ test('client handles non-streaming response with error', async (_) => {
     ok(error instanceof Error)
     ok(error.message.includes('HTTP 500'))
   }
-
-  server.close()
-  await once(server, 'close')
 })
 
-test('client defaults to streaming when stream option not specified', async (_) => {
+test('client defaults to streaming when stream option not specified', async (t) => {
   let capturedRequestBody: any = null
 
   const server = createServer((req, res) => {
@@ -985,6 +1007,10 @@ test('client defaults to streaming when stream option not specified', async (_) 
     })
   })
 
+  t.after(async () => {
+    await server.close()
+  })
+
   server.listen(0)
   await once(server, 'listening')
   const port = (server.address() as AddressInfo).port
@@ -1000,12 +1026,9 @@ test('client defaults to streaming when stream option not specified', async (_) 
 
   strictEqual(capturedRequestBody?.stream, true)
   ok(response && typeof (response as any).stream[Symbol.asyncIterator] === 'function', 'Should return an async iterable stream')
-
-  server.close()
-  await once(server, 'close')
 })
 
-test('client handles URL without trailing slash', async (_) => {
+test('client handles URL without trailing slash', async (t) => {
   const server = createServer((req, res) => {
     res.writeHead(200, {
       'Content-Type': 'text/event-stream',
@@ -1014,6 +1037,10 @@ test('client handles URL without trailing slash', async (_) => {
     })
     res.write('event: content\ndata: {"response": "Hello"}\n\n')
     res.end()
+  })
+
+  t.after(async () => {
+    await server.close()
   })
 
   server.listen(0)
@@ -1037,12 +1064,9 @@ test('client handles URL without trailing slash', async (_) => {
 
   strictEqual(messages.length, 1)
   deepStrictEqual(messages[0], { type: 'content', content: 'Hello' })
-
-  server.close()
-  await once(server, 'close')
 })
 
-test('client handles data with error field instead of message', async (_) => {
+test('client handles data with error field instead of message', async (t) => {
   const server = createServer((req, res) => {
     res.writeHead(200, {
       'Content-Type': 'text/event-stream',
@@ -1052,6 +1076,10 @@ test('client handles data with error field instead of message', async (_) => {
 
     res.write('data: {"error": "Something went wrong"}\n\n')
     res.end()
+  })
+
+  t.after(async () => {
+    await server.close()
   })
 
   server.listen(0)
@@ -1071,12 +1099,9 @@ test('client handles data with error field instead of message', async (_) => {
 
   strictEqual(messages.length, 1)
   deepStrictEqual(messages[0], { type: 'error', error: new Error('Something went wrong') })
-
-  server.close()
-  await once(server, 'close')
 })
 
-test('client handles response object with content property', async (_) => {
+test('client handles response object with content property', async (t) => {
   const server = createServer((req, res) => {
     res.writeHead(200, {
       'Content-Type': 'text/event-stream',
@@ -1086,6 +1111,10 @@ test('client handles response object with content property', async (_) => {
 
     res.write('data: {"response": {"content": "Hello from content"}}\n\n')
     res.end()
+  })
+
+  t.after(async () => {
+    await server.close()
   })
 
   server.listen(0)
@@ -1105,12 +1134,9 @@ test('client handles response object with content property', async (_) => {
 
   strictEqual(messages.length, 1)
   deepStrictEqual(messages[0], { type: 'content', content: 'Hello from content' })
-
-  server.close()
-  await once(server, 'close')
 })
 
-test('client handles response object without model or sessionId', async (_) => {
+test('client handles response object without model or sessionId', async (t) => {
   const server = createServer((req, res) => {
     res.writeHead(200, {
       'Content-Type': 'text/event-stream',
@@ -1120,6 +1146,10 @@ test('client handles response object without model or sessionId', async (_) => {
 
     res.write('data: {"response": {"content": "Just content"}}\n\n')
     res.end()
+  })
+
+  t.after(async () => {
+    await server.close()
   })
 
   server.listen(0)
@@ -1139,12 +1169,9 @@ test('client handles response object without model or sessionId', async (_) => {
 
   strictEqual(messages.length, 1)
   deepStrictEqual(messages[0], { type: 'content', content: 'Just content' })
-
-  server.close()
-  await once(server, 'close')
 })
 
-test('client handles empty chunks in stream', async (_) => {
+test('client handles empty chunks in stream', async (t) => {
   const server = createServer((req, res) => {
     res.writeHead(200, {
       'Content-Type': 'text/event-stream',
@@ -1156,6 +1183,10 @@ test('client handles empty chunks in stream', async (_) => {
     res.write('data: {"response": "Hello"}\n\n')
     res.write('   \n\n')
     res.end()
+  })
+
+  t.after(async () => {
+    await server.close()
   })
 
   server.listen(0)
@@ -1175,12 +1206,9 @@ test('client handles empty chunks in stream', async (_) => {
 
   strictEqual(messages.length, 1)
   deepStrictEqual(messages[0], { type: 'content', content: 'Hello' })
-
-  server.close()
-  await once(server, 'close')
 })
 
-test('client handles response with unknown structure', async (_) => {
+test('client handles response with unknown structure', async (t) => {
   const server = createServer((req, res) => {
     res.writeHead(200, {
       'Content-Type': 'text/event-stream',
@@ -1190,6 +1218,10 @@ test('client handles response with unknown structure', async (_) => {
 
     res.write('data: {"unknown": "structure"}\n\n')
     res.end()
+  })
+
+  t.after(async () => {
+    await server.close()
   })
 
   server.listen(0)
@@ -1208,12 +1240,9 @@ test('client handles response with unknown structure', async (_) => {
   }
 
   strictEqual(messages.length, 0)
-
-  server.close()
-  await once(server, 'close')
 })
 
-test('client stream handles error events', async (_) => {
+test('client stream handles error events', async (t) => {
   const server = createServer(async (_req, res) => {
     res.writeHead(200, {
       'Content-Type': 'text/event-stream',
@@ -1225,6 +1254,10 @@ test('client stream handles error events', async (_) => {
 
     await setTimeout(200)
     res.destroy(new Error('Connection lost'))
+  })
+
+  t.after(async () => {
+    await server.close()
   })
 
   server.listen(0)
@@ -1250,7 +1283,158 @@ test('client stream handles error events', async (_) => {
 
   strictEqual(messages.length, 1)
   deepStrictEqual(messages[0], { type: 'content', content: 'First message' })
+})
 
-  server.close()
-  await once(server, 'close')
+test('client handles flush case with remaining buffer data', async (t) => {
+  const server = createServer((req, res) => {
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      Connection: 'keep-alive'
+    })
+
+    // Send data without ending double newline to test flush case
+    res.write('data: {"response": "Buffered message"}')
+    res.end() // End stream without \n\n to trigger flush
+  })
+
+  t.after(async () => {
+    await server.close()
+  })
+
+  server.listen(0)
+  await once(server, 'listening')
+  const port = (server.address() as any).port
+
+  const client = buildClient({
+    url: `http://localhost:${port}`,
+    logger: silentLogger
+  })
+
+  const response = await client.ask({ prompt: 'Hello', stream: true })
+  const messages = []
+  for await (const message of response.stream) {
+    messages.push(message)
+  }
+
+  strictEqual(messages.length, 1)
+  deepStrictEqual(messages[0], { type: 'content', content: 'Buffered message' })
+})
+
+test('client handles SSE data with no matching properties', async (t) => {
+  const server = createServer((req, res) => {
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      Connection: 'keep-alive'
+    })
+
+    // Send JSON data that doesn't match any expected properties
+    res.write('data: {"someUnknownProperty": "unknown value"}\n\n')
+    res.write('data: {"anotherProperty": 123}\n\n')
+    res.write('data: {"nested": {"object": "value"}}\n\n')
+    res.write('data: {"emptyArray": []}\n\n')
+    res.end()
+  })
+
+  t.after(async () => {
+    await server.close()
+  })
+
+  server.listen(0)
+  await once(server, 'listening')
+  const port = (server.address() as any).port
+
+  const client = buildClient({
+    url: `http://localhost:${port}`,
+    logger: silentLogger
+  })
+
+  const response = await client.ask({ prompt: 'Hello', stream: true })
+  const messages = []
+  for await (const message of response.stream) {
+    messages.push(message)
+  }
+
+  // Should receive no messages since the data doesn't match any expected format
+  strictEqual(messages.length, 0)
+})
+
+test('client handles JSON data that returns null from convertEventToMessage', async (t) => {
+  const server = createServer((req, res) => {
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      Connection: 'keep-alive'
+    })
+
+    // Send valid JSON but with no expected properties to trigger the final return null in convertEventToMessage
+    // This should hit the final return null at lines 231-232
+    res.write('data: {}\n\n') // Empty object - no error, message, response, or content fields
+    res.write('data: {"randomField": true, "someValue": 42}\n\n') // Object with random fields
+    res.write('data: {"justAnObject": {"with": "nested", "properties": null}}\n\n') // Nested object with no expected fields
+    res.end()
+  })
+
+  t.after(async () => {
+    await server.close()
+  })
+
+  server.listen(0)
+  await once(server, 'listening')
+  const port = (server.address() as any).port
+
+  const client = buildClient({
+    url: `http://localhost:${port}`,
+    logger: silentLogger
+  })
+
+  const response = await client.ask({ prompt: 'Hello', stream: true })
+  const messages = []
+  for await (const message of response.stream) {
+    messages.push(message)
+  }
+
+  // Should receive no messages - this should trigger the final return null at lines 231-232
+  strictEqual(messages.length, 0)
+})
+
+test('client handles JSON data that is not an object to trigger type guard', async (t) => {
+  const server = createServer((req, res) => {
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      Connection: 'keep-alive'
+    })
+
+    // Send JSON data that parses to non-object types to trigger the type guard at lines 231-232
+    res.write('data: null\n\n') // JSON null - should trigger typeof data !== 'object' || !data
+    res.write('data: "just a string"\n\n') // JSON string - should trigger typeof data !== 'object'
+    res.write('data: 42\n\n') // JSON number - should trigger typeof data !== 'object'
+    res.write('data: true\n\n') // JSON boolean - should trigger typeof data !== 'object'
+    res.write('data: [1, 2, 3]\n\n') // JSON array - arrays are objects in JS but may trigger different behavior
+    res.end()
+  })
+
+  t.after(async () => {
+    await server.close()
+  })
+
+  server.listen(0)
+  await once(server, 'listening')
+  const port = (server.address() as any).port
+
+  const client = buildClient({
+    url: `http://localhost:${port}`,
+    logger: silentLogger
+  })
+
+  const response = await client.ask({ prompt: 'Hello', stream: true })
+  const messages = []
+  for await (const message of response.stream) {
+    messages.push(message)
+  }
+
+  // Should receive no messages - this should trigger the type guard return null at lines 231-232
+  strictEqual(messages.length, 0)
 })

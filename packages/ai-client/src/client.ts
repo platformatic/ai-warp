@@ -227,7 +227,7 @@ function convertEventToMessage (event: ParsedEvent): StreamMessage | null {
   }
 
   // Type guard to ensure data is an object
-  if (typeof data !== 'object' || data === null) {
+  if (typeof data !== 'object' || !data) {
     return null
   }
 

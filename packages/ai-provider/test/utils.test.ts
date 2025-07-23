@@ -14,4 +14,5 @@ test('parseTimeWindow', () => {
 
   assert.throws(() => parseTimeWindow('invalid'), /INVALID_TIME_WINDOW_STRING_INPUT_ERROR/)
   assert.throws(() => parseTimeWindow('100xz'), /INVALID_TIME_WINDOW_STRING_INPUT_ERROR/)
+  assert.throws(() => parseTimeWindow(-1), /INVALID_TIME_WINDOW_NUMBER_INPUT_ERROR/)
 })
