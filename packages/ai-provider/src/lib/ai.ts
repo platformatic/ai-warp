@@ -7,7 +7,7 @@ import type { FastifyError } from '@fastify/error'
 
 import { type AiChatHistory, type Provider, type ProviderClient, type ProviderOptions, type ProviderRequestOptions, type ProviderResponse, type AiSessionId, createAiProvider } from './provider.ts'
 import { createStorage, type Storage, type AiStorageOptions } from './storage/index.ts'
-import { parseTimeWindow } from './utils.ts'
+import { isStream, parseTimeWindow } from './utils.ts'
 import { HistoryGetError, ModelStateError, OptionError, ProviderNoModelsAvailableError, ProviderRateLimitError, ProviderRequestStreamTimeoutError, ProviderRequestTimeoutError } from './errors.ts'
 import { DEFAULT_HISTORY_EXPIRATION, DEFAULT_MAX_RETRIES, DEFAULT_RATE_LIMIT_MAX, DEFAULT_RATE_LIMIT_TIME_WINDOW, DEFAULT_REQUEST_TIMEOUT, DEFAULT_RESTORE_PROVIDER_COMMUNICATION_ERROR, DEFAULT_RESTORE_PROVIDER_EXCEEDED_QUOTA_ERROR, DEFAULT_RESTORE_RATE_LIMIT, DEFAULT_RESTORE_REQUEST_TIMEOUT, DEFAULT_RESTORE_RETRY, DEFAULT_RETRY_INTERVAL, DEFAULT_STORAGE } from './config.ts'
 import { createEventId, decodeEventStream } from './event.ts'
@@ -94,6 +94,7 @@ export type Request = {
 }
 
 type ValidatedRequest = {
+  resume: boolean
   models: QueryModel[]
   prompt: string
   options: ProviderRequestOptions
@@ -457,6 +458,7 @@ export class Ai {
     }
 
     const validatedRequest: ValidatedRequest = {
+      resume: request.resume ?? true,
       models: [],
       prompt: request.prompt,
       options: {
@@ -506,35 +508,13 @@ export class Ai {
 
     this.logger.debug({ request }, 'AI request')
 
-    const sessionId: AiSessionId = req.options.sessionId ?? await this.createSessionId()
-
     // Handle stream resume functionality
-    const shouldResume = request.resume !== false // Default to true
-
     // If resume is enabled and we have a sessionId, try to auto-resume from the last event
-    if (shouldResume && req.options.sessionId && req.options.stream) {
+    if (req.resume && req.options.sessionId && req.options.stream) {
       try {
-        const allEvents = await this.history.range(req.options.sessionId)
-        if (allEvents.length > 0) {
-          // Get the last event ID to resume from
-          const lastEvent = allEvents[allEvents.length - 1]
-          const resumeFromEventId = lastEvent.eventId
-          this.logger.debug({
-            sessionId: req.options.sessionId,
-            lastEventId: resumeFromEventId,
-            totalEvents: allEvents.length
-          }, 'Auto-resuming from last event')
-
-          // Try to get events from the last event ID
-          const events = await this.history.rangeFromId(req.options.sessionId, resumeFromEventId)
-
-          if (events.length > 0) {
-            // Create a resumable stream from historical events
-            const resumeStream = this.createResumeStream(events, sessionId)
-            return resumeStream as AiStreamResponse
-          } else {
-            this.logger.debug({ resumeFromEventId, sessionId }, 'No events found for resume, continuing with normal request')
-          }
+        const resumeStream = await this.resumeStream(req.options.sessionId)
+        if (resumeStream) {
+          return resumeStream
         }
       } catch (error: any) {
         // If we can't get events or resume fails, continue with normal request
@@ -542,6 +522,7 @@ export class Ai {
       }
     }
 
+    const sessionId: AiSessionId = req.options.sessionId ?? await this.createSessionId()
     const models: QueryModel[] = req.models
     const skipModels: string[] = []
 
@@ -553,23 +534,21 @@ export class Ai {
 
     let response!: Response
     const history: AiChatHistory | undefined = req.options.history
+    const options = {
+      context: req.options.context,
+      temperature: req.options.temperature,
+      stream: req.options.stream,
+      history,
+      maxTokens: req.options.maxTokens ?? this.options.limits.maxTokens
+    }
 
     while (selected) {
       this.logger.debug({ model: selected.model.name }, 'Selected model')
-
-      const options = {
-        context: req.options.context,
-        temperature: req.options.temperature,
-        stream: req.options.stream,
-        history,
-        maxTokens: selected.settings.limits.maxTokens ?? req.options.maxTokens ?? this.options.limits.maxTokens
-      }
-
-      const rateLimit = {
-        max: selected.settings.limits.rate.max,
-        timeWindow: selected.settings.limits.rate.timeWindow
-      }
       const operationTimestamp = Date.now()
+
+      // set maxTokens from model limits or options
+      options.maxTokens = selected.settings.limits.maxTokens ?? req.options.maxTokens ?? this.options.limits.maxTokens
+      const rateLimit = { max: selected.settings.limits.rate.max, timeWindow: selected.settings.limits.rate.timeWindow }
 
       let providerResponse!: ProviderResponse
       let err: FastifyError | undefined
@@ -589,14 +568,12 @@ export class Ai {
               options.stream
             )
             break
-          } catch (error: unknown) { // Fixed type - catch variables must be any or unknown
+          } catch (error: any) {
             const errorWithCode = error as FastifyError
             err = errorWithCode
 
             // do not retry on timeout errors and empty response
-            if (errorWithCode.code && (errorWithCode.code === 'PROVIDER_REQUEST_TIMEOUT_ERROR' ||
-              errorWithCode.code === 'PROVIDER_REQUEST_STREAM_TIMEOUT_ERROR' ||
-              errorWithCode.code === 'PROVIDER_RESPONSE_MAX_TOKENS_ERROR')) {
+            if (this.isErrorRetryable(errorWithCode)) {
               break
             }
 
@@ -615,102 +592,12 @@ export class Ai {
           throw err
         }
 
-        // @ts-ignore
-        if (typeof providerResponse.pipe === 'function') {
-          // Clone the stream using cloneable-readable for history processing
-          // @ts-ignore
-          const cloneableStream = cloneable(providerResponse as Readable)
-          const responseStream = cloneableStream // Return the original
-          const historyStream = cloneableStream.clone() // Create one clone for history
-
-          // Handle streaming response: process history/pub/sub in background
-          const streamChannel = `ai-stream:${sessionId}`
-          let accumulatedResponse = ''
-
-          // Process the cloned stream in background to accumulate response for history and pub/sub
-          const processStreamInBackground = async () => {
-            try {
-              for await (const chunk of historyStream) {
-                // Decode the chunk from Buffer to string
-                const chunkString = chunk.toString('utf8')
-
-                // Parse the event stream format to extract events
-                const events = decodeEventStream(chunkString)
-
-                // Process each event
-                for (const event of events) {
-                  const eventId = event.id || createEventId()
-
-                  if (event.event === 'content') {
-                    const content = (event.data as any)?.response || (event.data as any)?.content || ''
-                    accumulatedResponse += content
-
-                    // Publish streaming event via pub/sub
-                    await this.storage.publish(streamChannel, {
-                      eventId,
-                      type: 'content',
-                      sessionId,
-                      data: event.data
-                    })
-                  } else if (event.event === 'error') {
-                    // Store error to history
-                    await this.history.push(sessionId, eventId, {
-                      prompt: req.prompt,
-                      error: event.data
-                    }, this.options.limits.historyExpiration)
-
-                    // Publish error event
-                    await this.storage.publish(streamChannel, {
-                      eventId,
-                      type: 'error',
-                      sessionId,
-                      data: event.data
-                    })
-                    return
-                  }
-                }
-              }
-
-              // Store final accumulated response to history
-              const finalEventId = createEventId()
-              await this.history.push(sessionId, finalEventId, {
-                prompt: req.prompt,
-                response: accumulatedResponse
-              }, this.options.limits.historyExpiration)
-
-              // Publish final event
-              await this.storage.publish(streamChannel, {
-                eventId: finalEventId,
-                type: 'complete',
-                sessionId,
-                data: { response: accumulatedResponse }
-              })
-            } catch (error: any) {
-              // Store error to history
-              const errorEventId = createEventId()
-              await this.history.push(sessionId, errorEventId, {
-                prompt: req.prompt,
-                error: error.message || String(error)
-              }, this.options.limits.historyExpiration)
-
-              // Publish error event
-              await this.storage.publish(streamChannel, {
-                eventId: errorEventId,
-                type: 'error',
-                sessionId,
-                data: { message: error.message || String(error) }
-              })
-            }
-          }
-
-          // Process stream in background (don't await to avoid blocking the response)
-          processStreamInBackground().catch(error => {
-            this.logger.error({ error }, 'Failed to process stream for history/pubsub')
-          });
+        if (isStream(providerResponse)) {
+          const responseStream = await this.handleStreamResponse(sessionId, req.prompt, providerResponse as Readable)
 
           // Attach sessionId to the stream for the user
-          (responseStream as any).sessionId = sessionId
-          return responseStream as unknown as AiStreamResponse
+          responseStream.sessionId = sessionId
+          return responseStream
         }
 
         const contentResponse: AiContentResponse = response as AiContentResponse
@@ -718,31 +605,17 @@ export class Ai {
         await this.history.push(sessionId, createEventId(), { prompt: req.prompt, response: contentResponse.text }, this.options.limits.historyExpiration)
 
         return contentResponse
-      } catch (error: unknown) { // Fixed type - catch variables must be any or unknown
+      } catch (error: any) {
         const errorWithCode = error as FastifyError
-        // skip:
-        // - storage errors
-        // - PROVIDER_RESPONSE_MAX_TOKENS_ERROR (options error)
-        // update state if errors are one of:
-        if (errorWithCode.code !== 'PROVIDER_RATE_LIMIT_ERROR' &&
-          errorWithCode.code !== 'PROVIDER_REQUEST_TIMEOUT_ERROR' &&
-          errorWithCode.code !== 'PROVIDER_REQUEST_STREAM_TIMEOUT_ERROR' &&
-          errorWithCode.code !== 'PROVIDER_RESPONSE_ERROR' &&
-          errorWithCode.code !== 'PROVIDER_RESPONSE_NO_CONTENT' &&
-          errorWithCode.code !== 'PROVIDER_EXCEEDED_QUOTA_ERROR'
-        ) {
+        if (!this.isErrorToUpdateModelState(errorWithCode)) {
           throw error
         }
-
         err = errorWithCode
       }
 
       if (err) {
         try {
-          selected.model.state.status = 'error'
-          selected.model.state.timestamp = Date.now()
-          selected.model.state.reason = err.code as ModelStateErrorReason
-
+          selected.model.state = this.modelErrorState(err)
           await this.setModelState(selected.model.name, selected.provider, selected.model, operationTimestamp)
 
           // try to select a new model from the remaining models
@@ -767,9 +640,122 @@ export class Ai {
     return response
   }
 
-  // TODO user grants
-  async createSessionId () {
-    return randomUUID()
+  async resumeStream (sessionId: AiSessionId): Promise<AiStreamResponse | undefined> {
+    const allEvents = await this.history.range(sessionId)
+    if (allEvents?.length > 0) {
+      // Get the last event ID to resume from
+      const lastEvent = allEvents[allEvents.length - 1]
+      const resumeFromEventId = lastEvent.eventId
+      this.logger.debug({
+        sessionId,
+        lastEventId: resumeFromEventId,
+        totalEvents: allEvents.length
+      }, 'Auto-resuming from last event')
+
+      // Try to get events from the last event ID
+      const events = await this.history.rangeFromId(sessionId, resumeFromEventId)
+
+      if (events.length > 0) {
+        // Create a resumable stream from historical events
+        const resumeStream = this.createResumeStream(events, sessionId)
+        return resumeStream as AiStreamResponse
+      }
+    }
+  }
+
+  async handleStreamResponse (sessionId: AiSessionId, prompt: string, providerResponse: Readable) {
+    // Clone the stream using cloneable-readable for history processing
+    // @ts-ignore
+    const cloneableStream = cloneable(providerResponse as Readable)
+    const responseStream = cloneableStream as unknown as AiStreamResponse // Return the original
+    const historyStream = cloneableStream.clone() // Create one clone for history
+
+    // Handle streaming response: process history/pub/sub in background
+    const streamChannel = `ai-stream:${sessionId}`
+    let accumulatedResponse = ''
+
+    // Process the cloned stream in background to accumulate response for history and pub/sub
+    const processStreamInBackground = async () => {
+      try {
+        for await (const chunk of historyStream) {
+          // Decode the chunk from Buffer to string
+          const chunkString = chunk.toString('utf8')
+
+          // Parse the event stream format to extract events
+          const events = decodeEventStream(chunkString)
+
+          // Process each event
+          for (const event of events) {
+            const eventId = event.id || createEventId()
+
+            if (event.event === 'content') {
+              const content = (event.data as any)?.response || (event.data as any)?.content || ''
+              accumulatedResponse += content
+
+              // Publish streaming event via pub/sub
+              await this.storage.publish(streamChannel, {
+                eventId,
+                type: 'content',
+                sessionId,
+                data: event.data
+              })
+            } else if (event.event === 'error') {
+              // Store error to history
+              await this.history.push(sessionId, eventId, {
+                prompt,
+                error: event.data
+              }, this.options.limits.historyExpiration)
+
+              // Publish error event
+              await this.storage.publish(streamChannel, {
+                eventId,
+                type: 'error',
+                sessionId,
+                data: event.data
+              })
+              return
+            }
+          }
+        }
+
+        // Store final accumulated response to history
+        const finalEventId = createEventId()
+        await this.history.push(sessionId, finalEventId, {
+          prompt,
+          response: accumulatedResponse
+        }, this.options.limits.historyExpiration)
+
+        // Publish final event
+        await this.storage.publish(streamChannel, {
+          eventId: finalEventId,
+          type: 'complete',
+          sessionId,
+          data: { response: accumulatedResponse }
+        })
+      } catch (error: any) {
+        // Store error to history
+        const errorEventId = createEventId()
+        await this.history.push(sessionId, errorEventId, {
+          prompt,
+          error: error.message || String(error)
+        }, this.options.limits.historyExpiration)
+
+        // Publish error event
+        await this.storage.publish(streamChannel, {
+          eventId: errorEventId,
+          type: 'error',
+          sessionId,
+          data: { message: error.message || String(error) }
+        })
+      }
+    }
+
+    // Process stream in background (don't await to avoid blocking the response)
+    processStreamInBackground().catch(error => {
+      this.logger.error({ error }, 'Failed to process stream for history/pubsub')
+    })
+
+    return responseStream
   }
 
   async setModelState (modelName: string, providerState: ProviderState, modelState: ModelState, operationTimestamp: number) {
@@ -815,6 +801,14 @@ export class Ai {
 
     m.rateLimit = rateLimitState
     await providerState.models.set(key, m)
+  }
+
+  modelErrorState (error: FastifyError): ModelState['state'] {
+    return {
+      status: 'error',
+      timestamp: Date.now(),
+      reason: error.code as ModelStateErrorReason
+    }
   }
 
   async checkRateLimit (model: ModeleSelection, rateLimit: { max: number, timeWindow: number }) {
@@ -956,9 +950,29 @@ export class Ai {
       }
     })
 
-    // Attach sessionId to the resume stream
-    ;(resumeStream as any).sessionId = sessionId
+      // Attach sessionId to the resume stream
+      ; (resumeStream as any).sessionId = sessionId
     return resumeStream
+  }
+
+  // TODO user grants
+  async createSessionId () {
+    return randomUUID()
+  }
+
+  isErrorRetryable (error: FastifyError) {
+    return error.code === 'PROVIDER_REQUEST_TIMEOUT_ERROR' ||
+      error.code === 'PROVIDER_REQUEST_STREAM_TIMEOUT_ERROR' ||
+      error.code === 'PROVIDER_RESPONSE_MAX_TOKENS_ERROR'
+  }
+
+  isErrorToUpdateModelState (error: FastifyError) {
+    return error.code === 'PROVIDER_RATE_LIMIT_ERROR' ||
+      error.code === 'PROVIDER_REQUEST_TIMEOUT_ERROR' ||
+      error.code === 'PROVIDER_REQUEST_STREAM_TIMEOUT_ERROR' ||
+      error.code === 'PROVIDER_RESPONSE_ERROR' ||
+      error.code === 'PROVIDER_RESPONSE_NO_CONTENT' ||
+      error.code === 'PROVIDER_EXCEEDED_QUOTA_ERROR'
   }
 }
 

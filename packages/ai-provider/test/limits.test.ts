@@ -2,9 +2,10 @@ import { mock, test } from 'node:test'
 import assert from 'node:assert'
 import { Readable } from 'node:stream'
 import { setTimeout as wait } from 'node:timers/promises'
-import { Ai, type StreamResponse, type ContentResponse } from '../src/lib/ai.ts'
+import { Ai, type AiStreamResponse, type AiContentResponse } from '../src/lib/ai.ts'
 import pino from 'pino'
 import { consumeStream, createDummyClient, mockOpenAiStream } from './helper/helper.ts'
+import { isStream } from '../src/lib/utils.ts'
 
 const apiKey = 'test'
 const logger = pino({ level: 'silent' })
@@ -52,7 +53,7 @@ test('should succeed after some failures because of retries', async () => {
   const response = await ai.request({
     models: ['openai:gpt-4o-mini'],
     prompt: 'Hello, how are you?',
-  }) as ContentResponse
+  }) as AiContentResponse
 
   assert.equal(callCount, 1)
 
@@ -136,7 +137,7 @@ test('should allow requests within rate limit', async () => {
     const response = await ai.request({
       models: ['openai:gpt-4o-mini'],
       prompt: `Request ${i + 1}`,
-    }) as ContentResponse
+    }) as AiContentResponse
 
     assert.equal(response.text, 'Response')
   }
@@ -239,7 +240,7 @@ test('should allow requests after time window passes', async () => {
   const response = await ai.request({
     models: ['openai:gpt-4o-mini'],
     prompt: 'Second request',
-  }) as ContentResponse
+  }) as AiContentResponse
 
   assert.equal(response.text, 'Response')
 })
@@ -290,7 +291,7 @@ test('should maintain separate rate limits per model', async () => {
   const response = await ai.request({
     models: ['openai:gpt-4o'],
     prompt: 'Request to gpt-4o'
-  }) as ContentResponse
+  }) as AiContentResponse
 
   assert.equal(response.text, 'Response')
 
@@ -352,7 +353,7 @@ test('should work with streaming responses and rate limits', async () => {
     }
   })
 
-  assert.ok(typeof response1.pipe === 'function')
+  assert.ok(isStream(response1))
 
   // Second streaming request should be blocked
   await assert.rejects(
@@ -517,9 +518,9 @@ test('should timeout streaming request between chunks', async () => {
     options: {
       stream: true
     }
-  })
+  }) as AiStreamResponse
 
-  assert.ok(typeof response.pipe === 'function')
+  assert.ok(isStream(response))
 
   let receivedFirstChunk = false
   let errorOccurred = false
@@ -582,7 +583,7 @@ test('should not timeout with fast responses', async () => {
   const response = await ai.request({
     models: ['openai:gpt-4o-mini'],
     prompt: 'Fast request',
-  }) as ContentResponse
+  }) as AiContentResponse
 
   assert.equal(response.text, 'Fast response')
 })
@@ -669,7 +670,7 @@ test('should store history with expiration', async () => {
   const response1 = await ai.request({
     models: ['openai:gpt-4o-mini'],
     prompt: 'First message',
-  }) as ContentResponse
+  }) as AiContentResponse
 
   assert.ok(response1.sessionId)
   assert.equal(response1.text, 'Response from AI')
@@ -721,11 +722,10 @@ test('should work with streaming responses and history expiration', async () => 
     models: ['openai:gpt-4o-mini'],
     prompt: 'Streaming request',
     options: { stream: true }
-  })
+  }) as AiStreamResponse
 
-  assert.ok(typeof response.pipe === 'function')
-  const sessionId = (response as StreamResponse).sessionId
-  assert.ok(sessionId)
+  assert.ok(isStream(response))
+  assert.ok(response.sessionId)
 
   // Consume the stream
   const chunks: Buffer[] = []
@@ -741,7 +741,7 @@ test('should work with streaming responses and history expiration', async () => 
         await wait(50)
 
         // Check that history was stored
-        let history = await ai.history.range(sessionId)
+        let history = await ai.history.range(response.sessionId)
         assert.equal(history.length, 1)
         assert.equal(history[0].prompt, 'Streaming request')
 
@@ -749,7 +749,7 @@ test('should work with streaming responses and history expiration', async () => 
         await wait(100)
 
         // History should be expired
-        history = await ai.history.range(sessionId)
+        history = await ai.history.range(response.sessionId)
         assert.equal(history.length, 0)
 
         resolve(undefined)
@@ -805,7 +805,7 @@ test('should handle max tokens limit in non-streaming response', async () => {
     options: {
       maxTokens: 100
     }
-  }) as ContentResponse
+  }) as AiContentResponse
 
   assert.equal(response.text, 'This is a truncated response because')
   assert.equal(response.result, 'INCOMPLETE_MAX_TOKENS')
@@ -847,9 +847,9 @@ test('should handle max tokens limit in streaming response', async () => {
       stream: true,
       maxTokens: 50
     }
-  })
+  }) as AiStreamResponse
 
-  assert.ok(typeof response.pipe === 'function')
+  assert.ok(isStream(response))
 
   const { content, end } = await consumeStream(response)
 
@@ -896,7 +896,7 @@ test('should handle complete response when max tokens not reached', async () => 
     options: {
       maxTokens: 1000
     }
-  }) as ContentResponse
+  }) as AiContentResponse
 
   assert.equal(response.text, 'This is a complete response.')
   assert.equal(response.result, 'COMPLETE')
@@ -937,9 +937,9 @@ test('should handle complete streaming response when max tokens not reached', as
       stream: true,
       maxTokens: 1000
     }
-  })
+  }) as AiStreamResponse
 
-  assert.ok(typeof response.pipe === 'function')
+  assert.ok(isStream(response))
 
   const { content, end } = await consumeStream(response)
 
@@ -983,7 +983,7 @@ test('should handle unknown finish reason', async () => {
     options: {
       maxTokens: 100
     }
-  }) as ContentResponse
+  }) as AiContentResponse
 
   assert.equal(response.text, 'Response with unknown finish reason')
   assert.equal(response.result, 'INCOMPLETE_UNKNOWN')
@@ -1026,7 +1026,7 @@ test('should not pass max_tokens when not specified', async () => {
     models: ['openai:gpt-4o-mini'],
     prompt: 'Test prompt'
     // No limits specified
-  }) as ContentResponse
+  }) as AiContentResponse
 
   assert.equal(response.text, 'Response without max tokens limit')
   assert.equal(response.result, 'COMPLETE')

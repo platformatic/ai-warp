@@ -1,8 +1,9 @@
 import { test } from 'node:test'
 import assert from 'node:assert'
-import { Ai } from '../src/lib/ai.ts'
+import { Ai, type AiStreamResponse } from '../src/lib/ai.ts'
 import pino from 'pino'
 import { createDummyClient, mockOpenAiStream } from './helper/helper.ts'
+import { isStream } from '../src/lib/utils.ts'
 
 const apiKey = 'test'
 const logger = pino({ level: 'silent' })
@@ -41,9 +42,9 @@ test('should resume stream from event ID', async () => {
     models: ['openai:gpt-4o-mini'],
     prompt: 'Say hello',
     options: { stream: true }
-  })
+  }) as AiStreamResponse
 
-  assert.ok(typeof originalResponse.pipe === 'function', 'Response should be a stream-like object')
+  assert.ok(isStream(originalResponse), 'Response should be a stream-like object')
   const originalSessionId = (originalResponse as any).sessionId
   assert.ok(originalSessionId)
 
@@ -71,9 +72,9 @@ test('should resume stream from event ID', async () => {
       stream: true,
       sessionId: originalSessionId
     }
-  })
+  }) as AiStreamResponse
 
-  assert.ok(typeof resumedResponse.pipe === 'function', 'Response should be a stream-like object')
+  assert.ok(isStream(resumedResponse), 'Response should be a stream-like object')
   assert.equal((resumedResponse as any).sessionId, originalSessionId)
 
   // Consume the resumed stream
@@ -123,9 +124,9 @@ test('should make normal request when resume is disabled', async () => {
     models: ['openai:gpt-4o-mini'],
     prompt: 'Hello',
     options: { stream: true }
-  })
+  }) as AiStreamResponse
 
-  assert.ok(typeof response1.pipe === 'function', 'Response should be a stream-like object')
+  assert.ok(isStream(response1), 'Response should be a stream-like object')
   const sessionId = (response1 as any).sessionId
 
   // Consume first stream
@@ -145,9 +146,9 @@ test('should make normal request when resume is disabled', async () => {
       stream: true
     },
     resume: false // Explicitly disable resume
-  })
+  }) as AiStreamResponse
 
-  assert.ok(typeof response2.pipe === 'function', 'Response should be a stream-like object')
+  assert.ok(isStream(response2), 'Response should be a stream-like object')
   assert.equal((response2 as any).sessionId, sessionId)
 
   // Should have made 2 provider calls since resume was disabled
@@ -191,9 +192,9 @@ test('should resume from storage without calling provider API', async () => {
     models: ['openai:gpt-4o-mini'],
     prompt: 'Say hello',
     options: { stream: true }
-  })
+  }) as AiStreamResponse
 
-  assert.ok(typeof originalResponse.pipe === 'function', 'Response should be a stream-like object')
+  assert.ok(isStream(originalResponse), 'Response should be a stream-like object')
   const sessionId = (originalResponse as any).sessionId
   assert.ok(sessionId)
 
@@ -222,9 +223,9 @@ test('should resume from storage without calling provider API', async () => {
       stream: true,
       sessionId // Same sessionId triggers auto-resume
     }
-  })
+  }) as AiStreamResponse
 
-  assert.ok(typeof resumeResponse.pipe === 'function', 'Response should be a stream-like object')
+  assert.ok(isStream(resumeResponse), 'Response should be a stream-like object')
   assert.equal((resumeResponse as any).sessionId, sessionId)
 
   // Verify API was NOT called again (still only 1 call)
@@ -285,9 +286,9 @@ test('should call API when resume fails and no stored events exist', async () =>
       stream: true
       // No sessionId provided - should make normal API call
     }
-  })
+  }) as AiStreamResponse
 
-  assert.ok(typeof response.pipe === 'function', 'Response should be a stream-like object')
+  assert.ok(isStream(response), 'Response should be a stream-like object')
 
   // Should have called API since no stored events exist
   assert.equal(apiCallCount, 1, 'Should call API when no stored events exist')
@@ -340,7 +341,7 @@ test('should handle explicit resume disabled parameter', async () => {
     models: ['openai:gpt-4o-mini'],
     prompt: 'Hello',
     options: { stream: true }
-  })
+  }) as AiStreamResponse
 
   const sessionId = (originalResponse as any).sessionId
   for await (const _chunk of originalResponse) {
@@ -361,9 +362,9 @@ test('should handle explicit resume disabled parameter', async () => {
       sessionId
     },
     resume: false // Explicitly disable resume
-  })
+  }) as AiStreamResponse
 
-  assert.ok(typeof response.pipe === 'function', 'Response should be a stream-like object')
+  assert.ok(isStream(response), 'Response should be a stream-like object')
 
   // Should have made second API call since resume was disabled
   assert.equal(apiCallCount, 2, 'Should call API again when resume is disabled')

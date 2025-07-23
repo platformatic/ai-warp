@@ -1,8 +1,9 @@
 import { test, mock } from 'node:test'
 import assert from 'node:assert'
 import pino from 'pino'
-import { Ai } from '../src/index.ts'
+import { Ai, type AiStreamResponse } from '../src/index.ts'
 import { createDummyClient, mockOpenAiStream } from './helper/helper.ts'
+import { isStream } from '../src/lib/utils.ts'
 
 test('should include UUID ids in streaming events', async () => {
   const client = {
@@ -36,13 +37,11 @@ test('should include UUID ids in streaming events', async () => {
 
   const response = await ai.request({
     prompt: 'Hello',
-    options: {
-      stream: true
-    }
-  })
+    options: { stream: true }
+  }) as AiStreamResponse
 
   // Check if it's a stream-like object (could be a Readable or cloneable stream)
-  assert.ok(typeof response.pipe === 'function', 'Response should be a stream-like object')
+  assert.ok(isStream(response), 'Response should be a stream-like object')
 
   const events: Array<{ event?: string, data?: string, id?: string }> = []
   let currentEvent: { event?: string, data?: string, id?: string } = {}
@@ -138,10 +137,10 @@ test('should include UUID ids in streaming events with valkey storage', async ()
     options: {
       stream: true
     }
-  })
+  }) as AiStreamResponse
 
   // Check if it's a stream-like object (could be a Readable or cloneable stream)
-  assert.ok(typeof response.pipe === 'function', 'Response should be a stream-like object')
+  assert.ok(isStream(response), 'Response should be a stream-like object')
 
   const events: Array<{ event?: string, data?: string, id?: string }> = []
   let currentEvent: { event?: string, data?: string, id?: string } = {}

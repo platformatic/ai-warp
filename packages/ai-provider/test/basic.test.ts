@@ -1,9 +1,10 @@
 import { test, mock } from 'node:test'
 import assert from 'node:assert'
 import { Readable } from 'node:stream'
-import { Ai, type AiContentResponse } from '../src/lib/ai.ts'
+import { Ai, type AiStreamResponse, type AiContentResponse } from '../src/lib/ai.ts'
 import { mockOpenAiStream, consumeStream, createDummyClient } from './helper/helper.ts'
 import pino from 'pino'
+import { isStream } from '../src/lib/utils.ts'
 
 const apiKey = 'test'
 const logger = pino({ level: 'silent' })
@@ -125,9 +126,9 @@ test('should be able to perform a prompt with stream', async () => {
       context: 'You are a nice helpful assistant.',
       stream: true,
     }
-  }) as Readable
+  }) as AiStreamResponse
 
-  assert.ok(typeof response.pipe === 'function')
+  assert.ok(isStream(response))
   // @ts-ignore
   assert.deepEqual(client.stream.mock.calls[0].arguments[1], {
     model: 'gpt-4o-mini',
