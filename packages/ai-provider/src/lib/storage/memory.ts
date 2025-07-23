@@ -28,6 +28,7 @@ export class MemoryStorage implements Storage {
     this.hash.set(key, field, value, expiration)
     
     // Publish the event to notify subscribers
+    // The value should be the event data that was stored
     this.pubsub.publish(key, value)
   }
 

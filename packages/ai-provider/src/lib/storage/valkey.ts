@@ -43,7 +43,7 @@ export class ValkeyStorage implements Storage {
     this.client.subscribe(`__keyspace@${connectionConfig.db}__:*`)
 
     this.client.on('message', async (sessionId, event) => {
-      if(event !== 'hset') {
+      if (event !== 'hset') {
         return
       }
       try {
@@ -93,7 +93,7 @@ export class ValkeyStorage implements Storage {
       const serializedValue = typeof value === 'string' ? value : JSON.stringify(value)
       await this.client.hset(key, field, serializedValue)
       await this.client.expire(key, Math.ceil(expiration / 1000))
-      
+
       // Publish the event to notify subscribers
       this.subscriptions.emit(key, value)
     } catch (error) {
