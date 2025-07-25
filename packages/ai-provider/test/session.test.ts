@@ -207,7 +207,196 @@ for (const storage of [storages[0]]) {
     ])
   })
 
-  // TODO should update last prompt when history last event is content and type is prompt
+  test(`should update last prompt when history last event is a prompt, non-streaming, with ${storage.type} storage`, async (t) => {
+    const client = {
+      ...createDummyClient(),
+      request: mock.fn(async () => {
+        return { choices: [{ message: { content: 'Some Response' }, finish_reason: 'stop' }] }
+      })
+    }
+    const ai = await createAi({ t, client, storage })
+
+    const sessionId = randomUUID()
+    await ai.history.push(sessionId, randomUUID(), {
+      event: 'content',
+      data: { prompt: 'Last Prompt' },
+      type: 'prompt'
+    }, historyExpiration)
+
+    const response = await ai.request({
+      prompt: 'New Prompt!',
+      resume: false,
+      options: { stream: false, sessionId }
+    }) as AiContentResponse
+
+    assert.equal(client.request.mock.calls.length, 1, 'Should have one request call')
+    // @ts-ignore
+    assert.deepEqual(client.request.mock.calls[0].arguments[1].messages, [
+      {
+        role: 'user',
+        content: 'New Prompt!'
+      }
+    ])
+
+    assert.equal(response.text, 'Some Response')
+    assert.equal(response.result, 'COMPLETE')
+    assert.equal(response.sessionId, sessionId)
+  })
+
+  test(`should load history when request has session id but not history, stream, with ${storage.type} storage`, async (t) => {
+    const client = {
+      ...createDummyClient(),
+      stream: mock.fn(async () => {
+        return mockOpenAiStream([
+          { choices: [{ delta: { content: 'A Response' } }] },
+          { choices: [{ delta: { content: ' Again' }, finish_reason: 'stop' }] }
+        ])
+      })
+    }
+    const ai = await createAi({ t, client, storage })
+
+    const sessionId = randomUUID()
+    await ai.history.push(sessionId, randomUUID(), {
+      event: 'content',
+      data: { prompt: 'Old Prompt' },
+      type: 'prompt'
+    }, historyExpiration)
+
+    const response = await ai.request({
+      prompt: 'New Prompt!',
+      resume: false,
+      options: { stream: true, sessionId }
+    }) as AiStreamResponse
+
+    const { content } = await consumeStream(response)
+
+    assert.equal(content.join(''), 'A Response Again')
+    assert.equal(client.stream.mock.calls.length, 1, 'Should have one request call')
+    // @ts-ignore
+    assert.deepEqual(client.stream.mock.calls[0].arguments[1].messages, [
+      {
+        role: 'user',
+        content: 'New Prompt!'
+      }
+    ])
+  })
+
+// ---------
+
+test(`should load history when request has session id but not history, non-streaming, with resume, with ${storage.type} storage`, async (t) => {
+  const client = {
+    ...createDummyClient(),
+    request: mock.fn(async () => {
+      return { choices: [{ message: { content: 'I am good, thank you!' }, finish_reason: 'stop' }] }
+    })
+  }
+  const ai = await createAi({ t, client, storage })
+
+  const sessionId = randomUUID()
+  await ai.history.push(sessionId, randomUUID(), {
+    event: 'content',
+    data: { prompt: 'Hello' },
+    type: 'prompt'
+  }, historyExpiration)
+
+  await ai.history.push(sessionId, randomUUID(), {
+    event: 'content',
+    data: { response: 'Hi there!' },
+    type: 'response'
+  }, historyExpiration)
+
+  await ai.history.push(sessionId, randomUUID(), {
+    event: 'end',
+    data: { response: 'COMPLETE' }
+  }, historyExpiration)
+
+  const response = await ai.request({
+    prompt: 'How are you?',
+    resume: true,
+    options: { stream: false, sessionId }
+  }) as AiContentResponse
+
+  assert.equal(client.request.mock.calls.length, 1, 'Should have one request call')
+  // @ts-ignore
+  assert.deepEqual(client.request.mock.calls[0].arguments[1].messages, [
+    {
+      role: 'user',
+      content: 'Hello'
+    },
+    {
+      role: 'assistant',
+      content: 'Hi there!'
+    },
+    {
+      role: 'user',
+      content: 'How are you?'
+    }
+  ])
+
+  assert.equal(response.text, 'I am good, thank you!')
+  assert.equal(response.result, 'COMPLETE')
+  assert.equal(response.sessionId, sessionId)
+})
+
+test(`should load history when request has session id but not history, stream, with resume, with ${storage.type} storage`, async (t) => {
+  const client = {
+    ...createDummyClient(),
+    stream: mock.fn(async () => {
+      return mockOpenAiStream([
+        { choices: [{ delta: { content: 'Response' } }] },
+        { choices: [{ delta: { content: ' 2' }, finish_reason: 'stop' }] }
+      ])
+    })
+  }
+  const ai = await createAi({ t, client, storage })
+
+  const sessionId = randomUUID()
+  await ai.history.push(sessionId, randomUUID(), {
+    event: 'content',
+    data: { prompt: 'Prompt 1' },
+    type: 'prompt'
+  }, historyExpiration)
+
+  await ai.history.push(sessionId, randomUUID(), {
+    event: 'content',
+    data: { response: 'Response 1' },
+    type: 'response'
+  }, historyExpiration)
+
+  await ai.history.push(sessionId, randomUUID(), {
+    event: 'end',
+    data: { response: 'COMPLETE' }
+  }, historyExpiration)
+
+  const response = await ai.request({
+    prompt: 'Prompt 2',
+    resume: true,
+    options: { stream: true, sessionId }
+  }) as AiStreamResponse
+
+  const { content } = await consumeStream(response)
+
+  assert.equal(content.join(''), 'Response 2')
+  assert.equal(client.stream.mock.calls.length, 1, 'Should have one request call')
+  // @ts-ignore
+  assert.deepEqual(client.stream.mock.calls[0].arguments[1].messages, [
+    {
+      role: 'user',
+      content: 'Prompt 1'
+    },
+    {
+      role: 'assistant',
+      content: 'Response 1'
+    },
+    {
+      role: 'user',
+      content: 'Prompt 2'
+    }
+  ])
+})
+
+
+// ------------
 
   test(`compactHistory - should load history from storage format and compact in history format / last event: end, with ${storage.type} storage`, async (t) => {
     const ai = await createAi({ t, storage })
@@ -362,4 +551,3 @@ for (const storage of [storages[0]]) {
 }
 
 // multiple clients same session
-// with resume, stream

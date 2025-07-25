@@ -92,8 +92,9 @@ export type Request = {
   resume?: boolean
 }
 
-type ValidatedRequest = {
+type ProviderContextRequest = {
   resume: boolean
+  selectedModel?: ModelSelection
   models: QueryModel[]
   prompt: string
   options: ProviderRequestOptions
@@ -475,12 +476,12 @@ export class Ai {
     return modelState.state.timestamp + wait < Date.now()
   }
 
-  async validateRequest (request: Request): Promise<ValidatedRequest> {
+  async validateRequest (request: Request): Promise<ProviderContextRequest> {
     if (request.options?.history && request.options?.sessionId) {
       throw new OptionError('history and sessionId cannot be used together')
     }
 
-    const validatedRequest: ValidatedRequest = {
+    const validatedRequest: ProviderContextRequest = {
       resume: request.resume ?? true,
       prompt: request.prompt,
       options: request.options ?? {},
@@ -529,7 +530,7 @@ export class Ai {
 
     if (r.resume && r.options.sessionId && r.options.stream) {
       r.stream = createResponseStream(r.options.sessionId)
-      this.resumeRequest(r.stream, r.options.sessionId, r)
+      this.resumeRequest(r.stream, r.options.sessionId, r.options.resumeEventId)
         .then((complete) => {
           if (!complete) {
             return this._request(r)
@@ -545,7 +546,7 @@ export class Ai {
     return this._request(r)
   }
 
-  async _request (r: ValidatedRequest) {
+  async _request (r: ProviderContextRequest) {
     const sessionId: AiSessionId = r.options.sessionId ?? await this.createSessionId()
     try {
       if (r.options.stream && !r.stream) {
@@ -558,11 +559,11 @@ export class Ai {
     }
   }
 
-  private async providerRequest (sessionId: AiSessionId, request: ValidatedRequest): Promise<ProviderResponse> {
+  private async providerRequest (sessionId: AiSessionId, request: ProviderContextRequest): Promise<ProviderResponse> {
     const models: QueryModel[] = request.models
     const skipModels: string[] = []
 
-    let selected = await this.selectModel(models)
+    let selected = request.selectedModel ?? await this.selectModel(models)
     if (!selected) {
       this.logger.warn({ models }, 'No models available')
       throw new ProviderNoModelsAvailableError(models.map(m => typeof m === 'string' ? m : `${m.provider}:${m.model}`).join(', '))
@@ -582,15 +583,16 @@ export class Ai {
       // when last event is a content and type is response, last request is incomplete, state is not clear: probabily it's a resume
 
       // when last event is a content and type is prompt, edge case: last event got an error before getting the response >
-      // in this case, replace the last prompt with the new prompt
+      // in this case, remove the last prompt to be replaced by the new prompt
       if (h?.history && h?.last?.event === 'content' && h.last.type === 'prompt') {
-        h.history[h.history.length - 1].prompt = request.prompt
+        h.history.splice(h.history.length - 1, 1)
         promptEventId = h.last.id
       }
       history = h?.history
     } else {
       history = request.options.history
     }
+
 
     this.history.push(sessionId, promptEventId ?? createEventId(), {
       event: 'content',
@@ -620,7 +622,6 @@ export class Ai {
         await this.checkRateLimit(selected, rateLimit)
         await this.updateModelStateRateLimit(selected.model.name, selected.provider, selected.model.rateLimit)
 
-        let attempts = 0
         let retry
         const retryInterval = this.options.limits.retry.interval
         do {
@@ -642,12 +643,12 @@ export class Ai {
               break
             }
 
-            retry = this.options.limits.retry && attempts++ < this.options.limits.retry.max
+            retry = this.options.limits.retry && request.attempts++ < this.options.limits.retry.max
             if (retry) {
               this.logger.warn({ err }, `Failed to request from provider, retrying in ${retryInterval} ms...`)
               await wait(retryInterval)
             } else {
-              this.logger.error({ err }, `Failed to request from provider after ${attempts} attempts`)
+              this.logger.error({ err }, `Failed to request from provider after ${request.attempts} attempts`)
             }
           }
         } while (retry && err)
@@ -659,19 +660,27 @@ export class Ai {
 
         if (options.stream && isStream(providerResponse)) {
           await this.subscribeToStorage(request.stream!, sessionId)
+          let err: FastifyError | undefined
           this.pipeStreamResponseToStorage(sessionId, providerResponse as Readable)
             .then(() => {
               this.pubsub.remove(sessionId)
             })
             .catch((error: any) => {
               this.logger.error({ error, sessionId }, 'ai request stream error')
-              // TODO
-              // const nextModel = await this.shouldRetryRequest(selected, models, skipModels, error, operationTimestamp)
-              // if (nextModel) {
-              //   selected = nextModel
-              //   continue
-              // }
-              // throw error
+              err = error
+              return this.shouldRetryRequest(selected!, models, skipModels, error, operationTimestamp)
+            })
+            .then((nextModel) => {
+              if (nextModel) {
+                request.selectedModel = nextModel
+                // call request again with the new model, since the response is a stream
+                return this._request(request)
+              }
+              this.logger.error({ err, sessionId }, 'ai request stream error')
+            })
+            .catch((error: any) => {
+              this.logger.error({ error, sessionId }, 'ai request stream error')
+              throw error
             })
           return request.stream!
         } else {
@@ -738,25 +747,24 @@ export class Ai {
     return nextModel
   }
 
-  async resumeRequest (stream: AiStreamResponse, sessionId: AiSessionId, request: ValidatedRequest): Promise<boolean> {
+  async resumeRequest (stream: AiStreamResponse, sessionId: AiSessionId): Promise<boolean> {
     let complete = false
-    if (request.resume && request.options.sessionId) {
-      try {
-        const existingHistory = await this.history.range(sessionId)
-        // Replay existing events
-        for (const event of existingHistory) {
-          this.sendEvent(stream, sessionId, event)
-          if (event.event === 'end') {
-            complete = true
-            break
-          }
-        }
-      } catch (error) {
-        this.logger.error({ error, sessionId }, 'Failed to resume stream')
-        stream.destroy(error as Error)
-      }
-    }
+    try {
+      const existingHistory = await this.history.rangeFromId(sessionId, resumeEventId)
 
+      // if last event is end and response is complete, return true
+      const lastEvent = existingHistory.at(-1)
+      if (lastEvent?.event === 'end' && lastEvent.data.response === 'COMPLETE') {
+        complete = true
+      }
+
+      for (const event of existingHistory) {
+        this.sendEvent(stream, sessionId, event, complete)
+      }
+    } catch (error) {
+      this.logger.error({ error, sessionId }, 'Failed to resume stream')
+    }
+    
     return complete
   }
 
@@ -766,7 +774,7 @@ export class Ai {
     await this.storage.subscribe(sessionId, callback)
   }
 
-  sendEvent (stream: AiStreamResponse, sessionId: AiSessionId, event: any, callback?: (event: any) => void) {
+  sendEvent (stream: AiStreamResponse, sessionId: AiSessionId, event: any, close = true, callback?: (event: any) => void) {
     try {
       if (event.event === 'content') {
         const encodedEvent = encodeEvent(event)
@@ -778,17 +786,17 @@ export class Ai {
       } else if (event.event === 'end') {
         const encodedEvent = encodeEvent(event)
         stream.push(encodedEvent)
-        stream.push(null) // End the stream
+        close && stream.push(null) // End the stream
         callback && this.storage.unsubscribe(sessionId, callback)
       } else if (event.event === 'error') {
         const encodedEvent = encodeEvent(event)
         stream.push(encodedEvent)
-        stream.destroy(event.data as Error)
+        close && stream.destroy(event.data as Error)
         callback && this.storage.unsubscribe(sessionId, callback)
       }
     } catch (error) {
       this.logger.error({ error, sessionId }, 'Failed to process storage event')
-      stream.destroy(error as Error)
+      close && stream.destroy(error as Error)
       callback && this.storage.unsubscribe(sessionId, callback)
     }
   }
@@ -861,10 +869,10 @@ export class Ai {
     try {
       const storedHistory = await this.history.range(sessionId)
       if (!storedHistory || storedHistory.length < 1) { return }
-
+      
       const lastEvent: AiStreamEvent | undefined = storedHistory.at(-1)
       if (!lastEvent) { return }
-
+      
       const history: HistoryContentEvent[] = storedHistory.filter((event: any) => event.event === 'content') as HistoryContentEvent[]
       return { history: this.compactHistory(history), last: lastEvent }
     } catch (err) {
@@ -889,7 +897,7 @@ export class Ai {
       }
     }
 
-    if (lastResponse.length > 0) {
+    if (lastResponse.length > 0 || lastPrompt) {
       compactedHistory.push({ prompt: lastPrompt, response: lastResponse.join('') })
     }
 

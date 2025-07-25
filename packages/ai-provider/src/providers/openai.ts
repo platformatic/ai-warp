@@ -127,8 +127,12 @@ export class OpenAIProvider extends BaseProvider {
 
     const messages: OpenAIMessage[] = []
     for (const previousInteraction of chatHistory) {
-      messages.push({ role: 'user', content: previousInteraction.prompt })
-      messages.push({ role: 'assistant', content: previousInteraction.response })
+      if (previousInteraction.prompt) {
+        messages.push({ role: 'user', content: previousInteraction.prompt })
+      }
+      if (previousInteraction.response) {
+        messages.push({ role: 'assistant', content: previousInteraction.response })
+      }
     }
 
     return messages

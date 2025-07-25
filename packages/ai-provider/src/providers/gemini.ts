@@ -170,8 +170,12 @@ export class GeminiProvider extends BaseProvider {
     // Add chat history
     if (options.history) {
       for (const previousInteraction of options.history) {
-        contents.push({ role: 'user', parts: [{ text: previousInteraction.prompt }] })
-        contents.push({ role: 'model', parts: [{ text: previousInteraction.response }] })
+        if (previousInteraction.prompt) {
+          contents.push({ role: 'user', parts: [{ text: previousInteraction.prompt }] })
+        }
+        if (previousInteraction.response) {
+          contents.push({ role: 'model', parts: [{ text: previousInteraction.response }] })
+        }
       }
     }
 
