@@ -241,6 +241,7 @@ Make AI requests with automatic fallback and session management.
 
 #### `app.ai.retrieveHistory(sessionId)`
 Retrieve conversation history for a specific session.
+TODO update doc
 
 **Options:**
 - `sessionId` (string, required): Session identifier

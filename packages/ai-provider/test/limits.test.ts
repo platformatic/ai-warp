@@ -1,15 +1,16 @@
-import { mock, test } from 'node:test'
+import { test } from 'node:test'
 import assert from 'node:assert'
 import { Readable } from 'node:stream'
 import { setTimeout as wait } from 'node:timers/promises'
-import { Ai, type StreamResponse, type ContentResponse } from '../src/lib/ai.ts'
+import { Ai, type AiStreamResponse, type AiContentResponse } from '../src/lib/ai.ts'
 import pino from 'pino'
 import { consumeStream, createDummyClient, mockOpenAiStream } from './helper/helper.ts'
+import { isStream } from '../src/lib/utils.ts'
 
 const apiKey = 'test'
 const logger = pino({ level: 'silent' })
 
-test('should succeed after some failures because of retries', async () => {
+test('should succeed after some failures because of retries', async (t) => {
   let callCount = 0
   const client = {
     ...createDummyClient(),
@@ -48,11 +49,12 @@ test('should succeed after some failures because of retries', async () => {
     }
   })
   await ai.init()
+  t.after(() => ai.close())
 
   const response = await ai.request({
     models: ['openai:gpt-4o-mini'],
     prompt: 'Hello, how are you?',
-  }) as ContentResponse
+  }) as AiContentResponse
 
   assert.equal(callCount, 1)
 
@@ -90,7 +92,7 @@ test('should fail after max retries', async () => {
   })
   await ai.init()
 
-  await assert.rejects(ai.request({
+  await assert.rejects(async () => await ai.request({
     models: ['openai:gpt-4o-mini'],
     prompt: 'Hello, how are you?',
   }), new Error('ERROR_FROM_PROVIDER'))
@@ -136,7 +138,7 @@ test('should allow requests within rate limit', async () => {
     const response = await ai.request({
       models: ['openai:gpt-4o-mini'],
       prompt: `Request ${i + 1}`,
-    }) as ContentResponse
+    }) as AiContentResponse
 
     assert.equal(response.text, 'Response')
   }
@@ -239,7 +241,7 @@ test('should allow requests after time window passes', async () => {
   const response = await ai.request({
     models: ['openai:gpt-4o-mini'],
     prompt: 'Second request',
-  }) as ContentResponse
+  }) as AiContentResponse
 
   assert.equal(response.text, 'Response')
 })
@@ -290,7 +292,7 @@ test('should maintain separate rate limits per model', async () => {
   const response = await ai.request({
     models: ['openai:gpt-4o'],
     prompt: 'Request to gpt-4o'
-  }) as ContentResponse
+  }) as AiContentResponse
 
   assert.equal(response.text, 'Response')
 
@@ -300,25 +302,18 @@ test('should maintain separate rate limits per model', async () => {
       models: ['openai:gpt-4o-mini'],
       prompt: 'Blocked request to mini',
     }),
-    /Rate limit exceeded/
+    /PROVIDER_RATE_LIMIT_ERROR/
   )
 })
 
-test('should work with streaming responses and rate limits', async () => {
+test('should work with streaming responses and rate limits (streaming)', async () => {
   const client = {
     ...createDummyClient(),
     stream: async () => {
-      const readable = new Readable({
-        read () {}
-      })
-
-      setImmediate(() => {
-        readable.push(Buffer.from('{"choices": [{"delta": {"content": "chunk1"}}]}'))
-        readable.push(Buffer.from('{"choices": [{"delta": {"content": "chunk2"}}]}'))
-        readable.push(null) // End stream
-      })
-
-      return readable
+      return mockOpenAiStream([
+        { choices: [{ delta: { content: 'chunk1' } }] },
+        { choices: [{ delta: { content: 'chunk2' } }] }
+      ])
     }
   }
 
@@ -352,18 +347,17 @@ test('should work with streaming responses and rate limits', async () => {
     }
   })
 
-  assert.ok(typeof response1.pipe === 'function')
+  assert.ok(isStream(response1))
 
   // Second streaming request should be blocked
-  await assert.rejects(
-    ai.request({
-      models: ['openai:gpt-4o-mini'],
-      prompt: 'Blocked streaming request',
-      options: {
-        stream: true
-      }
-    }),
-    /Rate limit exceeded/
+  await assert.rejects(async () => await ai.request({
+    models: ['openai:gpt-4o-mini'],
+    prompt: 'Blocked streaming request',
+    options: {
+      stream: true
+    }
+  }),
+  /PROVIDER_RATE_LIMIT_ERROR/
   )
 })
 
@@ -413,22 +407,16 @@ test('should timeout non-streaming request after requestTimeout', async () => {
   )
 })
 
-test('should timeout streaming request after requestTimeout', async () => {
+test('should timeout streaming request after requestTimeout (streaming)', async () => {
   const client = {
     ...createDummyClient(),
     stream: async () => {
       // Simulate a slow initial response
       await wait(200)
-      const readable = new Readable({
-        read () {}
-      })
-
-      setImmediate(() => {
-        readable.push(Buffer.from('{"choices": [{"delta": {"content": "chunk1"}}]}'))
-        readable.push(null) // End stream
-      })
-
-      return readable
+      return mockOpenAiStream([
+        { choices: [{ delta: { content: 'chunk1' } }] },
+        { choices: [{ delta: { content: 'chunk2' } }] }
+      ])
     }
   }
 
@@ -468,7 +456,7 @@ test('should timeout streaming request between chunks', async () => {
     stream: async () => {
       // Create a Node.js Readable stream that simulates delay between chunks
       const readable = new Readable({
-        read () {}
+        read () { }
       })
 
       const pushChunks = async () => {
@@ -517,9 +505,9 @@ test('should timeout streaming request between chunks', async () => {
     options: {
       stream: true
     }
-  })
+  }) as AiStreamResponse
 
-  assert.ok(typeof response.pipe === 'function')
+  assert.ok(isStream(response))
 
   let receivedFirstChunk = false
   let errorOccurred = false
@@ -582,7 +570,7 @@ test('should not timeout with fast responses', async () => {
   const response = await ai.request({
     models: ['openai:gpt-4o-mini'],
     prompt: 'Fast request',
-  }) as ContentResponse
+  }) as AiContentResponse
 
   assert.equal(response.text, 'Fast response')
 })
@@ -639,11 +627,7 @@ test('should store history with expiration', async () => {
   const client = {
     ...createDummyClient(),
     request: async () => ({
-      choices: [{
-        message: {
-          content: 'Response from AI'
-        }
-      }]
+      choices: [{ message: { content: 'Response from AI' }, finish_reason: 'stop' }]
     })
   }
 
@@ -660,7 +644,7 @@ test('should store history with expiration', async () => {
       model: 'gpt-4o-mini'
     }],
     limits: {
-      historyExpiration: '1s'
+      historyExpiration: '500ms'
     }
   })
   await ai.init()
@@ -669,19 +653,21 @@ test('should store history with expiration', async () => {
   const response1 = await ai.request({
     models: ['openai:gpt-4o-mini'],
     prompt: 'First message',
-  }) as ContentResponse
+  }) as AiContentResponse
 
   assert.ok(response1.sessionId)
   assert.equal(response1.text, 'Response from AI')
 
   // Immediately check that history exists
   const history = await ai.history.range(response1.sessionId!)
-  assert.equal(history.length, 1)
-  assert.equal(history[0].prompt, 'First message')
-  assert.equal(history[0].response, 'Response from AI')
+
+  assert.equal(history.length, 3)
+  assert.equal(history[0].data.prompt, 'First message')
+  assert.equal(history[1].data.response, 'Response from AI')
+  assert.equal(history[2].data.response, 'COMPLETE')
 
   // Wait for expiration
-  await wait(1100)
+  await wait(750)
 
   // History should be empty after expiration
   const expiredHistory = await ai.history.range(response1.sessionId!)
@@ -721,11 +707,10 @@ test('should work with streaming responses and history expiration', async () => 
     models: ['openai:gpt-4o-mini'],
     prompt: 'Streaming request',
     options: { stream: true }
-  })
+  }) as AiStreamResponse
 
-  assert.ok(typeof response.pipe === 'function')
-  const sessionId = (response as StreamResponse).sessionId
-  assert.ok(sessionId)
+  assert.ok(isStream(response))
+  assert.ok(response.sessionId)
 
   // Consume the stream
   const chunks: Buffer[] = []
@@ -741,15 +726,19 @@ test('should work with streaming responses and history expiration', async () => 
         await wait(50)
 
         // Check that history was stored
-        let history = await ai.history.range(sessionId)
-        assert.equal(history.length, 1)
-        assert.equal(history[0].prompt, 'Streaming request')
+        let history = await ai.history.range(response.sessionId)
+
+        assert.equal(history.length, 4)
+        assert.equal(history[0].data.prompt, 'Streaming request')
+        assert.equal(history[1].data.response, 'Stream')
+        assert.equal(history[2].data.response, ' response')
+        assert.equal(history[3].data.response, 'COMPLETE')
 
         // Wait for expiration
         await wait(100)
 
         // History should be expired
-        history = await ai.history.range(sessionId)
+        history = await ai.history.range(response.sessionId)
         assert.equal(history.length, 0)
 
         resolve(undefined)
@@ -805,7 +794,7 @@ test('should handle max tokens limit in non-streaming response', async () => {
     options: {
       maxTokens: 100
     }
-  }) as ContentResponse
+  }) as AiContentResponse
 
   assert.equal(response.text, 'This is a truncated response because')
   assert.equal(response.result, 'INCOMPLETE_MAX_TOKENS')
@@ -814,7 +803,7 @@ test('should handle max tokens limit in non-streaming response', async () => {
 test('should handle max tokens limit in streaming response', async () => {
   const client = {
     ...createDummyClient(),
-    stream: mock.fn(async (api: any, request: any) => {
+    stream: async (api: any, request: any) => {
       assert.equal(request.max_tokens, 50)
       return mockOpenAiStream([
         { choices: [{ delta: { content: 'This is' } }] },
@@ -822,7 +811,7 @@ test('should handle max tokens limit in streaming response', async () => {
         { choices: [{ delta: { content: ' response' } }] },
         { choices: [{ delta: {}, finish_reason: 'length' }] }
       ])
-    })
+    }
   }
 
   const ai = new Ai({
@@ -847,9 +836,9 @@ test('should handle max tokens limit in streaming response', async () => {
       stream: true,
       maxTokens: 50
     }
-  })
+  }) as AiStreamResponse
 
-  assert.ok(typeof response.pipe === 'function')
+  assert.ok(isStream(response))
 
   const { content, end } = await consumeStream(response)
 
@@ -896,7 +885,7 @@ test('should handle complete response when max tokens not reached', async () => 
     options: {
       maxTokens: 1000
     }
-  }) as ContentResponse
+  }) as AiContentResponse
 
   assert.equal(response.text, 'This is a complete response.')
   assert.equal(response.result, 'COMPLETE')
@@ -905,14 +894,14 @@ test('should handle complete response when max tokens not reached', async () => 
 test('should handle complete streaming response when max tokens not reached', async () => {
   const client = {
     ...createDummyClient(),
-    stream: mock.fn(async (api: any, request: any) => {
+    stream: async (api: any, request: any) => {
       assert.equal(request.max_tokens, 1000)
       return mockOpenAiStream([
         { choices: [{ delta: { content: 'Complete' } }] },
         { choices: [{ delta: { content: ' response.' } }] },
         { choices: [{ delta: {}, finish_reason: 'stop' }] }
       ])
-    })
+    }
   }
 
   const ai = new Ai({
@@ -937,9 +926,9 @@ test('should handle complete streaming response when max tokens not reached', as
       stream: true,
       maxTokens: 1000
     }
-  })
+  }) as AiStreamResponse
 
-  assert.ok(typeof response.pipe === 'function')
+  assert.ok(isStream(response))
 
   const { content, end } = await consumeStream(response)
 
@@ -983,7 +972,7 @@ test('should handle unknown finish reason', async () => {
     options: {
       maxTokens: 100
     }
-  }) as ContentResponse
+  }) as AiContentResponse
 
   assert.equal(response.text, 'Response with unknown finish reason')
   assert.equal(response.result, 'INCOMPLETE_UNKNOWN')
@@ -1026,7 +1015,7 @@ test('should not pass max_tokens when not specified', async () => {
     models: ['openai:gpt-4o-mini'],
     prompt: 'Test prompt'
     // No limits specified
-  }) as ContentResponse
+  }) as AiContentResponse
 
   assert.equal(response.text, 'Response without max tokens limit')
   assert.equal(response.result, 'COMPLETE')

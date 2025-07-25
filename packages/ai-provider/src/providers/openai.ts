@@ -107,7 +107,7 @@ export class OpenAIProvider extends BaseProvider {
     this.logger.debug({ request }, `${this.providerName} request`)
     const response = await this.client.request(this.api, request, this.context)
 
-    this.logger.debug({ response }, `${this.providerName} full response (no stream)`)
+    this.logger.debug({ response }, `${this.providerName} full response (non-streaming)`)
 
     const text = response.choices?.[0]?.message?.content
     if (!text) {
@@ -127,8 +127,12 @@ export class OpenAIProvider extends BaseProvider {
 
     const messages: OpenAIMessage[] = []
     for (const previousInteraction of chatHistory) {
-      messages.push({ role: 'user', content: previousInteraction.prompt })
-      messages.push({ role: 'assistant', content: previousInteraction.response })
+      if (previousInteraction.prompt) {
+        messages.push({ role: 'user', content: previousInteraction.prompt })
+      }
+      if (previousInteraction.response) {
+        messages.push({ role: 'assistant', content: previousInteraction.response })
+      }
     }
 
     return messages
@@ -177,6 +181,7 @@ class OpenAiStreamTransformer extends Transform {
           const eventData: AiStreamEvent = {
             id: event.id ?? createEventId(),
             event: 'content',
+            type: 'response',
             data: { response }
           }
           this.push(encodeEvent(eventData))

@@ -146,6 +146,7 @@ export async function app({ start = false, logger }: AppOptions) {
   })
 
   app.get('/history/:sessionId', async (request: FastifyRequest<{ Params: { sessionId: string } }>, reply) => {
+    // TODO stream or compact
     const history = await app.ai.retrieveHistory(request.params.sessionId)
     return history
   })

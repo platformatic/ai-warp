@@ -1,6 +1,7 @@
 import { Redis } from 'iovalkey'
 import type { AiStorageOptions, Storage, ValkeyOptions } from './index.ts'
 import { StorageGetError, StorageListPushError, StorageListRangeError, StorageSetError } from '../errors.ts'
+import EventEmitter from 'node:events'
 
 const defaultValkeyOptions: ValkeyOptions = {
   host: 'localhost',
@@ -9,14 +10,20 @@ const defaultValkeyOptions: ValkeyOptions = {
 }
 
 export class ValkeyStorage implements Storage {
-  private client: Redis
-  private subscriber: Redis
-  private subscriptions: Map<string, (message: any) => void>
+  private options: AiStorageOptions
+  private client!: Redis
+  private pubsub!: Redis
+  private subscriptions: EventEmitter
+  private subscriptionsCount: Record<string, number> = {}
 
   constructor (options: AiStorageOptions) {
     // TODO validate options
+    this.options = options
+    this.subscriptions = new EventEmitter()
+  }
 
-    const valkeyOptions = options.valkey || {} // TODO when validated
+  async init () {
+    const valkeyOptions = this.options.valkey || {}
 
     const connectionConfig = {
       host: valkeyOptions.host || defaultValkeyOptions.host,
@@ -26,43 +33,48 @@ export class ValkeyStorage implements Storage {
       db: valkeyOptions.database || defaultValkeyOptions.database
     }
 
-    this.client = new Redis(connectionConfig)
-    this.subscriber = new Redis(connectionConfig)
-    this.subscriptions = new Map()
+    this.client = new Redis({
+      connectionName: 'client',
+      ...connectionConfig
+    })
+    this.pubsub = new Redis({
+      connectionName: 'pubsub',
+      ...connectionConfig
+    })
 
-    // Handle subscriber messages
-    this.subscriber.on('message', (channel, message) => {
-      const callback = this.subscriptions.get(channel)
-      if (callback) {
-        try {
-          const parsedMessage = JSON.parse(message)
-          callback(parsedMessage)
-        } catch {
-          callback(message)
-        }
+    // TODO PUBLISH __keyevent@0__:del mykey
+    this.pubsub.on('message', (sessionId, event) => {
+      try {
+        const unserializedEvent = JSON.parse(event)
+        this.subscriptions.emit(sessionId, unserializedEvent)
+      } catch (error) {
+        // TODO logger.error
+        console.error('valkey pubsub message error', sessionId, event, error)
       }
     })
   }
 
   async close () {
-    await this.subscriber.quit()
     await this.client.quit()
+    await this.pubsub.quit()
   }
 
   async valueGet (key: string) {
     try {
       const value = await this.client.get(key)
-      if (value === null) {
-        return undefined
+      if (!value) {
+        return
       }
 
       // Try to parse as JSON, fallback to string if it fails
       try {
         return JSON.parse(value)
       } catch {
-        return value
+
       }
     } catch (error) {
+      // TODO logger.error
+      console.error('valkey valueGet error', key, error)
       const errorMessage = error instanceof Error ? error.message : String(error)
       throw new StorageGetError(key, errorMessage)
     }
@@ -78,11 +90,15 @@ export class ValkeyStorage implements Storage {
     }
   }
 
-  async hashSet (key: string, field: string, value: any, expiration: number) {
+  async hashSet (key: string, field: string, value: any, expiration: number, publish?: boolean) {
     try {
       const serializedValue = typeof value === 'string' ? value : JSON.stringify(value)
       await this.client.hset(key, field, serializedValue)
-      await this.client.expire(key, expiration / 1000)
+      await this.client.expire(key, Math.ceil(expiration / 1000))
+      if (!publish) {
+        return
+      }
+      await this.client.publish(key, serializedValue)
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error)
       throw new StorageListPushError(key, errorMessage)
@@ -112,9 +128,7 @@ export class ValkeyStorage implements Storage {
   async hashGet (key: string, field: string) {
     try {
       const value = await this.client.hget(key, field)
-      if (value === null) {
-        return undefined
-      }
+      if (!value) { return }
 
       try {
         return JSON.parse(value)
@@ -127,33 +141,46 @@ export class ValkeyStorage implements Storage {
     }
   }
 
-  async publish (channel: string, message: any) {
+  async createSubscription (sessionId: string) {
     try {
-      const serializedMessage = typeof message === 'string' ? message : JSON.stringify(message)
-      await this.client.publish(channel, serializedMessage)
+      if (!this.subscriptionsCount[sessionId]) {
+        this.subscriptionsCount[sessionId] = 0
+        await this.pubsub.subscribe(sessionId)
+      }
+      this.subscriptionsCount[sessionId]++
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error)
-      throw new StorageSetError(channel, errorMessage)
+    // TODO logger.error
+      console.error('valkey createSubscription error', sessionId, error)
     }
   }
 
-  async subscribe (channel: string, callback: (message: any) => void) {
+  async removeSubscription (sessionId: string) {
     try {
-      this.subscriptions.set(channel, callback)
-      await this.subscriber.subscribe(channel)
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error)
-      throw new StorageGetError(channel, errorMessage)
+      this.subscriptionsCount[sessionId]--
+      if (this.subscriptionsCount[sessionId] === 0) {
+        await this.pubsub.unsubscribe(sessionId)
+      }
+    } catch {
     }
   }
 
-  async unsubscribe (channel: string) {
+  async subscribe (key: string, callback: (message: any) => void) {
     try {
-      this.subscriptions.delete(channel)
-      await this.subscriber.unsubscribe(channel)
+      this.subscriptionsCount[key] = (this.subscriptionsCount[key] || 0) + 1
+      this.subscriptions.on(key, callback)
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error)
-      throw new StorageGetError(channel, errorMessage)
+      throw new StorageGetError(key, errorMessage)
+    }
+  }
+
+  async unsubscribe (key: string, callback: (message: any) => void) {
+    try {
+      this.subscriptionsCount[key] = (this.subscriptionsCount[key] || 0) - 1
+      this.subscriptions.off(key, callback)
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      throw new StorageGetError(key, errorMessage)
     }
   }
 }

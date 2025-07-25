@@ -10,7 +10,7 @@ import { parseTimeWindow } from '../src/lib/utils.ts'
 const logger = pino({ level: 'silent' })
 const apiKey = 'test'
 
-test('request - should always generate a sessionId (no stream)', async () => {
+test('request - should always generate a sessionId (non-streaming)', async () => {
   const client = {
     ...createDummyClient(),
     request: async () => {

@@ -19,12 +19,13 @@ export type AiStorageOptions = {
 export type Storage = {
   valueGet: (key: string) => Promise<any>
   valueSet: (key: string, value: any) => Promise<void>
-  hashSet: (key: string, field: string, value: any, expiration: number) => Promise<void>
+  hashSet: (key: string, field: string, value: any, expiration: number, publish?: boolean) => Promise<void>
   hashGetAll: (key: string) => Promise<Record<string, any>>
   hashGet: (key: string, field: string) => Promise<any>
-  publish: (channel: string, message: any) => Promise<void>
   subscribe: (channel: string, callback: (message: any) => void) => Promise<void>
-  unsubscribe: (channel: string) => Promise<void>
+  unsubscribe: (channel: string, callback: (message: any) => void) => Promise<void>
+  createSubscription: (channel: string) => Promise<void>
+  removeSubscription: (channel: string) => Promise<void>
   close: () => Promise<void>
 }
 
@@ -39,6 +40,7 @@ export async function createStorage (options?: AiStorageOptions): Promise<Storag
   if (storageOptions.type === 'valkey') {
     // TODO try/catch connection may fail
     const s = new ValkeyStorage(storageOptions)
+    await s.init()
     return s
   } else {
     return new MemoryStorage(storageOptions)
