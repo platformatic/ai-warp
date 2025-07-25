@@ -5,7 +5,7 @@ import { Ai, type AiStreamResponse } from '../src/index.ts'
 import { createDummyClient, mockOpenAiStream } from './helper/helper.ts'
 import { isStream } from '../src/lib/utils.ts'
 
-test('should include session ids in streaming events', async () => {
+test('should include session ids in streaming events', async (t) => {
   const client = {
     ...createDummyClient(),
     stream: async () => {
@@ -34,6 +34,7 @@ test('should include session ids in streaming events', async () => {
   })
 
   await ai.init()
+  t.after(() => ai.close())
 
   const response = await ai.request({
     prompt: 'Hello',
@@ -88,17 +89,19 @@ test('should include session ids in streaming events', async () => {
   const eventIds = events.map(e => e.id)
   const uniqueIds = new Set(eventIds)
   assert.equal(eventIds.length, uniqueIds.size, 'All event IDs should be unique')
-
-  await ai.close()
 })
 
-// should load history when request has session id but not history
-// compactHistory
+test('should load history when request has session id but not history', async (t) => {
+})
 
+test('compactHistory - should load history from storage format and compact in history format / last event: end', async (t) => {
+})
 
-// when last event is end, last request is complete, happy state
-// when last event is error, last request is incomplete, so surely it's a resume
-// when last event is a content and type is response, last request is incomplete, state is not clear: probabily it's a resume
+test('compactHistory - should load history from storage format and compact in history format / last event: error', async (t) => {
+})
 
-// when last event is a content and type is prompt, edge case: last event got an error before getting the response >
-// in this case, replace the last prompt with the new prompt
+test('compactHistory - should load history from storage format and compact in history format / last event: content and type: response', async (t) => {
+})
+
+test('compactHistory - should load history from storage format and compact in history format / last event: content and type: prompt', async (t) => {
+})
