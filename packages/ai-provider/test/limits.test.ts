@@ -91,7 +91,7 @@ test('should fail after max retries', async () => {
   })
   await ai.init()
 
-  await assert.rejects(ai.request({
+  await assert.rejects(async () => await ai.request({
     models: ['openai:gpt-4o-mini'],
     prompt: 'Hello, how are you?',
   }), new Error('ERROR_FROM_PROVIDER'))
@@ -301,25 +301,18 @@ test('should maintain separate rate limits per model', async () => {
       models: ['openai:gpt-4o-mini'],
       prompt: 'Blocked request to mini',
     }),
-    /Rate limit exceeded/
+    /PROVIDER_RATE_LIMIT_ERROR/
   )
 })
 
-test('should work with streaming responses and rate limits', async () => {
+test('should work with streaming responses and rate limits (streaming)', async () => {
   const client = {
     ...createDummyClient(),
     stream: async () => {
-      const readable = new Readable({
-        read () {}
-      })
-
-      setImmediate(() => {
-        readable.push(Buffer.from('{"choices": [{"delta": {"content": "chunk1"}}]}'))
-        readable.push(Buffer.from('{"choices": [{"delta": {"content": "chunk2"}}]}'))
-        readable.push(null) // End stream
-      })
-
-      return readable
+      return mockOpenAiStream([
+        { choices: [{ delta: { content: 'chunk1' } }] },
+        { choices: [{ delta: { content: 'chunk2' } }] }
+      ])
     }
   }
 
@@ -356,15 +349,14 @@ test('should work with streaming responses and rate limits', async () => {
   assert.ok(isStream(response1))
 
   // Second streaming request should be blocked
-  await assert.rejects(
-    ai.request({
-      models: ['openai:gpt-4o-mini'],
-      prompt: 'Blocked streaming request',
-      options: {
-        stream: true
-      }
-    }),
-    /Rate limit exceeded/
+  await assert.rejects(async () => await ai.request({
+    models: ['openai:gpt-4o-mini'],
+    prompt: 'Blocked streaming request',
+    options: {
+      stream: true
+    }
+  }),
+  /PROVIDER_RATE_LIMIT_ERROR/
   )
 })
 
@@ -414,22 +406,16 @@ test('should timeout non-streaming request after requestTimeout', async () => {
   )
 })
 
-test('should timeout streaming request after requestTimeout', async () => {
+test('should timeout streaming request after requestTimeout (streaming)', async () => {
   const client = {
     ...createDummyClient(),
     stream: async () => {
       // Simulate a slow initial response
       await wait(200)
-      const readable = new Readable({
-        read () {}
-      })
-
-      setImmediate(() => {
-        readable.push(Buffer.from('{"choices": [{"delta": {"content": "chunk1"}}]}'))
-        readable.push(null) // End stream
-      })
-
-      return readable
+      return mockOpenAiStream([
+        { choices: [{ delta: { content: 'chunk1' } }] },
+        { choices: [{ delta: { content: 'chunk2' } }] }
+      ])
     }
   }
 

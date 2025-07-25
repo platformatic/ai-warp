@@ -2,7 +2,7 @@ import { mock, test } from 'node:test'
 import assert from 'node:assert'
 import { Readable } from 'node:stream'
 import { setTimeout as wait } from 'node:timers/promises'
-import { Ai, type AiStreamResponse, type ContentResponse } from '../src/lib/ai.ts'
+import { Ai, type AiStreamResponse, type AiContentResponse } from '../src/lib/ai.ts'
 import pino from 'pino'
 import { createDummyClient, setModelState } from './helper/helper.ts'
 import { isStream } from '../src/lib/utils.ts'
@@ -80,7 +80,7 @@ test('should restore model after rate limit error when enough time has passed', 
   const response = await ai.request({
     models: ['openai:gpt-4o-mini'],
     prompt: 'Third request after restore'
-  }) as ContentResponse
+  }) as AiContentResponse
 
   assert.equal(response.text, 'Success after restore')
   assert.equal(requestCount, 2) // First request + restored request
@@ -221,7 +221,7 @@ test('should restore model after timeout error when enough time has passed', asy
   const response = await ai.request({
     models: ['openai:gpt-4o-mini'],
     prompt: 'Request after timeout restore'
-  }) as ContentResponse
+  }) as AiContentResponse
 
   assert.equal(response.text, 'Success after timeout restore')
   assert.equal(requestCount, 2)
@@ -374,7 +374,7 @@ test('should restore model after provider communication error when enough time h
   const response = await ai.request({
     models: ['openai:gpt-4o-mini'],
     prompt: 'Request after communication error restore'
-  }) as ContentResponse
+  }) as AiContentResponse
 
   assert.equal(response.text, 'Success after communication error restore')
   assert.equal(requestCount, 2)
@@ -436,7 +436,7 @@ test('should restore model after provider exceeded quota error when enough time 
   const response = await ai.request({
     models: ['openai:gpt-4o-mini'],
     prompt: 'Request after quota error restore'
-  }) as ContentResponse
+  }) as AiContentResponse
 
   assert.equal(response.text, 'Success after quota error restore')
   assert.equal(requestCount, 1)
@@ -519,7 +519,7 @@ test('should use different restore timeouts for different error types', async ()
   const response = await ai.request({
     models: ['openai:gpt-4o-mini'],
     prompt: 'Request after restore'
-  }) as ContentResponse
+  }) as AiContentResponse
 
   assert.equal(response.text, 'Success')
   assert.equal(requestCount, 2)

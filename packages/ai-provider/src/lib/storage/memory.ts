@@ -28,8 +28,11 @@ export class MemoryStorage implements Storage {
     this.values.set(key, value)
   }
 
-  async hashSet (key: string, field: string, value: any, expiration: number) {
+  async hashSet (key: string, field: string, value: any, expiration: number, publish?: boolean) {
     this.hash.set(key, field, value, expiration)
+    if (!publish) {
+      return
+    }
 
     // Publish the event to notify subscribers
     // The value should be the event data that was stored
@@ -158,7 +161,6 @@ class HashStorage {
 
 class PubSubStorage extends EventEmitter {
   publish (channel: string, message: any) {
-    // Use setImmediate to make it async and avoid blocking
     setImmediate(() => {
       this.emit(channel, message)
     })

@@ -1,30 +1,14 @@
 import { test, mock } from 'node:test'
 import assert from 'node:assert'
 import { Ai, type AiStreamResponse, type AiContentResponse } from '../src/lib/ai.ts'
-import { mockOpenAiStream, consumeStream, createDummyClient } from './helper/helper.ts'
+import { mockOpenAiStream, consumeStream, createDummyClient, storages } from './helper/helper.ts'
 import pino from 'pino'
 
 const apiKey = 'test'
 const logger = pino({ level: 'silent' })
 
-const storages = [
-  {
-    type: 'memory' as const,
-  },
-  {
-    type: 'valkey' as const,
-    valkey: {
-      host: 'localhost',
-      port: 6379,
-      database: 0,
-      username: 'default',
-      password: 'password'
-    }
-  }
-]
-
 for (const storage of storages) {
-  test(`should be able to perform a basic prompt with ${storage.type} storage`, async () => {
+  test(`should be able to perform a basic prompt with ${storage.type} storage`, async (t) => {
     const client = {
       ...createDummyClient(),
       request: async () => {
@@ -47,6 +31,7 @@ for (const storage of storages) {
       }],
     })
     await ai.init()
+    t.after(() => ai.close())
 
     const response = await ai.request({
       models: ['openai:gpt-4o-mini'],

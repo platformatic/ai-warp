@@ -8,6 +8,7 @@ const stringifyEventData = fastJson({
   properties: {
     // Success
     response: { type: 'string' },
+    prompt: { type: 'string' },
     // Error
     code: { type: 'string' },
     message: { type: 'string' }

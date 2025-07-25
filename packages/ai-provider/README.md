@@ -376,17 +376,6 @@ const ai = new Ai({
 })
 ```
 
-### Storage Operations
-
-The storage interface provides hash-based operations:
-
-- `hashSet(sessionId, eventId, value, expiration)` - Store event with UUID key
-- `hashGetAll(sessionId)` - Retrieve all events for session
-- `hashGet(sessionId, eventId)` - Get specific event by UUID
-- `rangeFromId(sessionId, fromEventId)` - Get events starting from UUID
-- `publish(channel, data)` - Publish real-time events
-- `subscribe(channel, callback)` - Subscribe to event streams
-
 ## 🔄 Advanced Features
 
 ### Custom Provider Client

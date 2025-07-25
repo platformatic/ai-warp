@@ -33,11 +33,24 @@ export class ValkeyStorage implements Storage {
       db: valkeyOptions.database || defaultValkeyOptions.database
     }
 
-    this.client = new Redis(connectionConfig)
-    this.pubsub = new Redis(connectionConfig)
+    this.client = new Redis({
+      connectionName: 'client',
+      ...connectionConfig
+    })
+    this.pubsub = new Redis({
+      connectionName: 'pubsub',
+      ...connectionConfig
+    })
 
+    // TODO PUBLISH __keyevent@0__:del mykey
     this.pubsub.on('message', (sessionId, event) => {
-      this.subscriptions.emit(sessionId, event)
+      try {
+        const unserializedEvent = JSON.parse(event)
+        this.subscriptions.emit(sessionId, unserializedEvent)
+      } catch (error) {
+        // TODO logger.error
+        console.error('valkey pubsub message error', sessionId, event, error)
+      }
     })
   }
 
@@ -60,6 +73,7 @@ export class ValkeyStorage implements Storage {
 
       }
     } catch (error) {
+      // TODO logger.error
       console.error('valkey valueGet error', key, error)
       const errorMessage = error instanceof Error ? error.message : String(error)
       throw new StorageGetError(key, errorMessage)
@@ -76,12 +90,15 @@ export class ValkeyStorage implements Storage {
     }
   }
 
-  async hashSet (key: string, field: string, value: any, expiration: number) {
+  async hashSet (key: string, field: string, value: any, expiration: number, publish?: boolean) {
     try {
       const serializedValue = typeof value === 'string' ? value : JSON.stringify(value)
       await this.client.hset(key, field, serializedValue)
       await this.client.expire(key, Math.ceil(expiration / 1000))
-      await this.pubsub.publish(key, value)
+      if (!publish) {
+        return
+      }
+      await this.client.publish(key, serializedValue)
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error)
       throw new StorageListPushError(key, errorMessage)
@@ -139,21 +156,23 @@ export class ValkeyStorage implements Storage {
     }
   }
 
-  async subscribe (sessionId: string, callback: (message: any) => void) {
+  async subscribe (key: string, callback: (message: any) => void) {
     try {
-      this.subscriptions.on(sessionId, callback)
+      this.subscriptionsCount[key] = (this.subscriptionsCount[key] || 0) + 1
+      this.subscriptions.on(key, callback)
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error)
-      throw new StorageGetError(sessionId, errorMessage)
+      throw new StorageGetError(key, errorMessage)
     }
   }
 
-  async unsubscribe (sessionId: string, callback: (message: any) => void) {
+  async unsubscribe (key: string, callback: (message: any) => void) {
     try {
-      this.subscriptions.off(sessionId, callback)
+      this.subscriptionsCount[key] = (this.subscriptionsCount[key] || 0) - 1
+      this.subscriptions.off(key, callback)
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error)
-      throw new StorageGetError(sessionId, errorMessage)
+      throw new StorageGetError(key, errorMessage)
     }
   }
 }

@@ -7,7 +7,7 @@ import type { FastifyError } from '@fastify/error'
 import { type AiChatHistory, type Provider, type ProviderClient, type ProviderOptions, type ProviderRequestOptions, type ProviderResponse, type AiSessionId, createAiProvider } from './provider.ts'
 import { createStorage, type Storage, type AiStorageOptions } from './storage/index.ts'
 import { isStream, parseTimeWindow } from './utils.ts'
-import { HistoryGetError, ModelStateError, OptionError, ProviderNoModelsAvailableError, ProviderRateLimitError, ProviderRequestStreamTimeoutError, ProviderRequestTimeoutError, StorageRetrieveError } from './errors.ts'
+import { HistoryGetError, ModelStateError, OptionError, ProviderNoModelsAvailableError, ProviderRateLimitError, ProviderRequestEndError, ProviderRequestStreamTimeoutError, ProviderRequestTimeoutError } from './errors.ts'
 import { DEFAULT_HISTORY_EXPIRATION, DEFAULT_MAX_RETRIES, DEFAULT_RATE_LIMIT_MAX, DEFAULT_RATE_LIMIT_TIME_WINDOW, DEFAULT_REQUEST_TIMEOUT, DEFAULT_RESTORE_PROVIDER_COMMUNICATION_ERROR, DEFAULT_RESTORE_PROVIDER_EXCEEDED_QUOTA_ERROR, DEFAULT_RESTORE_RATE_LIMIT, DEFAULT_RESTORE_REQUEST_TIMEOUT, DEFAULT_RESTORE_RETRY, DEFAULT_RETRY_INTERVAL, DEFAULT_STORAGE } from './config.ts'
 import { createEventId, decodeEventStream, encodeEvent, type AiStreamEvent } from './event.ts'
 
@@ -76,7 +76,7 @@ export type AddModelsOptions = {
   model: ModelOptions
 }
 
-export type ModeleSelection = {
+export type ModelSelection = {
   provider: ProviderState
   model: ModelState
   settings: ModelSettings
@@ -93,7 +93,9 @@ export type Request = {
 }
 
 type ValidatedRequest = {
+  sessionId?: AiSessionId
   resume: boolean
+  history?: AiStreamEvent[]
   models: QueryModel[]
   prompt: string
   options: ProviderRequestOptions
@@ -210,6 +212,8 @@ export class Ai {
   providers: Map<AiProvider, ProviderState>
   // @ts-expect-error
   history: History
+  // @ts-expect-error
+  pubsub: Pubsub
 
   constructor (options: AiOptions) {
     this.options = this.validateOptions(options)
@@ -222,6 +226,7 @@ export class Ai {
   async init () {
     this.storage = await createStorage(this.options.storage)
     this.history = new History(this.storage)
+    this.pubsub = new Pubsub(this.storage)
     this.providers = new Map()
 
     for (const provider of Object.keys(this.options.providers)) {
@@ -403,7 +408,7 @@ export class Ai {
    * @returns Selected model with provider and limits
    * TODO implement logic, for example round robin, random, least used, etc.
    */
-  async selectModel (models: QueryModel[], skip?: string[]): Promise<ModeleSelection | undefined> {
+  async selectModel (models: QueryModel[], skip?: string[]): Promise<ModelSelection | undefined> {
     if (models.length === 0) {
       return undefined
     }
@@ -475,19 +480,16 @@ export class Ai {
 
     const validatedRequest: ValidatedRequest = {
       resume: request.resume ?? true,
-      models: [],
       prompt: request.prompt,
-      options: {
-        ...(request.options ?? {}),
-        sessionId: request.options?.sessionId,
-        history: request.options?.history
-      },
+      options: request.options ?? {},
+      models: []
     }
 
     if (request.options?.sessionId) {
+      validatedRequest.sessionId = request.options.sessionId
       try {
-        validatedRequest.options.history = await this.history.range(request.options.sessionId)
-        if (!validatedRequest.options.history || validatedRequest.options.history.length < 1) {
+        validatedRequest.history = await this.history.range(validatedRequest.sessionId)
+        if (!validatedRequest.history || validatedRequest.history.length < 1) {
           throw new OptionError('sessionId does not exist')
         }
       } catch (err: any) {
@@ -523,56 +525,16 @@ export class Ai {
     const r = await this.validateRequest(request)
 
     const sessionId: AiSessionId = r.options.sessionId ?? await this.createSessionId()
-    // TODO this.pubsub instead of this.history
-    this.history.listen(sessionId)
-
-    if (r.options.stream) {
-      const stream = await this.createResponseStream(sessionId, r)
-      this.providerRequest(sessionId, r)
-        .then(() => {
-          this.history.remove(sessionId)
-        })
-        .catch((error: any) => {
-          this.logger.error({ error, sessionId }, 'ai request stream error')
-        })
-      return stream
-    }
+    this.pubsub.listen(sessionId)
 
     try {
-      await this.providerRequest(sessionId, r)
-      this.history.remove(sessionId)
-      return this.getResponseContent(sessionId)
+      // need to relay on storage for non streaming requests for multiple instances of the service
+      const response = await this.providerRequest(sessionId, r) as Response
+      response.sessionId = sessionId
+      return response
     } catch (error) {
       this.logger.error({ error, sessionId }, 'ai request no stream error')
       throw error
-    }
-  }
-
-  // Get the content from the history
-  async getResponseContent (sessionId: AiSessionId): Promise<AiContentResponse> {
-    // TODO ensure events are chronological
-    try {
-      const history = await this.history.range(sessionId)
-
-      const endEvent = history.find((event: any) => event.event === 'end')
-      const contentEvents = history.filter((event: any) => event.event === 'content')
-      const text = contentEvents.map((event: any) => event.data.response).join('')
-
-      return ({
-        text,
-        result: endEvent?.data.response || 'COMPLETE',
-        sessionId
-      })
-
-      // Check for error events
-      // TODO
-      // const errorEvent = history.find((event: any) => event.event === 'error')
-      // if (errorEvent) {
-      //   // TODO contentError
-      //   throw new FastifyError(errorEvent.data, 500)
-      // }
-    } catch {
-      throw new StorageRetrieveError()
     }
   }
 
@@ -610,6 +572,8 @@ export class Ai {
     await this.storage.subscribe(sessionId, subscription)
 
     // Handle resume if needed
+    // TODO
+    /*
     if (request.resume && request.options.sessionId) {
       try {
         const existingHistory = await this.history.range(sessionId)
@@ -633,6 +597,7 @@ export class Ai {
         stream.destroy(error as Error)
       }
     }
+    */
 
     return stream as AiStreamResponse
   }
@@ -647,32 +612,38 @@ export class Ai {
       throw new ProviderNoModelsAvailableError(models.map(m => typeof m === 'string' ? m : `${m.provider}:${m.model}`).join(', '))
     }
 
-    // TODO get and update history should be atomic for concurrent requests with same sessionId
-    // concurrent requests should fail until the first one is complete
-    const h = await this.getHistory(sessionId, request.options.history)
-    let promptEventId: string | undefined
-    // when last event is end, last request is complete, happy state
-    // when last event is error, last request is incomplete, so surely it's a resume
-    // when last event is a content and type is response, last request is incomplete, state is not clear: probabily it's a resume
+    let history
+    if (request.sessionId) {
+      // TODO get and update history should be atomic for concurrent requests with same sessionId
+      // concurrent requests should fail until the first one is complete
+      const h = await this.getHistory(sessionId)
+      let promptEventId: string | undefined
+      // when last event is end, last request is complete, happy state
+      // when last event is error, last request is incomplete, so surely it's a resume
+      // when last event is a content and type is response, last request is incomplete, state is not clear: probabily it's a resume
 
-    // when last event is a content and type is prompt, edge case: last event got an error before getting the response >
-    // in this case, replace the last prompt with the new prompt
-    if (h?.history && h?.last?.event === 'content' && h.last.type === 'prompt') {
-      h.history[h.history.length - 1].prompt = request.prompt
-      promptEventId = h.last.id
+      // when last event is a content and type is prompt, edge case: last event got an error before getting the response >
+      // in this case, replace the last prompt with the new prompt
+      if (h?.history && h?.last?.event === 'content' && h.last.type === 'prompt') {
+        h.history[h.history.length - 1].prompt = request.prompt
+        promptEventId = h.last.id
+      }
+      // TODO enable publish on prompt for realtime collaboration, handle on client side
+      this.history.push(sessionId, promptEventId ?? createEventId(), {
+        event: 'content',
+        data: { prompt: request.prompt },
+        type: 'prompt'
+      }, this.options.limits.historyExpiration, false)
+      history = h?.history
+    } else {
+      history = request.options.history
     }
-
-    this.history.push(sessionId, promptEventId ?? createEventId(), {
-      event: 'content',
-      data: { prompt: request.prompt },
-      type: 'prompt'
-    }, this.options.limits.historyExpiration)
 
     const options = {
       context: request.options.context,
       temperature: request.options.temperature,
       stream: request.options.stream,
-      history: h?.history,
+      history,
       maxTokens: request.options.maxTokens ?? this.options.limits.maxTokens
     }
 
@@ -727,8 +698,17 @@ export class Ai {
           throw err
         }
 
-        if (isStream(providerResponse)) {
-          await this.handleStreamResponse(sessionId, request.prompt, providerResponse as Readable)
+        if (options.stream && isStream(providerResponse)) {
+          const stream = await this.createResponseStream(sessionId, request)
+          this.handleStreamResponse(sessionId, providerResponse as Readable)
+            .then(() => {
+              this.pubsub.remove(sessionId)
+            })
+            .catch((error: any) => {
+              this.logger.error({ error, sessionId }, 'ai request stream error')
+              // TODO if(this.shouldRetry())
+            })
+          return stream
         } else {
           // Handle non-streaming response
           const contentEvent: HistoryContentEvent = {
@@ -747,88 +727,50 @@ export class Ai {
 
         return providerResponse
       } catch (error: any) {
-        const errorWithCode = error as FastifyError
-        if (!this.isErrorToUpdateModelState(errorWithCode)) {
-          throw error
-        }
-        err = errorWithCode
+        err = error as FastifyError
       }
 
       if (err) {
-        try {
-          selected.model.state = this.modelErrorState(err)
-          await this.setModelState(selected.model.name, selected.provider, selected.model, operationTimestamp)
-
-          // try to select a new model from the remaining models
-          skipModels.push(`${selected.provider.provider.name}:${selected.model.name}`)
-          selected = await this.selectModel(models, skipModels)
-
-          if (!selected) {
-            this.logger.warn({ models }, 'No more models available')
-            throw err
-          }
-
-          // then try to request again
+        selected = await this.shouldRetry(selected, models, skipModels, err, operationTimestamp)
+        if (selected) {
           continue
-        } catch (error) {
-          this.logger.error({ err: error }, 'Failed to set model state')
-          throw err
         }
+        throw err
       }
     }
 
-    throw new Error('Unexpected end of providerRequest')
+    this.logger.error({ sessionId }, 'Unexpected end of providerRequest')
+    throw new ProviderRequestEndError()
   }
 
-  async streamToContent (stream: Readable, sessionId: AiSessionId): Promise<AiContentResponse> {
-    return new Promise((resolve, reject) => {
-      let text = ''
-      let result: AiResponseResult = 'COMPLETE'
+  async shouldRetry (selected: ModelSelection, models: QueryModel[], skipModels: string[], err: FastifyError, operationTimestamp: number): Promise<ModelSelection | undefined> {
+    if (!this.isErrorToUpdateModelState(err)) {
+      return
+    }
 
-      stream.on('data', (chunk: Buffer) => {
-        const eventData = chunk.toString('utf8')
-        // Parse Server-sent events format
-        const lines = eventData.split('\n')
+    try {
+      selected.model.state = this.modelErrorState(err)
+      await this.setModelState(selected.model.name, selected.provider, selected.model, operationTimestamp)
+    } catch (error) {
+      this.logger.error({ err: error }, 'Failed to set model state')
+      return
+    }
 
-        let currentEvent: string | null = null
-        let currentData: string | null = null
+    // try to select a new model from the remaining models
+    skipModels.push(`${selected.provider.provider.name}:${selected.model.name}`)
+    const nextModel = await this.selectModel(models, skipModels)
 
-        for (const line of lines) {
-          if (line.startsWith('event: ')) {
-            currentEvent = line.substring(7).trim()
-          } else if (line.startsWith('data: ')) {
-            currentData = line.substring(6).trim()
-          } else if (line === '' && currentEvent && currentData) {
-            // End of event, parse the data
-            try {
-              const parsedData = JSON.parse(currentData)
-              if (currentEvent === 'content') {
-                text += parsedData.response
-              } else if (currentEvent === 'end') {
-                result = parsedData.response
-              }
-            } catch {
-              // Ignore parsing errors
-            }
+    if (!nextModel) {
+      this.logger.warn({ models }, 'No more models available')
+      return
+    }
 
-            // Reset for next event
-            currentEvent = null
-            currentData = null
-          }
-        }
-      })
-
-      stream.on('end', () => {
-        resolve({ text, result, sessionId })
-      })
-
-      stream.on('error', (error) => {
-        reject(error)
-      })
-    })
+    return nextModel
   }
 
-  async handleStreamResponse (sessionId: AiSessionId, prompt: string, providerResponse: Readable) {
+  // get the stream and push to history storage
+  // it will be consumed by createResponseStream
+  async handleStreamResponse (sessionId: AiSessionId, providerResponse: Readable) {
     try {
       for await (const chunk of providerResponse) {
         // Decode the chunk from Buffer to string
@@ -849,6 +791,7 @@ export class Ai {
               data: { response: content },
               type: 'response'
             }
+
             await this.history.push(sessionId, eventId, contentEvent, this.options.limits.historyExpiration)
           } else if (event.event === 'error') {
             const errorEvent: HistoryErrorEvent = {
@@ -876,19 +819,15 @@ export class Ai {
     }
   }
 
-  async getHistory (sessionId: AiSessionId, history?: AiChatHistory): Promise<{ history: AiChatHistory, last?: AiStreamEvent } | undefined> {
-    if (history) {
-      return { history }
-    }
-
+  async getHistory (sessionId: AiSessionId): Promise<{ history: AiChatHistory, last?: AiStreamEvent } | undefined> {
     try {
       const storedHistory = await this.history.range(sessionId)
       if (!storedHistory || storedHistory.length < 1) { return }
 
-      const lastEvent: AiStreamEvent = storedHistory.at(-1)
+      const lastEvent: AiStreamEvent | undefined = storedHistory.at(-1)
       if (!lastEvent) { return }
 
-      const history: HistoryContentEvent[] = storedHistory.filter((event: any) => event.event === 'content')
+      const history: HistoryContentEvent[] = storedHistory.filter((event: any) => event.event === 'content') as HistoryContentEvent[]
       return { history: this.compactHistory(history), last: lastEvent }
     } catch (err) {
       this.logger.error({ err, sessionId }, 'Failed to get history')
@@ -972,7 +911,7 @@ export class Ai {
     }
   }
 
-  async checkRateLimit (model: ModeleSelection, rateLimit: { max: number, timeWindow: number }) {
+  async checkRateLimit (model: ModelSelection, rateLimit: { max: number, timeWindow: number }) {
     const now = Date.now()
     const windowMs = rateLimit.timeWindow
     const modelState = model.model
@@ -1097,6 +1036,16 @@ export function createModelState (modelName: string): ModelState {
   }
 }
 
+// mask error code to response result
+function mapResultError (code: string): AiResponseResult {
+  switch (code) {
+    case 'INCOMPLETE_MAX_TOKENS':
+      return 'INCOMPLETE_MAX_TOKENS'
+    default:
+      return 'INCOMPLETE_UNKNOWN'
+  }
+}
+
 class Models {
   storage: Storage
 
@@ -1120,25 +1069,16 @@ class History {
     this.storage = storage
   }
 
-  async listen (sessionId: string) {
-    return await this.storage.createSubscription(sessionId)
-  }
-
-  async remove (sessionId: string) {
-    return await this.storage.removeSubscription(sessionId)
-  }
-
-  async push (sessionId: string, eventId: string, value: HistoryContentEvent | HistoryEndEvent | HistoryErrorEvent, expiration: number) {
-    // Add eventId and timestamp to the stored value for resume functionality
+  async push (sessionId: string, eventId: string, value: HistoryContentEvent | HistoryEndEvent | HistoryErrorEvent, expiration: number, publish: boolean = true) {
     const eventData = {
       ...value,
       id: eventId,
       timestamp: Date.now()
     }
-    return await this.storage.hashSet(sessionId, eventId, eventData, expiration)
+    return await this.storage.hashSet(sessionId, eventId, eventData, expiration, publish)
   }
 
-  async range (sessionId: string) {
+  async range (sessionId: string): Promise<AiStreamEvent[]> {
     const hash = await this.storage.hashGetAll(sessionId)
 
     // Convert hash to array and sort by timestamp to maintain order
@@ -1160,5 +1100,21 @@ class History {
 
   async getEvent (sessionId: string, eventId: string) {
     return await this.storage.hashGet(sessionId, eventId)
+  }
+}
+
+class Pubsub {
+  storage: Storage
+
+  constructor (storage: Storage) {
+    this.storage = storage
+  }
+
+  async listen (sessionId: string) {
+    return await this.storage.createSubscription(sessionId)
+  }
+
+  async remove (sessionId: string) {
+    return await this.storage.removeSubscription(sessionId)
   }
 }

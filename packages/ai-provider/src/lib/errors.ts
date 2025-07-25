@@ -14,6 +14,7 @@ export const ModelStateNotFoundError = createError<string>('MODEL_STATE_NOT_FOUN
 export const ProviderRateLimitError = createError<string>('PROVIDER_RATE_LIMIT_ERROR', 'Rate limit exceeded. Try again in %s seconds.')
 export const ProviderRequestTimeoutError = createError<string>('PROVIDER_REQUEST_TIMEOUT_ERROR', 'Provider request timeout after %s ms')
 export const ProviderRequestStreamTimeoutError = createError<string>('PROVIDER_REQUEST_STREAM_TIMEOUT_ERROR', 'Stream timeout after %s ms of inactivity')
+export const ProviderRequestEndError = createError<string>('PROVIDER_REQUEST_END_ERROR', 'Unexpected end of providerRequest')
 
 export const ProviderResponseNoContentError = createError<[string]>('PROVIDER_RESPONSE_NO_CONTENT', '%s didn\'t return any content')
 export const ProviderResponseMaxTokensError = createError<[string]>('PROVIDER_RESPONSE_MAX_TOKENS_ERROR', '%s returned empty response because max tokens reached')
