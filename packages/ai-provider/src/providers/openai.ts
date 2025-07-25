@@ -107,7 +107,7 @@ export class OpenAIProvider extends BaseProvider {
     this.logger.debug({ request }, `${this.providerName} request`)
     const response = await this.client.request(this.api, request, this.context)
 
-    this.logger.debug({ response }, `${this.providerName} full response (no stream)`)
+    this.logger.debug({ response }, `${this.providerName} full response (non-streaming)`)
 
     const text = response.choices?.[0]?.message?.content
     if (!text) {

@@ -219,7 +219,7 @@ export class GeminiProvider extends BaseProvider {
     this.logger.debug({ request }, `${this.providerName} request`)
     const response = await this.client.request(this.api, { model, request }, this.context)
 
-    this.logger.debug({ response }, `${this.providerName} full response (no stream)`)
+    this.logger.debug({ response }, `${this.providerName} full response (non-streaming)`)
 
     const text = response.candidates?.[0]?.content?.parts?.[0]?.text
     const result = mapResponseResult(response.candidates?.[0]?.finishReason)

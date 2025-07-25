@@ -533,7 +533,7 @@ export class Ai {
       response.sessionId = sessionId
       return response
     } catch (error) {
-      this.logger.error({ error, sessionId }, 'ai request no stream error')
+      this.logger.error({ error, sessionId }, 'ai request non-streaming error')
       throw error
     }
   }
@@ -613,11 +613,11 @@ export class Ai {
     }
 
     let history
+    let promptEventId: string | undefined
     if (request.sessionId) {
       // TODO get and update history should be atomic for concurrent requests with same sessionId
       // concurrent requests should fail until the first one is complete
       const h = await this.getHistory(sessionId)
-      let promptEventId: string | undefined
       // when last event is end, last request is complete, happy state
       // when last event is error, last request is incomplete, so surely it's a resume
       // when last event is a content and type is response, last request is incomplete, state is not clear: probabily it's a resume
@@ -628,16 +628,17 @@ export class Ai {
         h.history[h.history.length - 1].prompt = request.prompt
         promptEventId = h.last.id
       }
-      // TODO enable publish on prompt for realtime collaboration, handle on client side
-      this.history.push(sessionId, promptEventId ?? createEventId(), {
-        event: 'content',
-        data: { prompt: request.prompt },
-        type: 'prompt'
-      }, this.options.limits.historyExpiration, false)
       history = h?.history
     } else {
       history = request.options.history
     }
+
+    // TODO enable publish on prompt for realtime collaboration, handle on client side
+    this.history.push(sessionId, promptEventId ?? createEventId(), {
+      event: 'content',
+      data: { prompt: request.prompt },
+      type: 'prompt'
+    }, this.options.limits.historyExpiration, false)
 
     const options = {
       context: request.options.context,
@@ -706,7 +707,7 @@ export class Ai {
             })
             .catch((error: any) => {
               this.logger.error({ error, sessionId }, 'ai request stream error')
-              // TODO if(this.shouldRetry())
+              // TODO !! if(this.shouldRetry())
             })
           return stream
         } else {
@@ -725,7 +726,11 @@ export class Ai {
           await this.history.push(sessionId, createEventId(), endEvent, this.options.limits.historyExpiration)
         }
 
-        return providerResponse
+        return {
+          text: (providerResponse as any).text || '',
+          result: mapResultError((providerResponse as any).result),
+          sessionId
+        } as AiContentResponse
       } catch (error: any) {
         err = error as FastifyError
       }
@@ -772,10 +777,11 @@ export class Ai {
   // it will be consumed by createResponseStream
   async handleStreamResponse (sessionId: AiSessionId, providerResponse: Readable) {
     try {
+      let endEvent: HistoryEndEvent | undefined
+      let errorEvent: HistoryErrorEvent | undefined
       for await (const chunk of providerResponse) {
         // Decode the chunk from Buffer to string
         const chunkString = chunk.toString('utf8')
-
         // Parse the event stream format to extract events
         const events = decodeEventStream(chunkString)
 
@@ -793,8 +799,14 @@ export class Ai {
             }
 
             await this.history.push(sessionId, eventId, contentEvent, this.options.limits.historyExpiration)
+          } else if (event.event === 'end') {
+            endEvent = {
+              event: 'end',
+              data: { response: (event.data as any).response || 'COMPLETE' }
+            }
+            await this.history.push(sessionId, eventId, endEvent, this.options.limits.historyExpiration)
           } else if (event.event === 'error') {
-            const errorEvent: HistoryErrorEvent = {
+            errorEvent = {
               event: 'error',
               data: event.data
             }
@@ -804,11 +816,12 @@ export class Ai {
         }
       }
 
-      // Final event
-      await this.history.push(sessionId, createEventId(), {
-        event: 'end',
-        data: { response: 'COMPLETE' }
-      }, this.options.limits.historyExpiration)
+      if (!endEvent && !errorEvent) {
+        await this.history.push(sessionId, createEventId(), {
+          event: 'end',
+          data: { response: 'COMPLETE' }
+        }, this.options.limits.historyExpiration)
+      }
     } catch (error: any) {
       // Store error to history
       const errorEvent: HistoryErrorEvent = {
@@ -1036,14 +1049,14 @@ export function createModelState (modelName: string): ModelState {
   }
 }
 
-// mask error code to response result
 function mapResultError (code: string): AiResponseResult {
-  switch (code) {
-    case 'INCOMPLETE_MAX_TOKENS':
-      return 'INCOMPLETE_MAX_TOKENS'
-    default:
-      return 'INCOMPLETE_UNKNOWN'
+  if (code === 'COMPLETE') {
+    return 'COMPLETE'
   }
+  if (code === 'INCOMPLETE_MAX_TOKENS') {
+    return 'INCOMPLETE_MAX_TOKENS'
+  }
+  return 'INCOMPLETE_UNKNOWN'
 }
 
 class Models {

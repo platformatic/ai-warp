@@ -95,11 +95,11 @@ test('should include session ids in streaming events', async (t) => {
 })
 
 for (const storage of storages) {
-  test(`should load history when request has session id but not history, no stream,with ${storage.type} storage`, async (t) => {
+  test(`should load history when request has session id but not history, non-streaming, with ${storage.type} storage`, async (t) => {
     const client = {
       ...createDummyClient(),
       request: mock.fn(async () => {
-        return { choices: [{ message: { content: 'I am good, thank you!' } }] }
+        return { choices: [{ message: { content: 'I am good, thank you!' }, finish_reason: 'stop' }] }
       })
     }
     const ai = await createAi({ t, client, storage })
@@ -146,9 +146,10 @@ for (const storage of storages) {
 
     assert.equal(response.text, 'I am good, thank you!')
     assert.equal(response.result, 'COMPLETE')
+    assert.equal(response.sessionId, sessionId)
   })
 
-  test(`should load history when request has session id but not history, stream, with ${storage.type} storage`, async (t) => {
+  test.only(`should load history when request has session id but not history, stream, with ${storage.type} storage`, async (t) => {
     const client = {
       ...createDummyClient(),
       stream: mock.fn(async () => {

@@ -455,7 +455,7 @@ test('should timeout streaming request between chunks', async () => {
     stream: async () => {
       // Create a Node.js Readable stream that simulates delay between chunks
       const readable = new Readable({
-        read () {}
+        read () { }
       })
 
       const pushChunks = async () => {
@@ -626,11 +626,7 @@ test('should store history with expiration', async () => {
   const client = {
     ...createDummyClient(),
     request: async () => ({
-      choices: [{
-        message: {
-          content: 'Response from AI'
-        }
-      }]
+      choices: [{ message: { content: 'Response from AI' }, finish_reason: 'stop' }]
     })
   }
 
@@ -647,7 +643,7 @@ test('should store history with expiration', async () => {
       model: 'gpt-4o-mini'
     }],
     limits: {
-      historyExpiration: '1s'
+      historyExpiration: '500ms'
     }
   })
   await ai.init()
@@ -663,12 +659,14 @@ test('should store history with expiration', async () => {
 
   // Immediately check that history exists
   const history = await ai.history.range(response1.sessionId!)
-  assert.equal(history.length, 1)
-  assert.equal(history[0].prompt, 'First message')
-  assert.equal(history[0].response, 'Response from AI')
+
+  assert.equal(history.length, 3)
+  assert.equal(history[0].data.prompt, 'First message')
+  assert.equal(history[1].data.response, 'Response from AI')
+  assert.equal(history[2].data.response, 'COMPLETE')
 
   // Wait for expiration
-  await wait(1100)
+  await wait(750)
 
   // History should be empty after expiration
   const expiredHistory = await ai.history.range(response1.sessionId!)
@@ -728,8 +726,12 @@ test('should work with streaming responses and history expiration', async () => 
 
         // Check that history was stored
         let history = await ai.history.range(response.sessionId)
-        assert.equal(history.length, 1)
-        assert.equal(history[0].prompt, 'Streaming request')
+
+        assert.equal(history.length, 4)
+        assert.equal(history[0].data.prompt, 'Streaming request')
+        assert.equal(history[1].data.response, 'Stream')
+        assert.equal(history[2].data.response, ' response')
+        assert.equal(history[3].data.response, 'COMPLETE')
 
         // Wait for expiration
         await wait(100)
