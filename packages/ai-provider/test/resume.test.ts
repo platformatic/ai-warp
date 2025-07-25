@@ -1,4 +1,4 @@
-import { test } from 'node:test'
+import { mock, test } from 'node:test'
 import assert from 'node:assert'
 import { Ai, type AiStreamResponse } from '../src/lib/ai.ts'
 import pino from 'pino'
@@ -9,17 +9,15 @@ const apiKey = 'test'
 const logger = pino({ level: 'silent' })
 
 test('should resume stream from event ID', async (t) => {
-  let callCount = 0
   const client = {
     ...createDummyClient(),
-    stream: async () => {
-      callCount++
+    stream: mock.fn(async () => {
       return mockOpenAiStream([
         { choices: [{ delta: { content: 'Hello' } }] },
         { choices: [{ delta: { content: ' world' } }] },
         { choices: [{ delta: { content: '!' }, finish_reason: 'stop' }] }
       ])
-    }
+    })
   }
 
   const ai = new Ai({
@@ -89,7 +87,7 @@ test('should resume stream from event ID', async (t) => {
 
   // Verify that we only made one call to the provider (the original request)
   // The resume should not call the provider again
-  assert.equal(callCount, 1)
+  assert.equal(client.stream.mock.calls.length, 1)
 })
 
 test('should make normal request when resume is disabled', async (t) => {

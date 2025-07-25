@@ -93,12 +93,14 @@ export type Request = {
 }
 
 type ValidatedRequest = {
-  sessionId?: AiSessionId
   resume: boolean
-  history?: AiStreamEvent[]
   models: QueryModel[]
   prompt: string
   options: ProviderRequestOptions
+  attempts: number
+  stream?: AiStreamResponse
+  sessionId?: AiSessionId
+  history?: AiStreamEvent[]
 }
 
 export type AiResponseResult = 'COMPLETE' | 'INCOMPLETE_MAX_TOKENS' | 'INCOMPLETE_UNKNOWN'
@@ -482,7 +484,8 @@ export class Ai {
       resume: request.resume ?? true,
       prompt: request.prompt,
       options: request.options ?? {},
-      models: []
+      models: [],
+      attempts: 0
     }
 
     if (request.options?.sessionId) {
@@ -524,81 +527,35 @@ export class Ai {
   async request (request: Request): Promise<Response> {
     const r = await this.validateRequest(request)
 
-    const sessionId: AiSessionId = r.options.sessionId ?? await this.createSessionId()
-
-    try {
-      // need to relay on storage for non streaming requests for multiple instances of the service
-      const response = await this.providerRequest(sessionId, r) as Response
-      response.sessionId = sessionId
-      return response
-    } catch (error) {
-      this.logger.error({ error, sessionId }, 'ai request non-streaming error')
-      throw error
+    if (r.resume && r.options.sessionId && r.options.stream) {
+      r.stream = createResponseStream(r.options.sessionId)
+      this.resumeRequest(r.stream, r.options.sessionId, r)
+        .then((complete) => {
+          if (!complete) {
+            return this._request(r)
+          }
+        })
+        .catch((error) => {
+          this.logger.error({ error, sessionId: r.options.sessionId }, 'Failed to resume stream, proceed with new request')
+          r.stream!.destroy(error as Error)
+        })
+      return r.stream
     }
+
+    return this._request(r)
   }
 
-  async createResponseStream (sessionId: AiSessionId, request: ValidatedRequest): Promise<AiStreamResponse> {
-    const stream = new Readable({
-      objectMode: false,
-      read () { }
-    }) as AiStreamResponse
-    stream.sessionId = sessionId
-
-    const subscription = (event: any) => {
-      try {
-        if (event.event === 'content') {
-          const encodedEvent = encodeEvent(event)
-          stream.push(encodedEvent)
-        } else if (event.event === 'end') {
-          const encodedEvent = encodeEvent(event)
-          stream.push(encodedEvent)
-          stream.push(null) // End the stream
-          this.storage.unsubscribe(sessionId, subscription)
-        } else if (event.event === 'error') {
-          const encodedEvent = encodeEvent(event)
-          stream.push(encodedEvent)
-          stream.destroy(event.data as Error)
-          this.storage.unsubscribe(sessionId, subscription)
-        }
-      } catch (error) {
-        this.logger.error({ error, sessionId }, 'Failed to process storage event')
-        stream.destroy(error as Error)
-        this.storage.unsubscribe(sessionId, subscription)
+  async _request (r: ValidatedRequest) {
+    const sessionId: AiSessionId = r.options.sessionId ?? await this.createSessionId()
+    try {
+      if (r.options.stream && !r.stream) {
+        r.stream = createResponseStream(sessionId)
       }
+      return await this.providerRequest(sessionId, r) as Response
+    } catch (error) {
+      this.logger.error({ error, sessionId }, 'ai request error')
+      throw error
     }
-
-    // Subscribe to storage updates for this session
-    await this.storage.subscribe(sessionId, subscription)
-
-    // Handle resume if needed
-    // TODO
-    /*
-    if (request.resume && request.options.sessionId) {
-      try {
-        const existingHistory = await this.history.range(sessionId)
-        // Replay existing events
-        for (const event of existingHistory) {
-          if (event.event === 'content' || event.event === 'end' || event.event === 'error') {
-            const encodedEvent = encodeEvent(event)
-            stream.push(encodedEvent)
-
-            if (event.event === 'end') {
-              stream.push(null)
-              break
-            } else if (event.event === 'error') {
-              stream.destroy(event.data as Error)
-              break
-            }
-          }
-        }
-      } catch (error) {
-        this.logger.error({ error, sessionId }, 'Failed to resume stream')
-        stream.destroy(error as Error)
-      }
-    }
-    */
-
-    return stream as AiStreamResponse
   }
 
   private async providerRequest (sessionId: AiSessionId, request: ValidatedRequest): Promise<ProviderResponse> {
@@ -613,6 +570,7 @@ export class Ai {
 
     this.pubsub.listen(sessionId)
 
+    // TODO refactor this part to own function
     let history
     let promptEventId: string | undefined
     if (request.sessionId) {
@@ -634,7 +592,6 @@ export class Ai {
       history = request.options.history
     }
 
-    // TODO enable publish on prompt for realtime collaboration, handle on client side
     this.history.push(sessionId, promptEventId ?? createEventId(), {
       event: 'content',
       data: { prompt: request.prompt },
@@ -701,16 +658,22 @@ export class Ai {
         }
 
         if (options.stream && isStream(providerResponse)) {
-          const stream = await this.createResponseStream(sessionId, request)
-          this.handleStreamResponse(sessionId, providerResponse as Readable)
+          await this.subscribeToStorage(request.stream!, sessionId)
+          this.pipeStreamResponseToStorage(sessionId, providerResponse as Readable)
             .then(() => {
               this.pubsub.remove(sessionId)
             })
             .catch((error: any) => {
               this.logger.error({ error, sessionId }, 'ai request stream error')
-              // TODO !! if(this.shouldRetry())
+              // TODO
+              // const nextModel = await this.shouldRetryRequest(selected, models, skipModels, error, operationTimestamp)
+              // if (nextModel) {
+              //   selected = nextModel
+              //   continue
+              // }
+              // throw error
             })
-          return stream
+          return request.stream!
         } else {
           // Handle non-streaming response
           const contentEvent: HistoryContentEvent = {
@@ -738,7 +701,7 @@ export class Ai {
       }
 
       if (err) {
-        selected = await this.shouldRetry(selected, models, skipModels, err, operationTimestamp)
+        selected = await this.shouldRetryRequest(selected, models, skipModels, err, operationTimestamp)
         if (selected) {
           continue
         }
@@ -750,7 +713,7 @@ export class Ai {
     throw new ProviderRequestEndError()
   }
 
-  async shouldRetry (selected: ModelSelection, models: QueryModel[], skipModels: string[], err: FastifyError, operationTimestamp: number): Promise<ModelSelection | undefined> {
+  async shouldRetryRequest (selected: ModelSelection, models: QueryModel[], skipModels: string[], err: FastifyError, operationTimestamp: number): Promise<ModelSelection | undefined> {
     if (!this.isErrorToUpdateModelState(err)) {
       return
     }
@@ -775,9 +738,64 @@ export class Ai {
     return nextModel
   }
 
+  async resumeRequest (stream: AiStreamResponse, sessionId: AiSessionId, request: ValidatedRequest): Promise<boolean> {
+    let complete = false
+    if (request.resume && request.options.sessionId) {
+      try {
+        const existingHistory = await this.history.range(sessionId)
+        // Replay existing events
+        for (const event of existingHistory) {
+          this.sendEvent(stream, sessionId, event)
+          if (event.event === 'end') {
+            complete = true
+            break
+          }
+        }
+      } catch (error) {
+        this.logger.error({ error, sessionId }, 'Failed to resume stream')
+        stream.destroy(error as Error)
+      }
+    }
+
+    return complete
+  }
+
+  // Subscribe to storage updates for this session
+  async subscribeToStorage (stream: AiStreamResponse, sessionId: AiSessionId) {
+    const callback = (event: any) => this.sendEvent(stream, sessionId, event)
+    await this.storage.subscribe(sessionId, callback)
+  }
+
+  sendEvent (stream: AiStreamResponse, sessionId: AiSessionId, event: any, callback?: (event: any) => void) {
+    try {
+      if (event.event === 'content') {
+        const encodedEvent = encodeEvent(event)
+        // TODO enable publish on prompt for realtime collaboration, handle on client side
+        if (event.type === 'prompt') {
+          return
+        }
+        stream.push(encodedEvent)
+      } else if (event.event === 'end') {
+        const encodedEvent = encodeEvent(event)
+        stream.push(encodedEvent)
+        stream.push(null) // End the stream
+        callback && this.storage.unsubscribe(sessionId, callback)
+      } else if (event.event === 'error') {
+        const encodedEvent = encodeEvent(event)
+        stream.push(encodedEvent)
+        stream.destroy(event.data as Error)
+        callback && this.storage.unsubscribe(sessionId, callback)
+      }
+    } catch (error) {
+      this.logger.error({ error, sessionId }, 'Failed to process storage event')
+      stream.destroy(error as Error)
+      callback && this.storage.unsubscribe(sessionId, callback)
+    }
+  }
+
   // get the stream and push to history storage
   // it will be consumed by createResponseStream
-  async handleStreamResponse (sessionId: AiSessionId, providerResponse: Readable) {
+  async pipeStreamResponseToStorage (sessionId: AiSessionId, providerResponse: Readable) {
     try {
       let endEvent: HistoryEndEvent | undefined
       let errorEvent: HistoryErrorEvent | undefined
@@ -793,6 +811,11 @@ export class Ai {
 
           if (event.event === 'content') {
             const content = (event.data as any)?.response || ''
+
+            // TODO enable publish on prompt for realtime collaboration, handle on client side
+            if (event.type === 'prompt') {
+              continue
+            }
 
             const contentEvent: HistoryContentEvent = {
               event: 'content',
@@ -1061,6 +1084,15 @@ function mapResultError (code: string): AiResponseResult {
   return 'INCOMPLETE_UNKNOWN'
 }
 
+function createResponseStream (sessionId: AiSessionId): AiStreamResponse {
+  const stream = new Readable({
+    objectMode: false,
+    read () { }
+  }) as AiStreamResponse
+  stream.sessionId = sessionId
+  return stream
+}
+
 class Models {
   storage: Storage
 
@@ -1090,6 +1122,7 @@ class History {
       id: eventId,
       timestamp: Date.now()
     }
+
     return await this.storage.hashSet(sessionId, eventId, eventData, expiration, publish)
   }
 

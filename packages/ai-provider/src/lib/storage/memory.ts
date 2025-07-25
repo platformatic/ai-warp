@@ -161,9 +161,7 @@ class HashStorage {
 
 class PubSubStorage extends EventEmitter {
   publish (channel: string, message: any) {
-    setImmediate(() => {
-      this.emit(channel, message)
-    })
+    this.emit(channel, message)
   }
 
   subscribe (channel: string, callback: (message: any) => void) {
