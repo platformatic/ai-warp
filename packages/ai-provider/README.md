@@ -270,12 +270,12 @@ const stream2 = await ai.request({
 // Only missing events will be streamed
 ```
 
-### UUID Event Identification
+### Event Id Identification
 
-All streaming events include unique UUID identifiers for precise resumption:
+All streaming events include unique identifiers for precise resumption:
 
 ```javascript
-// Streaming events include UUID IDs
+// Streaming events include IDs
 const reader = streamResponse.getReader()
 const decoder = new TextDecoder()
 

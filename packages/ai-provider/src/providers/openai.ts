@@ -177,6 +177,7 @@ class OpenAiStreamTransformer extends Transform {
           const eventData: AiStreamEvent = {
             id: event.id ?? createEventId(),
             event: 'content',
+            type: 'response',
             data: { response }
           }
           this.push(encodeEvent(eventData))

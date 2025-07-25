@@ -9,7 +9,7 @@ import { createStorage, type Storage, type AiStorageOptions } from './storage/in
 import { isStream, parseTimeWindow } from './utils.ts'
 import { HistoryGetError, ModelStateError, OptionError, ProviderNoModelsAvailableError, ProviderRateLimitError, ProviderRequestStreamTimeoutError, ProviderRequestTimeoutError, StorageRetrieveError } from './errors.ts'
 import { DEFAULT_HISTORY_EXPIRATION, DEFAULT_MAX_RETRIES, DEFAULT_RATE_LIMIT_MAX, DEFAULT_RATE_LIMIT_TIME_WINDOW, DEFAULT_REQUEST_TIMEOUT, DEFAULT_RESTORE_PROVIDER_COMMUNICATION_ERROR, DEFAULT_RESTORE_PROVIDER_EXCEEDED_QUOTA_ERROR, DEFAULT_RESTORE_RATE_LIMIT, DEFAULT_RESTORE_REQUEST_TIMEOUT, DEFAULT_RESTORE_RETRY, DEFAULT_RETRY_INTERVAL, DEFAULT_STORAGE } from './config.ts'
-import { createEventId, decodeEventStream, encodeEvent } from './event.ts'
+import { createEventId, decodeEventStream, encodeEvent, type AiStreamEvent } from './event.ts'
 
 // supported providers
 export type AiProvider = 'openai' | 'deepseek' | 'gemini'
@@ -181,6 +181,24 @@ type StrictAiRestore = {
   providerCommunicationError: number // ms
   providerExceededError: number // ms
 }
+
+export type HistoryContentEvent = {
+  event: 'content'
+  data: any
+  type: 'prompt' | 'response'
+}
+
+export type HistoryEndEvent = {
+  event: 'end'
+  data: any
+}
+
+export type HistoryErrorEvent = {
+  event: 'error'
+  data: any
+}
+
+export type HistoryEvent = HistoryContentEvent | HistoryEndEvent | HistoryErrorEvent
 
 export class Ai {
   options: StrictAiOptions
@@ -505,11 +523,12 @@ export class Ai {
     const r = await this.validateRequest(request)
 
     const sessionId: AiSessionId = r.options.sessionId ?? await this.createSessionId()
+    // TODO this.pubsub instead of this.history
     this.history.listen(sessionId)
 
     if (r.options.stream) {
       const stream = await this.createResponseStream(sessionId, r)
-      this.makeProviderRequest(sessionId, r)
+      this.providerRequest(sessionId, r)
         .then(() => {
           this.history.remove(sessionId)
         })
@@ -520,7 +539,7 @@ export class Ai {
     }
 
     try {
-      await this.makeProviderRequest(sessionId, r)
+      await this.providerRequest(sessionId, r)
       this.history.remove(sessionId)
       return this.getResponseContent(sessionId)
     } catch (error) {
@@ -545,13 +564,13 @@ export class Ai {
         sessionId
       })
 
-    // Check for error events
-    // TODO
-    // const errorEvent = history.find((event: any) => event.event === 'error')
-    // if (errorEvent) {
-    //   // TODO contentError
-    //   throw new FastifyError(errorEvent.data, 500)
-    // }
+      // Check for error events
+      // TODO
+      // const errorEvent = history.find((event: any) => event.event === 'error')
+      // if (errorEvent) {
+      //   // TODO contentError
+      //   throw new FastifyError(errorEvent.data, 500)
+      // }
     } catch {
       throw new StorageRetrieveError()
     }
@@ -618,7 +637,7 @@ export class Ai {
     return stream as AiStreamResponse
   }
 
-  async makeProviderRequest (sessionId: AiSessionId, request: ValidatedRequest): Promise<ProviderResponse> {
+  private async providerRequest (sessionId: AiSessionId, request: ValidatedRequest): Promise<ProviderResponse> {
     const models: QueryModel[] = request.models
     const skipModels: string[] = []
 
@@ -628,12 +647,32 @@ export class Ai {
       throw new ProviderNoModelsAvailableError(models.map(m => typeof m === 'string' ? m : `${m.provider}:${m.model}`).join(', '))
     }
 
-    const history: AiChatHistory | undefined = request.options.history
+    // TODO get and update history should be atomic for concurrent requests with same sessionId
+    // concurrent requests should fail until the first one is complete
+    const h = await this.getHistory(sessionId, request.options.history)
+    let promptEventId: string | undefined
+    // when last event is end, last request is complete, happy state
+    // when last event is error, last request is incomplete, so surely it's a resume
+    // when last event is a content and type is response, last request is incomplete, state is not clear: probabily it's a resume
+
+    // when last event is a content and type is prompt, edge case: last event got an error before getting the response >
+    // in this case, replace the last prompt with the new prompt
+    if (h?.history && h?.last?.event === 'content' && h.last.type === 'prompt') {
+      h.history[h.history.length - 1].prompt = request.prompt
+      promptEventId = h.last.id
+    }
+
+    this.history.push(sessionId, promptEventId ?? createEventId(), {
+      event: 'content',
+      data: { prompt: request.prompt },
+      type: 'prompt'
+    }, this.options.limits.historyExpiration)
+
     const options = {
       context: request.options.context,
       temperature: request.options.temperature,
       stream: request.options.stream,
-      history,
+      history: h?.history,
       maxTokens: request.options.maxTokens ?? this.options.limits.maxTokens
     }
 
@@ -692,13 +731,14 @@ export class Ai {
           await this.handleStreamResponse(sessionId, request.prompt, providerResponse as Readable)
         } else {
           // Handle non-streaming response
-          const contentEvent = {
+          const contentEvent: HistoryContentEvent = {
             event: 'content',
-            data: { response: (providerResponse as any).text || '' }
+            data: { response: (providerResponse as any).text || '' },
+            type: 'response'
           }
           await this.history.push(sessionId, createEventId(), contentEvent, this.options.limits.historyExpiration)
 
-          const endEvent = {
+          const endEvent: HistoryEndEvent = {
             event: 'end',
             data: { response: (providerResponse as any).result || 'COMPLETE' }
           }
@@ -804,13 +844,14 @@ export class Ai {
           if (event.event === 'content') {
             const content = (event.data as any)?.response || ''
 
-            const contentEvent = {
+            const contentEvent: HistoryContentEvent = {
               event: 'content',
-              data: { response: content }
+              data: { response: content },
+              type: 'response'
             }
             await this.history.push(sessionId, eventId, contentEvent, this.options.limits.historyExpiration)
           } else if (event.event === 'error') {
-            const errorEvent = {
+            const errorEvent: HistoryErrorEvent = {
               event: 'error',
               data: event.data
             }
@@ -827,12 +868,55 @@ export class Ai {
       }, this.options.limits.historyExpiration)
     } catch (error: any) {
       // Store error to history
-      const errorEvent = {
+      const errorEvent: HistoryErrorEvent = {
         event: 'error',
         data: { code: error.code, message: error.message }
       }
       await this.history.push(sessionId, createEventId(), errorEvent, this.options.limits.historyExpiration)
     }
+  }
+
+  async getHistory (sessionId: AiSessionId, history?: AiChatHistory): Promise<{ history: AiChatHistory, last?: AiStreamEvent } | undefined> {
+    if (history) {
+      return { history }
+    }
+
+    try {
+      const storedHistory = await this.history.range(sessionId)
+      if (!storedHistory || storedHistory.length < 1) { return }
+
+      const lastEvent: AiStreamEvent = storedHistory.at(-1)
+      if (!lastEvent) { return }
+
+      const history: HistoryContentEvent[] = storedHistory.filter((event: any) => event.event === 'content')
+      return { history: this.compactHistory(history), last: lastEvent }
+    } catch (err) {
+      this.logger.error({ err, sessionId }, 'Failed to get history')
+    }
+  }
+
+  private compactHistory (history: HistoryContentEvent[]): AiChatHistory {
+    const compactedHistory: AiChatHistory = []
+    const lastResponse: string[] = []
+    let lastPrompt: string = ''
+    for (const event of history) {
+      if (event.type === 'response') {
+        lastResponse.push(event.data.response)
+      } else if (event.type === 'prompt') {
+        lastPrompt = event.data.prompt || '' // TODO warning?
+        if (lastResponse.length > 0) {
+          compactedHistory.push({ prompt: lastPrompt, response: lastResponse.join('') })
+          lastResponse.length = 0
+          lastPrompt = ''
+        }
+      }
+    }
+
+    if (lastResponse.length > 0) {
+      compactedHistory.push({ prompt: lastPrompt, response: lastResponse.join('') })
+    }
+
+    return compactedHistory
   }
 
   async setModelState (modelName: string, providerState: ProviderState, modelState: ModelState, operationTimestamp: number) {
@@ -1044,7 +1128,7 @@ class History {
     return await this.storage.removeSubscription(sessionId)
   }
 
-  async push (sessionId: string, eventId: string, value: any, expiration: number) {
+  async push (sessionId: string, eventId: string, value: HistoryContentEvent | HistoryEndEvent | HistoryErrorEvent, expiration: number) {
     // Add eventId and timestamp to the stored value for resume functionality
     const eventData = {
       ...value,
