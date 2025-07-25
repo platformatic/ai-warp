@@ -9,7 +9,7 @@ const logger = pino({ level: 'silent' })
 
 const storage = { type: 'memory' as const }
 
-test('should be able to perform a basic prompt', async () => {
+test('should be able to perform a basic prompt', async (t) => {
   const client = {
     ...createDummyClient(),
     request: async () => {
@@ -32,6 +32,7 @@ test('should be able to perform a basic prompt', async () => {
     }],
   })
   await ai.init()
+  t.after(() => ai.close())
 
   const response = await ai.request({
     models: ['openai:gpt-4o-mini'],
@@ -41,7 +42,7 @@ test('should be able to perform a basic prompt', async () => {
   assert.equal((response).text, 'All good')
 })
 
-test('should be able to perform a prompt with options', async () => {
+test('should be able to perform a prompt with options', async (t) => {
   const client = {
     ...createDummyClient(),
     request: mock.fn(async () => {
@@ -64,6 +65,7 @@ test('should be able to perform a prompt with options', async () => {
     }],
   })
   await ai.init()
+  t.after(() => ai.close())
 
   const response = await ai.request({
     models: ['openai:gpt-4o-mini'],
@@ -95,7 +97,7 @@ test('should be able to perform a prompt with options', async () => {
   assert.equal((response).text, 'All good')
 })
 
-test('should be able to perform a prompt with history', async () => {
+test('should be able to perform a prompt with history', async (t) => {
   const client = {
     ...createDummyClient(),
     request: mock.fn(async () => {
@@ -124,6 +126,7 @@ test('should be able to perform a prompt with history', async () => {
     }],
   })
   await ai.init()
+  t.after(() => ai.close())
 
   const response = await ai.request({
     models: ['openai:gpt-4o-mini'],
@@ -168,7 +171,7 @@ test('should be able to perform a prompt with history', async () => {
   assert.equal((response).text, 'Sure, I can help you with math.')
 })
 
-test('should be able to perform a prompt with stream', async () => {
+test('should be able to perform a prompt with stream', async (t) => {
   const client = {
     ...createDummyClient(),
     stream: mock.fn(async () => {
@@ -195,6 +198,7 @@ test('should be able to perform a prompt with stream', async () => {
     }],
   })
   await ai.init()
+  t.after(() => ai.close())
 
   const response = await ai.request({
     models: ['openai:gpt-4o-mini'],

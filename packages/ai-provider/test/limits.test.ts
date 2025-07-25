@@ -10,7 +10,7 @@ import { isStream } from '../src/lib/utils.ts'
 const apiKey = 'test'
 const logger = pino({ level: 'silent' })
 
-test('should succeed after some failures because of retries', async () => {
+test('should succeed after some failures because of retries', async (t) => {
   let callCount = 0
   const client = {
     ...createDummyClient(),
@@ -49,6 +49,7 @@ test('should succeed after some failures because of retries', async () => {
     }
   })
   await ai.init()
+  t.after(() => ai.close())
 
   const response = await ai.request({
     models: ['openai:gpt-4o-mini'],

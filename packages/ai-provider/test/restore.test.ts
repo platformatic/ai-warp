@@ -14,7 +14,7 @@ interface ExtendedError extends Error {
   code?: string
 }
 
-test('should restore model after rate limit error when enough time has passed', async () => {
+test('should restore model after rate limit error when enough time has passed', async (t) => {
   const client = createDummyClient()
   let requestCount = 0
   client.request = async (_api: any, _request: any, _context: any) => {
@@ -51,6 +51,7 @@ test('should restore model after rate limit error when enough time has passed', 
     }
   })
   await ai.init()
+  t.after(() => ai.close())
 
   // Make a request to consume rate limit
   await ai.request({
@@ -86,7 +87,7 @@ test('should restore model after rate limit error when enough time has passed', 
   assert.equal(requestCount, 2) // First request + restored request
 })
 
-test('should not restore model when not enough time has passed', async () => {
+test('should not restore model when not enough time has passed', async (t) => {
   const client = createDummyClient()
   let requestCount = 0
   client.request = async (_api: any, _request: any, _context: any) => {
@@ -123,6 +124,7 @@ test('should not restore model when not enough time has passed', async () => {
     }
   })
   await ai.init()
+  t.after(() => ai.close())
 
   // Make a request to consume rate limit
   await ai.request({
@@ -154,7 +156,7 @@ test('should not restore model when not enough time has passed', async () => {
   assert.equal(requestCount, 1) // Only first request succeeded
 })
 
-test('should restore model after timeout error when enough time has passed', async () => {
+test('should restore model after timeout error when enough time has passed', async (t) => {
   const client = createDummyClient()
   let requestCount = 0
   client.request = async (_api: any, _request: any, _context: any) => {
@@ -198,6 +200,7 @@ test('should restore model after timeout error when enough time has passed', asy
     }
   })
   await ai.init()
+  t.after(() => ai.close())
 
   // Make a request that will timeout
   await assert.rejects(
@@ -227,7 +230,7 @@ test('should restore model after timeout error when enough time has passed', asy
   assert.equal(requestCount, 2)
 })
 
-test('should restore model after stream timeout error when enough time has passed', async () => {
+test('should restore model after stream timeout error when enough time has passed', async (t) => {
   const client = createDummyClient()
   let requestCount = 0
   client.stream = async (_api: any, _request: any, _context: any) => {
@@ -278,6 +281,7 @@ test('should restore model after stream timeout error when enough time has passe
     }
   })
   await ai.init()
+  t.after(() => ai.close())
 
   // Make a streaming request that will timeout
   await assert.rejects(
@@ -313,7 +317,7 @@ test('should restore model after stream timeout error when enough time has passe
   assert.equal(requestCount, 2)
 })
 
-test('should restore model after provider communication error when enough time has passed', async () => {
+test('should restore model after provider communication error when enough time has passed', async (t) => {
   const client = createDummyClient()
   let requestCount = 0
   client.request = async (_api: any, _request: any, _context: any) => {
@@ -349,6 +353,7 @@ test('should restore model after provider communication error when enough time h
     }]
   })
   await ai.init()
+  t.after(() => ai.close())
 
   await setModelState({
     ai,
@@ -380,7 +385,7 @@ test('should restore model after provider communication error when enough time h
   assert.equal(requestCount, 2)
 })
 
-test('should restore model after provider exceeded quota error when enough time has passed', async () => {
+test('should restore model after provider exceeded quota error when enough time has passed', async (t) => {
   const client = createDummyClient()
   let requestCount = 0
   client.request = async (_api: any, _request: any, _context: any) => {
@@ -411,6 +416,7 @@ test('should restore model after provider exceeded quota error when enough time 
     }]
   })
   await ai.init()
+  t.after(() => ai.close())
 
   await setModelState({
     ai,
@@ -442,7 +448,7 @@ test('should restore model after provider exceeded quota error when enough time 
   assert.equal(requestCount, 1)
 })
 
-test('should use different restore timeouts for different error types', async () => {
+test('should use different restore timeouts for different error types', async (t) => {
   const client = createDummyClient()
   let requestCount = 0
   client.request = async (_api: any, _request: any, _context: any) => {
@@ -487,6 +493,7 @@ test('should use different restore timeouts for different error types', async ()
     }]
   })
   await ai.init()
+  t.after(() => ai.close())
 
   // Make a request that will have rate limit error
   await ai.request({

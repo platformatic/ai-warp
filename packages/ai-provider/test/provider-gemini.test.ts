@@ -9,7 +9,7 @@ import { isStream } from '../src/lib/utils.ts'
 const apiKey = 'test-api-key'
 const logger = pino({ level: 'silent' })
 
-test('GeminiProvider - should be able to perform a basic prompt', async () => {
+test('GeminiProvider - should be able to perform a basic prompt', async (t) => {
   const client = {
     ...createDummyClient(),
     request: async () => {
@@ -38,6 +38,7 @@ test('GeminiProvider - should be able to perform a basic prompt', async () => {
     }],
   })
   await ai.init()
+  t.after(() => ai.close())
 
   const response = await ai.request({
     models: ['gemini:gemini-1.5-flash'],

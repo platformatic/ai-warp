@@ -8,7 +8,7 @@ import { isStream } from '../src/lib/utils.ts'
 const apiKey = 'test'
 const logger = pino({ level: 'silent' })
 
-test('should resume stream from event ID', async () => {
+test('should resume stream from event ID', async (t) => {
   let callCount = 0
   const client = {
     ...createDummyClient(),
@@ -36,6 +36,7 @@ test('should resume stream from event ID', async () => {
     }]
   })
   await ai.init()
+  t.after(() => ai.close())
 
   // First, make a streaming request to populate history
   const originalResponse = await ai.request({
@@ -61,7 +62,7 @@ test('should resume stream from event ID', async () => {
   assert.ok(history.length > 0)
 
   // Find the first event ID
-  const firstEventId = history[0].eventId
+  const firstEventId = history[0].id
   assert.ok(firstEventId)
 
   // Now make another streaming request with the same sessionId - should auto-resume
@@ -91,7 +92,7 @@ test('should resume stream from event ID', async () => {
   assert.equal(callCount, 1)
 })
 
-test('should make normal request when resume is disabled', async () => {
+test('should make normal request when resume is disabled', async (t) => {
   let callCount = 0
   const client = {
     ...createDummyClient(),
@@ -118,6 +119,7 @@ test('should make normal request when resume is disabled', async () => {
     }]
   })
   await ai.init()
+  t.after(() => ai.close())
 
   // First make a streaming request to create history
   const response1 = await ai.request({
@@ -247,7 +249,7 @@ test('should resume from storage without calling provider API', async () => {
   await ai.close()
 })
 
-test('should call API when resume fails and no stored events exist', async () => {
+test('should call API when resume fails and no stored events exist', async (t) => {
   let apiCallCount = 0
   const client = {
     ...createDummyClient(),
@@ -277,6 +279,7 @@ test('should call API when resume fails and no stored events exist', async () =>
   })
 
   await ai.init()
+  t.after(() => ai.close())
 
   // Make normal request without sessionId (simulates no stored events)
   const response = await ai.request({
@@ -305,7 +308,7 @@ test('should call API when resume fails and no stored events exist', async () =>
   await ai.close()
 })
 
-test('should handle explicit resume disabled parameter', async () => {
+test('should handle explicit resume disabled parameter', async (t) => {
   let apiCallCount = 0
   const client = {
     ...createDummyClient(),
@@ -335,6 +338,7 @@ test('should handle explicit resume disabled parameter', async () => {
   })
 
   await ai.init()
+  t.after(() => ai.close())
 
   // First, create a session with stored events
   const originalResponse = await ai.request({

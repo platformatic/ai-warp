@@ -41,7 +41,7 @@ for (const storage of storages) {
     assert.equal((response).text, 'All good')
   })
 
-  test(`should be able to perform a prompt with options with ${storage.type} storage`, async () => {
+  test(`should be able to perform a prompt with options with ${storage.type} storage`, async (t) => {
     const client = {
       ...createDummyClient(),
       request: mock.fn(async () => {
@@ -64,6 +64,7 @@ for (const storage of storages) {
       }],
     })
     await ai.init()
+    t.after(() => ai.close())
 
     const response = await ai.request({
       models: ['openai:gpt-4o-mini'],
@@ -95,7 +96,7 @@ for (const storage of storages) {
     assert.equal((response).text, 'All good')
   })
 
-  test(`should be able to perform a prompt with history with ${storage.type} storage`, async () => {
+  test(`should be able to perform a prompt with history with ${storage.type} storage`, async (t) => {
     const client = {
       ...createDummyClient(),
       request: mock.fn(async () => {
@@ -124,6 +125,7 @@ for (const storage of storages) {
       }],
     })
     await ai.init()
+    t.after(() => ai.close())
 
     const response = await ai.request({
       models: ['openai:gpt-4o-mini'],
@@ -168,16 +170,16 @@ for (const storage of storages) {
     assert.equal((response).text, 'Sure, I can help you with math.')
   })
 
-  test(`should be able to perform a prompt with stream with ${storage.type} storage`, { only: true }, async () => {
+  test(`should be able to perform a prompt with stream with ${storage.type} storage`, async (t) => {
     const client = {
       ...createDummyClient(),
-      stream: async () => {
+      stream: mock.fn(async () => {
         return mockOpenAiStream([
           { choices: [{ delta: { content: 'Sure,' } }] },
           { choices: [{ delta: { content: ' I can help you' } }] },
           { choices: [{ delta: { content: ' with math.' }, finish_reason: 'stop' }] }
         ])
-      }
+      })
     }
 
     const ai = new Ai({
@@ -195,6 +197,7 @@ for (const storage of storages) {
       }],
     })
     await ai.init()
+    t.after(() => ai.close())
 
     const response = await ai.request({
       models: ['openai:gpt-4o-mini'],
