@@ -142,17 +142,25 @@ export class ValkeyStorage implements Storage {
   }
 
   async createSubscription (sessionId: string) {
-    if (!this.subscriptionsCount[sessionId]) {
-      this.subscriptionsCount[sessionId] = 0
-      await this.pubsub.subscribe(sessionId)
+    try {
+      if (!this.subscriptionsCount[sessionId]) {
+        this.subscriptionsCount[sessionId] = 0
+        await this.pubsub.subscribe(sessionId)
+      }
+      this.subscriptionsCount[sessionId]++
+    } catch (error) {
+    // TODO logger.error
+      console.error('valkey createSubscription error', sessionId, error)
     }
-    this.subscriptionsCount[sessionId]++
   }
 
   async removeSubscription (sessionId: string) {
-    this.subscriptionsCount[sessionId]--
-    if (this.subscriptionsCount[sessionId] === 0) {
-      await this.pubsub.unsubscribe(sessionId)
+    try {
+      this.subscriptionsCount[sessionId]--
+      if (this.subscriptionsCount[sessionId] === 0) {
+        await this.pubsub.unsubscribe(sessionId)
+      }
+    } catch {
     }
   }
 

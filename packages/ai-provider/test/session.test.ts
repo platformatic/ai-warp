@@ -149,7 +149,7 @@ for (const storage of storages) {
     assert.equal(response.sessionId, sessionId)
   })
 
-  test.only(`should load history when request has session id but not history, stream, with ${storage.type} storage`, async (t) => {
+  test(`should load history when request has session id but not history, stream, with ${storage.type} storage`, async (t) => {
     const client = {
       ...createDummyClient(),
       stream: mock.fn(async () => {

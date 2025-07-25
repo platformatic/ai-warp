@@ -525,7 +525,6 @@ export class Ai {
     const r = await this.validateRequest(request)
 
     const sessionId: AiSessionId = r.options.sessionId ?? await this.createSessionId()
-    this.pubsub.listen(sessionId)
 
     try {
       // need to relay on storage for non streaming requests for multiple instances of the service
@@ -611,6 +610,8 @@ export class Ai {
       this.logger.warn({ models }, 'No models available')
       throw new ProviderNoModelsAvailableError(models.map(m => typeof m === 'string' ? m : `${m.provider}:${m.model}`).join(', '))
     }
+
+    this.pubsub.listen(sessionId)
 
     let history
     let promptEventId: string | undefined
@@ -726,6 +727,7 @@ export class Ai {
           await this.history.push(sessionId, createEventId(), endEvent, this.options.limits.historyExpiration)
         }
 
+        this.pubsub.remove(sessionId)
         return {
           text: (providerResponse as any).text || '',
           result: mapResultError((providerResponse as any).result),
