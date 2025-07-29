@@ -1,6 +1,6 @@
 import { mock, test } from 'node:test'
 import assert from 'node:assert'
-import { Ai, type ContentResponse } from '../src/lib/ai.ts'
+import { Ai, type AiContentResponse } from '../src/lib/ai.ts'
 import pino from 'pino'
 import { createDummyClient } from './helper/helper.ts'
 
@@ -11,7 +11,7 @@ interface ExtendedError extends Error {
   code?: string
 }
 
-test('should use fallback model when the primary model is not available because of rate limit', async () => {
+test('should use fallback model when the primary model is not available because of rate limit', async (t) => {
   const client = createDummyClient()
   client.request = mock.fn(async (_api: any, _request: any, _context: any) => {
     return {
@@ -42,6 +42,7 @@ test('should use fallback model when the primary model is not available because 
     }
   })
   await ai.init()
+  t.after(() => ai.close())
 
   // Make a request to consume rate limit
   await ai.request({
@@ -53,7 +54,7 @@ test('should use fallback model when the primary model is not available because 
   const response = await ai.request({
     models: ['openai:gpt-4o-mini', 'openai:gpt-4o'],
     prompt: 'Second request'
-  }) as ContentResponse
+  }) as AiContentResponse
 
   // Verify model state is in error
   const provider = ai.providers.get('openai')!
@@ -62,6 +63,7 @@ test('should use fallback model when the primary model is not available because 
   assert.equal(modelState!.state.reason, 'PROVIDER_RATE_LIMIT_ERROR')
 
   assert.equal(response.text, 'Success')
+  // @ts-ignore
   assert.equal(client.request.mock.calls.length, 2)
 
   // @ts-ignore
@@ -69,7 +71,7 @@ test('should use fallback model when the primary model is not available because 
     model: 'gpt-4o-mini',
     messages: [{ role: 'user', content: 'First request' }],
     max_tokens: undefined,
-    stream: undefined,
+    stream: false,
     temperature: undefined,
   })
 
@@ -78,12 +80,12 @@ test('should use fallback model when the primary model is not available because 
     model: 'gpt-4o',
     messages: [{ role: 'user', content: 'Second request' }],
     max_tokens: undefined,
-    stream: undefined,
+    stream: false,
     temperature: undefined,
   })
 })
 
-test('should use fallback model when the primary model is not available because of communication error', async () => {
+test('should use fallback model when the primary model is not available because of communication error', async (t) => {
   const client = createDummyClient()
   client.request = mock.fn(async (_api: any, request: any, _context: any) => {
     if (request.model === 'gpt-4o-mini') {
@@ -119,6 +121,7 @@ test('should use fallback model when the primary model is not available because 
     }]
   })
   await ai.init()
+  t.after(() => ai.close())
 
   // Make a request to consume rate limit
   await ai.request({
@@ -130,7 +133,7 @@ test('should use fallback model when the primary model is not available because 
   const response = await ai.request({
     models: ['openai:gpt-4o-mini', 'openai:gpt-4o'],
     prompt: 'Second request'
-  }) as ContentResponse
+  }) as AiContentResponse
 
   // Verify model state is in error
   const provider = ai.providers.get('openai')!
@@ -148,7 +151,7 @@ test('should use fallback model when the primary model is not available because 
       model: 'gpt-4o-mini',
       messages: [{ content: 'First request', role: 'user' }],
       max_tokens: undefined,
-      stream: undefined,
+      stream: false,
       temperature: undefined
     })
   }
@@ -157,7 +160,7 @@ test('should use fallback model when the primary model is not available because 
     model: 'gpt-4o',
     messages: [{ role: 'user', content: 'First request' }],
     max_tokens: undefined,
-    stream: undefined,
+    stream: false,
     temperature: undefined
   })
   // @ts-ignore
@@ -165,7 +168,7 @@ test('should use fallback model when the primary model is not available because 
     model: 'gpt-4o',
     messages: [{ role: 'user', content: 'Second request' }],
     max_tokens: undefined,
-    stream: undefined,
+    stream: false,
     temperature: undefined
   })
 })
