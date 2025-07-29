@@ -1,6 +1,25 @@
+import { test } from 'node:test'
+import pino from 'pino'
 import { Readable } from 'node:stream'
 import { setTimeout as wait } from 'node:timers/promises'
 import { Ai, createModelState, type AiProvider, type ModelStateErrorReason, type ModelStatus, type ProviderState } from '../../src/lib/ai.ts'
+import type { AiStorageOptions } from '../../src/index.ts'
+
+export const storages = [
+  {
+    type: 'memory' as const,
+  },
+  {
+    type: 'valkey' as const,
+    valkey: {
+      host: 'localhost',
+      port: 6379,
+      database: 0,
+      username: 'default',
+      password: 'password'
+    }
+  }
+]
 
 export function createDummyClient () {
   return {
@@ -9,6 +28,32 @@ export function createDummyClient () {
     request: async (_api: any, _request: any, _context: any) => ({}),
     stream: async (_api: any, _request: any, _context: any) => ({})
   }
+}
+
+export async function createAi ({ t, client, storage }: { t: test.TestContext, client?: ReturnType<typeof createDummyClient>, storage?: AiStorageOptions }) {
+  const c = client ?? createDummyClient()
+
+  const ai = new Ai({
+    logger: pino({ level: 'silent' }),
+    providers: {
+      openai: {
+        apiKey: 'test',
+        client: c
+      }
+    },
+    models: [
+      {
+        provider: 'openai',
+        model: 'gpt-4o-mini' + Date.now()
+      }
+    ],
+    storage
+  })
+
+  await ai.init()
+  t.after(() => ai.close())
+
+  return ai
 }
 
 // Mock the readable stream to emit chunks that will result in 'All good'
@@ -97,7 +142,7 @@ export function mockGeminiStream (chunks: any[], error?: any) {
   return readable
 }
 
-export async function consumeStream (response: Readable) {
+export async function consumeStream (response: Readable): Promise<{ content: string[], end: string }> {
   const content: string[] = []
   let end: string = ''
 
@@ -105,6 +150,7 @@ export async function consumeStream (response: Readable) {
     // The response is a Readable stream that emits Server-sent events
     response.on('data', (chunk: Buffer) => {
       const eventData = chunk.toString('utf8')
+
       // Parse Server-sent events format
       const lines = eventData.split('\n')
 

@@ -10,7 +10,7 @@ import { parseTimeWindow } from '../src/lib/utils.ts'
 const logger = pino({ level: 'silent' })
 const apiKey = 'test'
 
-test('request - should always generate a sessionId (no stream)', async () => {
+test('request - should always generate a sessionId (non-streaming)', async () => {
   const client = {
     ...createDummyClient(),
     request: async () => {
@@ -1119,9 +1119,12 @@ test('History - should handle getEvent method', async () => {
 
   const sessionId = 'test-session'
   const eventId = 'test-event'
-  const eventData = { prompt: 'test', response: 'test response' }
 
-  await ai.history.push(sessionId, eventId, eventData, 60000)
+  await ai.history.push(sessionId, eventId, {
+    event: 'content',
+    data: { prompt: 'test' },
+    type: 'prompt'
+  }, 10_000)
   const retrievedEvent = await ai.history.getEvent(sessionId, eventId)
 
   assert.ok(retrievedEvent)
@@ -1149,7 +1152,7 @@ test('close - should handle errors in provider close gracefully', async () => {
   await ai.close()
 })
 
-test('validateRequest - should handle non-object model in request', async () => {
+test('createContext - should handle non-object model in request', async () => {
   const ai = new Ai({
     logger,
     providers: { openai: { apiKey, client: createDummyClient() } },
@@ -1157,7 +1160,7 @@ test('validateRequest - should handle non-object model in request', async () => 
   })
   await ai.init()
 
-  const validatedRequest = await ai.validateRequest({
+  const validatedRequest = await ai.createContext({
     models: [{
       provider: 'openai',
       model: 'gpt-4o-mini'
@@ -1165,10 +1168,10 @@ test('validateRequest - should handle non-object model in request', async () => 
     prompt: 'Test prompt'
   })
 
-  assert.ok(validatedRequest.models)
-  assert.equal(validatedRequest.models.length, 1)
-  assert.equal((validatedRequest.models[0] as any).provider, 'openai')
-  assert.equal((validatedRequest.models[0] as any).model, 'gpt-4o-mini')
+  assert.ok(validatedRequest.request.models)
+  assert.equal(validatedRequest.request.models.length, 1)
+  assert.equal((validatedRequest.request.models[0] as any).provider, 'openai')
+  assert.equal((validatedRequest.request.models[0] as any).model, 'gpt-4o-mini')
 })
 
 // Test to cover validation logic that checks if number values are not numbers
@@ -1287,9 +1290,9 @@ test('request - should handle resume functionality with no events in range', asy
     prompt: 'Resume request',
     options: {
       sessionId,
+      resumeEventId: 'no-valid-event-id',
       stream: true
     },
-    resume: true
   }) as AiStreamResponse
 
   assert.match(resumeResponse.sessionId, /[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}/)
@@ -1339,9 +1342,12 @@ test('History - should handle rangeFromId with no matching event', async () => {
   await ai.init()
 
   const sessionId = 'test-session'
-  const eventData = { prompt: 'test', response: 'test response' }
 
-  await ai.history.push(sessionId, 'event1', eventData, 60000)
+  await ai.history.push(sessionId, 'event1', {
+    event: 'content',
+    data: { prompt: 'test' },
+    type: 'prompt'
+  }, 60000)
 
   // Try to get events from non-existent event ID
   const events = await ai.history.rangeFromId(sessionId, 'non-existent-event')

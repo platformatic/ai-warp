@@ -37,7 +37,6 @@
   "dependencies": {
     "@fastify/deepmerge": "^3.1.0",
     "@fastify/error": "^4.2.0",
-    "cloneable-readable": "^3.0.0",
     "fast-json-stringify": "^6.0.1",
     "iovalkey": "^0.3.3",
     "openai": "^5.7.0",

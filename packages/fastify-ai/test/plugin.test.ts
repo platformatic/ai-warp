@@ -61,6 +61,8 @@ test('should be able to perform a basic prompt with stream', async () => {
   assert.ok(response.body.includes('id: '))
 })
 
+// TODO test: stream, compact history
+
 test('should be able to retrieve chat history', async () => {
   const client = createDummyClient()
 

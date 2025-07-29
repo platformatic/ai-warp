@@ -1,25 +1,24 @@
-import { test } from 'node:test'
+import { mock, test } from 'node:test'
 import assert from 'node:assert'
-import { Ai, type AiStreamResponse } from '../src/lib/ai.ts'
+import { randomUUID } from 'node:crypto'
 import pino from 'pino'
-import { createDummyClient, mockOpenAiStream } from './helper/helper.ts'
+import { Ai, type AiStreamResponse } from '../src/lib/ai.ts'
+import { consumeStream, createAi, createDummyClient, mockOpenAiStream } from './helper/helper.ts'
 import { isStream } from '../src/lib/utils.ts'
 
 const apiKey = 'test'
 const logger = pino({ level: 'silent' })
 
-test('should resume stream from event ID', async () => {
-  let callCount = 0
+test('should resume stream from first event ID', async (t) => {
   const client = {
     ...createDummyClient(),
-    stream: async () => {
-      callCount++
+    stream: mock.fn(async () => {
       return mockOpenAiStream([
         { choices: [{ delta: { content: 'Hello' } }] },
         { choices: [{ delta: { content: ' world' } }] },
         { choices: [{ delta: { content: '!' }, finish_reason: 'stop' }] }
       ])
-    }
+    })
   }
 
   const ai = new Ai({
@@ -36,6 +35,7 @@ test('should resume stream from event ID', async () => {
     }]
   })
   await ai.init()
+  t.after(() => ai.close())
 
   // First, make a streaming request to populate history
   const originalResponse = await ai.request({
@@ -61,7 +61,7 @@ test('should resume stream from event ID', async () => {
   assert.ok(history.length > 0)
 
   // Find the first event ID
-  const firstEventId = history[0].eventId
+  const firstEventId = history[0].id
   assert.ok(firstEventId)
 
   // Now make another streaming request with the same sessionId - should auto-resume
@@ -70,7 +70,8 @@ test('should resume stream from event ID', async () => {
     prompt: 'Say hello again', // This will be ignored for resume
     options: {
       stream: true,
-      sessionId: originalSessionId
+      sessionId: originalSessionId,
+      resumeEventId: firstEventId
     }
   }) as AiStreamResponse
 
@@ -88,10 +89,10 @@ test('should resume stream from event ID', async () => {
 
   // Verify that we only made one call to the provider (the original request)
   // The resume should not call the provider again
-  assert.equal(callCount, 1)
+  assert.equal(client.stream.mock.calls.length, 1, 'Should have made one call to the provider')
 })
 
-test('should make normal request when resume is disabled', async () => {
+test('should make normal request when resume is disabled', async (t) => {
   let callCount = 0
   const client = {
     ...createDummyClient(),
@@ -118,6 +119,7 @@ test('should make normal request when resume is disabled', async () => {
     }]
   })
   await ai.init()
+  t.after(() => ai.close())
 
   // First make a streaming request to create history
   const response1 = await ai.request({
@@ -143,9 +145,9 @@ test('should make normal request when resume is disabled', async () => {
     prompt: 'Hello again',
     options: {
       sessionId,
+      resumeEventId: undefined, // Explicitly disable resume
       stream: true
     },
-    resume: false // Explicitly disable resume
   }) as AiStreamResponse
 
   assert.ok(isStream(response2), 'Response should be a stream-like object')
@@ -155,99 +157,7 @@ test('should make normal request when resume is disabled', async () => {
   assert.equal(callCount, 2)
 })
 
-test('should resume from storage without calling provider API', async () => {
-  let apiCallCount = 0
-  const client = {
-    ...createDummyClient(),
-    stream: async () => {
-      apiCallCount++
-      return mockOpenAiStream([
-        { choices: [{ delta: { content: 'Hello' } }] },
-        { choices: [{ delta: { content: ' world' } }] },
-        { choices: [{ delta: { content: '!' }, finish_reason: 'stop' }] }
-      ])
-    }
-  }
-
-  const ai = new Ai({
-    logger: pino({ level: 'silent' }),
-    providers: {
-      openai: {
-        apiKey: 'test',
-        client
-      }
-    },
-    models: [
-      {
-        provider: 'openai',
-        model: 'gpt-4o-mini'
-      }
-    ]
-  })
-
-  await ai.init()
-
-  // Step 1: Complete a streaming request to populate storage
-  const originalResponse = await ai.request({
-    models: ['openai:gpt-4o-mini'],
-    prompt: 'Say hello',
-    options: { stream: true }
-  }) as AiStreamResponse
-
-  assert.ok(isStream(originalResponse), 'Response should be a stream-like object')
-  const sessionId = (originalResponse as any).sessionId
-  assert.ok(sessionId)
-
-  // Consume the original stream completely
-  const allChunks: Uint8Array[] = []
-  for await (const chunk of originalResponse) {
-    allChunks.push(chunk)
-  }
-
-  // Verify we have content stored
-  assert.ok(allChunks.length > 0)
-  assert.equal(apiCallCount, 1, 'Should have called API once for original request')
-
-  // Wait for background processing to complete
-  await new Promise(resolve => setTimeout(resolve, 100))
-
-  // Step 2: Verify events are stored in history
-  const storedHistory = await ai.history.range(sessionId)
-  assert.ok(storedHistory.length > 0, 'Should have stored events in history')
-
-  // Step 3: Make resume request - should get data from storage, NOT call API
-  const resumeResponse = await ai.request({
-    models: ['openai:gpt-4o-mini'],
-    prompt: 'Continue the conversation', // This should be ignored
-    options: {
-      stream: true,
-      sessionId // Same sessionId triggers auto-resume
-    }
-  }) as AiStreamResponse
-
-  assert.ok(isStream(resumeResponse), 'Response should be a stream-like object')
-  assert.equal((resumeResponse as any).sessionId, sessionId)
-
-  // Verify API was NOT called again (still only 1 call)
-  assert.equal(apiCallCount, 1, 'Should NOT call API for resume - should use storage')
-
-  // Consume the resume stream
-  const resumeChunks: Uint8Array[] = []
-  for await (const chunk of resumeResponse) {
-    resumeChunks.push(chunk)
-  }
-
-  // Verify we received data from storage
-  assert.ok(resumeChunks.length > 0, 'Should receive events from storage')
-
-  const resumeContent = Buffer.concat(resumeChunks).toString()
-  assert.ok(resumeContent.includes('Hello'), 'Should contain original content from storage')
-  assert.ok(resumeContent.includes('world'), 'Should contain original content from storage')
-
-  await ai.close()
-})
-
-test('should call API when resume fails and no stored events exist', async () => {
+test('should call API when resume fails and no stored events exist', async (t) => {
   let apiCallCount = 0
   const client = {
     ...createDummyClient(),
@@ -277,6 +187,7 @@ test('should call API when resume fails and no stored events exist', async () =>
   })
 
   await ai.init()
+  t.after(() => ai.close())
 
   // Make normal request without sessionId (simulates no stored events)
   const response = await ai.request({
@@ -305,7 +216,7 @@ test('should call API when resume fails and no stored events exist', async () =>
   await ai.close()
 })
 
-test('should handle explicit resume disabled parameter', async () => {
+test('should handle explicit resume event id undefined (resume is disabled)', async (t) => {
   let apiCallCount = 0
   const client = {
     ...createDummyClient(),
@@ -335,6 +246,7 @@ test('should handle explicit resume disabled parameter', async () => {
   })
 
   await ai.init()
+  t.after(() => ai.close())
 
   // First, create a session with stored events
   const originalResponse = await ai.request({
@@ -359,9 +271,9 @@ test('should handle explicit resume disabled parameter', async () => {
     prompt: 'New request',
     options: {
       stream: true,
-      sessionId
+      sessionId,
+      resumeEventId: undefined // Explicitly disable resume
     },
-    resume: false // Explicitly disable resume
   }) as AiStreamResponse
 
   assert.ok(isStream(response), 'Response should be a stream-like object')
@@ -370,4 +282,241 @@ test('should handle explicit resume disabled parameter', async () => {
   assert.equal(apiCallCount, 2, 'Should call API again when resume is disabled')
 
   await ai.close()
+})
+
+test('should resume by resume event id', async (t) => {
+  const historyExpiration = 10_000
+  const client = {
+    ...createDummyClient(),
+    stream: mock.fn(async () => { return [] })
+  }
+  const ai = await createAi({ t, client })
+
+  const sessionId = randomUUID()
+  const resumeEventId = randomUUID()
+  await ai.history.push(sessionId, resumeEventId, {
+    event: 'content',
+    data: { prompt: 'Prompt 1' },
+    type: 'prompt'
+  }, historyExpiration)
+
+  await ai.history.push(sessionId, randomUUID(), {
+    event: 'content',
+    data: { response: 'Response 1' },
+    type: 'response'
+  }, historyExpiration)
+
+  await ai.history.push(sessionId, randomUUID(), {
+    event: 'end',
+    data: { response: 'COMPLETE' }
+  }, historyExpiration)
+
+  const response = await ai.request({
+    prompt: 'Prompt 2',
+    options: { stream: true, sessionId, resumeEventId }
+  }) as AiStreamResponse
+
+  const { content } = await consumeStream(response)
+
+  assert.equal(client.stream.mock.calls.length, 0, 'Should have no request call')
+  assert.equal(content.join(''), 'Response 1')
+})
+
+test('should resume the second response by resume event id', async (t) => {
+  const historyExpiration = 10_000
+  const client = {
+    ...createDummyClient(),
+    stream: mock.fn(async () => { return [] })
+  }
+  const ai = await createAi({ t, client })
+
+  const sessionId = randomUUID()
+  await ai.history.push(sessionId, randomUUID(), {
+    event: 'content',
+    data: { prompt: 'Prompt 1' },
+    type: 'prompt'
+  }, historyExpiration)
+
+  await ai.history.push(sessionId, randomUUID(), {
+    event: 'content',
+    data: { response: 'Response 1' },
+    type: 'response'
+  }, historyExpiration)
+
+  await ai.history.push(sessionId, randomUUID(), {
+    event: 'end',
+    data: { response: 'COMPLETE' }
+  }, historyExpiration)
+
+  // Second response
+  const resumeEventId = randomUUID()
+  await ai.history.push(sessionId, resumeEventId, {
+    event: 'content',
+    data: { prompt: 'Prompt 2' },
+    type: 'prompt'
+  }, historyExpiration)
+
+  await ai.history.push(sessionId, randomUUID(), {
+    event: 'content',
+    data: { response: 'Response 2' },
+    type: 'response'
+  }, historyExpiration)
+
+  await ai.history.push(sessionId, randomUUID(), {
+    event: 'end',
+    data: { response: 'COMPLETE' }
+  }, historyExpiration)
+
+  const response = await ai.request({
+    prompt: 'Prompt 3',
+    options: { stream: true, sessionId, resumeEventId }
+  }) as AiStreamResponse
+
+  const { content } = await consumeStream(response)
+
+  assert.equal(client.stream.mock.calls.length, 0, 'Should have no request call')
+  assert.equal(content.join(''), 'Response 2')
+})
+
+test('should resume the second response by resume event id on an incomplete response', async (t) => {
+  const historyExpiration = 10_000
+  const client = {
+    ...createDummyClient(),
+    stream: mock.fn(async () => { return [] })
+  }
+  const ai = await createAi({ t, client })
+
+  const sessionId = randomUUID()
+  await ai.history.push(sessionId, randomUUID(), {
+    event: 'content',
+    data: { prompt: 'Prompt 1' },
+    type: 'prompt'
+  }, historyExpiration)
+
+  await ai.history.push(sessionId, randomUUID(), {
+    event: 'content',
+    data: { response: 'Response 1' },
+    type: 'response'
+  }, historyExpiration)
+
+  await ai.history.push(sessionId, randomUUID(), {
+    event: 'end',
+    data: { response: 'COMPLETE' }
+  }, historyExpiration)
+
+  // Second response
+  const resumeEventId = randomUUID()
+  await ai.history.push(sessionId, resumeEventId, {
+    event: 'content',
+    data: { prompt: 'Prompt 2' },
+    type: 'prompt'
+  }, historyExpiration)
+
+  await ai.history.push(sessionId, randomUUID(), {
+    event: 'content',
+    data: { response: 'Response 2' },
+    type: 'response'
+  }, historyExpiration)
+
+  await ai.history.push(sessionId, randomUUID(), {
+    event: 'end',
+    data: { response: 'COMPLETE' }
+  }, historyExpiration)
+
+  // Third incomplete response
+  await ai.history.push(sessionId, randomUUID(), {
+    event: 'content',
+    data: { response: 'Resp...' },
+    type: 'response'
+  }, historyExpiration)
+
+  const response = await ai.request({
+    prompt: 'Prompt 3',
+    options: { stream: true, sessionId, resumeEventId }
+  }) as AiStreamResponse
+
+  const { content } = await consumeStream(response)
+
+  assert.equal(client.stream.mock.calls.length, 0, 'Should have no request call')
+  assert.equal(content.join(''), 'Response 2')
+})
+
+test('should not resume a error response by resume event id but make a new request', async (t) => {
+  const historyExpiration = 10_000
+  const client = {
+    ...createDummyClient(),
+    stream: mock.fn(async () => {
+      return mockOpenAiStream([
+        { choices: [{ delta: { content: 'Response' } }] },
+        { choices: [{ delta: { content: ' 3' }, finish_reason: 'stop' }] }
+      ])
+    })
+  }
+  const ai = await createAi({ t, client })
+
+  const sessionId = randomUUID()
+  await ai.history.push(sessionId, randomUUID(), {
+    event: 'content',
+    data: { prompt: 'Prompt 1' },
+    type: 'prompt'
+  }, historyExpiration)
+
+  await ai.history.push(sessionId, randomUUID(), {
+    event: 'content',
+    data: { response: 'Response 1' },
+    type: 'response'
+  }, historyExpiration)
+
+  await ai.history.push(sessionId, randomUUID(), {
+    event: 'end',
+    data: { response: 'COMPLETE' }
+  }, historyExpiration)
+
+  // Second response
+  const resumeEventId = randomUUID()
+  await ai.history.push(sessionId, resumeEventId, {
+    event: 'content',
+    data: { prompt: 'Prompt 2' },
+    type: 'prompt'
+  }, historyExpiration)
+
+  await ai.history.push(sessionId, randomUUID(), {
+    event: 'content',
+    data: { response: 'Response 2' },
+    type: 'response'
+  }, historyExpiration)
+
+  await ai.history.push(sessionId, randomUUID(), {
+    event: 'error',
+    data: { code: 'PROVIDER_ERROR', message: 'Connection failed' },
+  }, historyExpiration)
+
+  const response = await ai.request({
+    prompt: 'Prompt 3',
+    options: { stream: true, sessionId, resumeEventId }
+  }) as AiStreamResponse
+
+  const { content } = await consumeStream(response)
+
+  assert.equal(client.stream.mock.calls.length, 1, 'Should have one request call')
+  // @ts-ignore
+  assert.deepEqual(client.stream.mock.calls[0].arguments[1].messages, [
+    {
+      content: 'Prompt 2',
+      role: 'user'
+    },
+    {
+      content: 'Response 1',
+      role: 'assistant'
+    },
+    {
+      content: 'Response 2',
+      role: 'assistant'
+    },
+    {
+      content: 'Prompt 3',
+      role: 'user'
+    }
+  ])
+  assert.equal(content.join(''), 'Response 3')
 })

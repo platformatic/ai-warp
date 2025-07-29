@@ -9,7 +9,7 @@ import { isStream } from '../src/lib/utils.ts'
 const apiKey = 'test-api-key'
 const logger = pino({ level: 'silent' })
 
-test('GeminiProvider - should be able to perform a basic prompt', async () => {
+test('GeminiProvider - should be able to perform a basic prompt', async (t) => {
   const client = {
     ...createDummyClient(),
     request: async () => {
@@ -38,6 +38,7 @@ test('GeminiProvider - should be able to perform a basic prompt', async () => {
     }],
   })
   await ai.init()
+  t.after(() => ai.close())
 
   const response = await ai.request({
     models: ['gemini:gemini-1.5-flash'],
@@ -148,6 +149,9 @@ test('GeminiProvider - should be able to perform a prompt with stream', async ()
 
   assert.ok(isStream(response))
 
+  const result = await consumeStream(response) as { content: string[], end: string }
+  assert.equal(result.content.join(''), 'Hello! I am doing well.')
+
   // @ts-ignore
   const streamCall = client.stream.mock.calls[0].arguments[1]
   assert.deepEqual(streamCall, {
@@ -165,9 +169,6 @@ test('GeminiProvider - should be able to perform a prompt with stream', async ()
     },
     stream: true
   })
-
-  const result = await consumeStream(response) as { content: string[], end: string }
-  assert.equal(result.content.join(''), 'Hello! I am doing well.')
 })
 
 test('GeminiProvider - should be able to perform a prompt with history', async () => {
@@ -490,6 +491,41 @@ test('GeminiProvider - should handle stream error', async () => {
 
   // The stream should handle the error gracefully
   assert.ok(isStream(response))
+
+  // Consume the stream and expect it to handle the error properly
+  await new Promise<void>((resolve, reject) => {
+    let errorReceived = false
+    let streamEnded = false
+
+    response.on('data', (chunk: Buffer) => {
+      const eventData = chunk.toString('utf8')
+      if (eventData.includes('event: error')) {
+        errorReceived = true
+      }
+    })
+
+    response.on('end', () => {
+      streamEnded = true
+      // The stream should have received an error event
+      assert.ok(errorReceived, 'Expected error event to be received')
+      resolve()
+    })
+
+    response.on('error', (error) => {
+      // This is expected - the stream should emit an error
+      // when it encounters the error event from the mock
+      // Accept any truthy error value
+      assert.ok(error, 'Expected error to be truthy')
+      resolve()
+    })
+
+    // Add a timeout to prevent hanging
+    setTimeout(() => {
+      if (!streamEnded && !errorReceived) {
+        reject(new Error('Test timeout - stream did not complete'))
+      }
+    }, 1000)
+  })
 })
 
 test('GeminiProvider - should require API key', async () => {

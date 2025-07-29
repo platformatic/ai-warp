@@ -12,6 +12,10 @@ export class MemoryStorage implements Storage {
     this.pubsub = new PubSubStorage()
   }
 
+  async init () {
+    // nothing to do
+  }
+
   async close () {
     // nothing to do
   }
@@ -24,8 +28,15 @@ export class MemoryStorage implements Storage {
     this.values.set(key, value)
   }
 
-  async hashSet (key: string, field: string, value: any, expiration: number) {
+  async hashSet (key: string, field: string, value: any, expiration: number, publish?: boolean) {
     this.hash.set(key, field, value, expiration)
+    if (!publish) {
+      return
+    }
+
+    // Publish the event to notify subscribers
+    // The value should be the event data that was stored
+    this.pubsub.publish(key, value)
   }
 
   async hashGetAll (key: string) {
@@ -36,16 +47,20 @@ export class MemoryStorage implements Storage {
     return this.hash.get(key, field)
   }
 
-  async publish (channel: string, message: any) {
-    this.pubsub.publish(channel, message)
+  async createSubscription (_sessionId: string) {
+    // nothing to do
+  }
+
+  async removeSubscription (_sessionId: string) {
+    // nothing to do
   }
 
   async subscribe (channel: string, callback: (message: any) => void) {
     this.pubsub.subscribe(channel, callback)
   }
 
-  async unsubscribe (channel: string) {
-    this.pubsub.unsubscribe(channel)
+  async unsubscribe (channel: string, callback: (message: any) => void) {
+    this.pubsub.unsubscribe(channel, callback)
   }
 }
 
@@ -146,22 +161,14 @@ class HashStorage {
 
 class PubSubStorage extends EventEmitter {
   publish (channel: string, message: any) {
-    // Use setImmediate to make it async and avoid blocking
-    setImmediate(() => {
-      this.emit(channel, message)
-    })
+    this.emit(channel, message)
   }
 
   subscribe (channel: string, callback: (message: any) => void) {
     this.on(channel, callback)
   }
 
-  unsubscribe (channel: string, callback?: (message: any) => void) {
-    if (callback) {
-      this.off(channel, callback)
-    } else {
-      // Remove all listeners for the channel
-      this.removeAllListeners(channel)
-    }
+  unsubscribe (channel: string, callback: (message: any) => void) {
+    this.off(channel, callback)
   }
 }

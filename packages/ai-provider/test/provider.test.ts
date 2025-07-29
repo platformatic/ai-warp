@@ -7,7 +7,7 @@ import pino from 'pino'
 const apiKey = 'test'
 const logger = pino({ level: 'silent' })
 
-test('should select the model from the list of models', async () => {
+test('should select the model from the list of models', async (t) => {
   const openaiClient = {
     ...createDummyClient(),
     request: async () => {
@@ -34,6 +34,7 @@ test('should select the model from the list of models', async () => {
     ],
   })
   await ai.init()
+  t.after(() => ai.close())
 
   const response = await ai.request({
     prompt: 'Hello, how are you?'
@@ -42,7 +43,7 @@ test('should select the model from the list of models', async () => {
   assert.equal((response).text, 'All good from deepseek')
 })
 
-test('should select the model in the request from the list of models', async () => {
+test('should select the model in the request from the list of models', async (t) => {
   const openaiClient = {
     ...createDummyClient(),
     request: async () => {
@@ -69,6 +70,7 @@ test('should select the model in the request from the list of models', async () 
     ],
   })
   await ai.init()
+  t.after(() => ai.close())
 
   const response = await ai.request({
     models: ['deepseek:deepseek-chat'],
@@ -78,7 +80,7 @@ test('should select the model in the request from the list of models', async () 
   assert.equal((response).text, 'All good from deepseek')
 })
 
-test('should handle all the providers', async () => {
+test('should handle all the providers', async (t) => {
   const openaiClient = {
     ...createDummyClient(),
     request: async () => {
@@ -114,6 +116,7 @@ test('should handle all the providers', async () => {
     ],
   })
   await ai.init()
+  t.after(() => ai.close())
 
   // Test OpenAI provider
   const openaiResponse = await ai.request({
