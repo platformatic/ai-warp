@@ -26,7 +26,6 @@ export const StorageListRangeError = createError<string>('STORAGE_LIST_RANGE_ERR
 
 export const InvalidTimeWindowNumberInputError = createError<[string, number]>('INVALID_TIME_WINDOW_NUMBER_INPUT_ERROR', 'Invalid time window %s for %s')
 export const InvalidTimeWindowStringInputError = createError<[string, string]>('INVALID_TIME_WINDOW_STRING_INPUT_ERROR', 'Invalid time window %s for %s')
-export const InvalidTimeWindowUnitError = createError<string>('INVALID_TIME_WINDOW_UNIT_ERROR', 'Unsupported time unit %s')
 
 export const DeserializingInvalidTypeError = createError<string>('DESERIALIZING_INVALID_TYPE_ERROR', 'Deserializing error: %s', 500)
 

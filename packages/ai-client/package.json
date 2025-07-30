@@ -5,7 +5,7 @@
   "license": "Apache-2.0",
   "scripts": {
     "test": "node --test --experimental-strip-types test/*.test.ts",
-    "test:coverage": "node --test --experimental-strip-types --experimental-test-coverage  --test-coverage-exclude=test/** test/*.test.ts",
+    "test:coverage": "node --test --experimental-strip-types --experimental-test-coverage --test-coverage-lines 100 --test-coverage-functions 100 --test-coverage-exclude=test/** test/*.test.ts",
     "lint": "eslint src test",
     "lint:fix": "eslint src test --fix",
     "build": "tsc -p tsconfig.build.json",
