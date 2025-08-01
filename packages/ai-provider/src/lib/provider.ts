@@ -13,11 +13,13 @@ export type AiChatHistory = {
 }[]
 
 export type AiSessionId = string
+export type AiEventId = string
 
 export type ProviderRequestOptions = {
   context?: string
   history?: AiChatHistory
   sessionId?: AiSessionId
+  resumeEventId?: AiEventId
   temperature?: number
   stream?: boolean
   onStreamChunk?: (response: string) => Promise<string>

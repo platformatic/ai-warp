@@ -170,8 +170,12 @@ export class GeminiProvider extends BaseProvider {
     // Add chat history
     if (options.history) {
       for (const previousInteraction of options.history) {
-        contents.push({ role: 'user', parts: [{ text: previousInteraction.prompt }] })
-        contents.push({ role: 'model', parts: [{ text: previousInteraction.response }] })
+        if (previousInteraction.prompt) {
+          contents.push({ role: 'user', parts: [{ text: previousInteraction.prompt }] })
+        }
+        if (previousInteraction.response) {
+          contents.push({ role: 'model', parts: [{ text: previousInteraction.response }] })
+        }
       }
     }
 
@@ -219,7 +223,7 @@ export class GeminiProvider extends BaseProvider {
     this.logger.debug({ request }, `${this.providerName} request`)
     const response = await this.client.request(this.api, { model, request }, this.context)
 
-    this.logger.debug({ response }, `${this.providerName} full response (no stream)`)
+    this.logger.debug({ response }, `${this.providerName} full response (non-streaming)`)
 
     const text = response.candidates?.[0]?.content?.parts?.[0]?.text
     const result = mapResponseResult(response.candidates?.[0]?.finishReason)
@@ -281,6 +285,7 @@ class GeminiStreamTransformer extends Transform {
           const eventData: AiStreamEvent = {
             id: event.id ?? createEventId(),
             event: 'content',
+            type: 'response',
             data: { response }
           }
           this.push(encodeEvent(eventData))

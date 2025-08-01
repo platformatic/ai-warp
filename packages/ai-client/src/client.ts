@@ -12,6 +12,7 @@ export class Client {
   private logger: Logger
   private promptPath: string
   private streamPath: string
+  private lastEventIds: Map<string, string> = new Map() // sessionId -> lastEventId
 
   constructor (options: ClientOptions) {
     this.url = options.url.endsWith('/') ? options.url.slice(0, -1) : options.url
@@ -29,9 +30,16 @@ export class Client {
   async ask (options: AskOptions & { stream?: false }): Promise<AskResponseContent>
   async ask (options: AskOptions): Promise<AskResponseStream | AskResponseContent> {
     const isStreaming = options.stream !== false
-    const shouldResume = options.resume !== false // Default to true
-
     const endpoint = this.url + (isStreaming ? this.streamPath : this.promptPath)
+
+    const shouldResume = isStreaming && options.resume !== false // Resume only applies to streaming
+    let resumeEventId
+
+    // Determine resumeEventId: explicit override, or from tracked events, or undefined
+    // Only for streaming requests with sessionId
+    if (shouldResume && options.sessionId) {
+      resumeEventId = options.resumeEventId ?? this.lastEventIds.get(options.sessionId)
+    }
 
     this.logger.debug('Making AI request', {
       endpoint,
@@ -39,26 +47,37 @@ export class Client {
       sessionId: options.sessionId,
       models: options.models,
       stream: isStreaming,
-      resume: shouldResume
+      resumeEventId
     })
 
     try {
+      const requestBody: any = {
+        prompt: options.prompt,
+        sessionId: options.sessionId,
+        context: options.context,
+        temperature: options.temperature,
+        models: options.models,
+        history: options.history,
+        stream: isStreaming
+      }
+
+      // Only include resume parameters for streaming requests
+      if (isStreaming) {
+        requestBody.resume = shouldResume
+
+        // Include resumeEventId if we have one
+        if (resumeEventId) {
+          requestBody.resumeEventId = resumeEventId
+        }
+      }
+
       const response = await fetch(endpoint, {
         method: 'POST',
         headers: {
           ...this.headers,
           Accept: isStreaming ? 'text/event-stream' : 'application/json'
         },
-        body: JSON.stringify({
-          prompt: options.prompt,
-          sessionId: options.sessionId,
-          context: options.context,
-          temperature: options.temperature,
-          models: options.models,
-          history: options.history,
-          stream: isStreaming,
-          resume: shouldResume
-        }),
+        body: JSON.stringify(requestBody),
         signal: AbortSignal.timeout(this.timeout)
       })
 
@@ -74,14 +93,23 @@ export class Client {
         if (!response.body) {
           throw new Error('Response body is null')
         }
-        const webStream = this.createStreamFromResponse(response.body)
+
+        // Extract sessionId from response if not provided in options
+        // ai-provider always includes sessionId in response headers
+        const responseSessionId = options.sessionId || response.headers.get('x-session-id') || undefined
+
+        const webStream = this.createStreamFromResponse(response.body, responseSessionId)
         return {
-          stream: this.createAsyncIterableStream(webStream),
+          stream: this.createAsyncIterableStream(webStream, responseSessionId, options),
           headers: response.headers
         }
       } else {
+        const content = await response.json() as AskResponseData
+
+        // For non-streaming, sessionId is in the content, but we don't need it for event tracking
+        // since resume only works with streaming
         return {
-          content: await response.json() as AskResponseData,
+          content,
           headers: response.headers
         }
       }
@@ -99,14 +127,14 @@ export class Client {
     }
   }
 
-  private createStreamFromResponse (body: ReadableStream<Uint8Array>): ReadableStream<StreamMessage> {
+  private createStreamFromResponse (body: ReadableStream<Uint8Array>, sessionId?: string): ReadableStream<StreamMessage> {
     let buffer = ''
 
     return body
       .pipeThrough(new TextDecoderStream())
       .pipeThrough(
         new TransformStream<string, StreamMessage>({
-          transform (chunk, controller) {
+          transform: (chunk, controller) => {
             buffer += chunk
 
             const events = buffer.split('\n\n')
@@ -116,6 +144,11 @@ export class Client {
               if (eventText.trim()) {
                 const event = parseEvent(eventText)
                 if (event) {
+                  // Track event ID for this session
+                  if (event.id && sessionId) {
+                    this.lastEventIds.set(sessionId, event.id)
+                  }
+
                   const message = convertEventToMessage(event)
                   if (message) {
                     controller.enqueue(message)
@@ -124,10 +157,15 @@ export class Client {
               }
             }
           },
-          flush (controller) {
+          flush: (controller) => {
             if (buffer.trim()) {
               const event = parseEvent(buffer)
               if (event) {
+                // Track event ID for this session
+                if (event.id && sessionId) {
+                  this.lastEventIds.set(sessionId, event.id)
+                }
+
                 const message = convertEventToMessage(event)
                 if (message) {
                   controller.enqueue(message)
@@ -139,21 +177,61 @@ export class Client {
       )
   }
 
-  private createAsyncIterableStream (stream: ReadableStream<StreamMessage>) {
+  private createAsyncIterableStream (stream: ReadableStream<StreamMessage>, sessionId?: string, originalOptions?: AskOptions) {
     const reader = stream.getReader()
 
     return {
-      async * [Symbol.asyncIterator] () {
+      [Symbol.asyncIterator]: async function * (this: Client) {
         try {
           while (true) {
             const { done, value } = await reader.read()
             if (done) break
-            if (value) yield value
+
+            if (value) {
+              // Handle event: error - automatically retry with resume
+              if (value.type === 'error') {
+                this.logger.debug('Stream error event received, attempting automatic resume', {
+                  sessionId,
+                  error: value.error?.message
+                })
+
+                // Only auto-resume if we have sessionId and streaming was enabled
+                if (sessionId && originalOptions && originalOptions.stream !== false) {
+                  try {
+                    // Retry the request with the same sessionId to trigger resume
+                    const resumeOptions = {
+                      ...originalOptions,
+                      sessionId,
+                      stream: true as const,
+                      resume: true // Explicit resume
+                    }
+
+                    this.logger.debug('Attempting resume after stream error', { sessionId })
+                    const resumeResponse = await this.ask(resumeOptions)
+
+                    // Yield all messages from the resumed stream
+                    for await (const resumeMessage of resumeResponse.stream) {
+                      yield resumeMessage
+                    }
+                    return // Exit the original stream since we've resumed
+                  } catch (resumeError) {
+                    this.logger.error('Failed to auto-resume after stream error', {
+                      sessionId,
+                      originalError: value.error?.message,
+                      resumeError: resumeError instanceof Error ? resumeError.message : String(resumeError)
+                    })
+                    // Fall through to yield the original error
+                  }
+                }
+              }
+
+              yield value
+            }
           }
         } finally {
           reader.releaseLock()
         }
-      }
+      }.bind(this)
     }
   }
 }
@@ -161,6 +239,7 @@ export class Client {
 interface ParsedEvent {
   event?: string
   data?: string
+  id?: string
 }
 
 interface SSEContentData {
@@ -198,6 +277,8 @@ function parseEvent (eventText: string): ParsedEvent | null {
       event.event = line.slice(7).trim()
     } else if (line.startsWith('data: ')) {
       event.data = line.slice(6).trim()
+    } else if (line.startsWith('id: ')) {
+      event.id = line.slice(4).trim()
     }
   }
 
