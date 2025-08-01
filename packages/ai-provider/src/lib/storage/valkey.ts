@@ -42,7 +42,7 @@ export class ValkeyStorage implements Storage {
       ...connectionConfig
     })
 
-    // TODO PUBLISH __keyevent@0__:del mykey
+    // TODO PUBLISH __keyevent@0__:hset *
     this.pubsub.on('message', (sessionId, event) => {
       try {
         const unserializedEvent = JSON.parse(event)
