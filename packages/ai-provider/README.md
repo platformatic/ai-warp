@@ -7,10 +7,10 @@ Core implementation for AI communication with multiple providers, offering unifi
 - **Multi-Provider Support**: OpenAI, DeepSeek, and Google Gemini
 - **Automatic Fallback**: Seamless switching between providers when one fails
 - **Session Management**: Persistent conversation history with multiple storage backends
-- **Auto-Resume**: Seamless stream resumption from interruption points using UUID event IDs
+- **Auto-Resume**: Seamless stream resumption from interruption points using event IDs
 - **Hash-Based Storage**: Efficient O(1) event access with Redis hash operations
 - **Rate Limiting**: Per-model rate limiting with automatic restoration
-- **Streaming Support**: Real-time response streaming with UUID event identification
+- **Streaming Support**: Real-time response streaming with event identification
 - **Error Recovery**: Intelligent error handling with configurable retry policies
 
 ## 📦 Installation
@@ -186,6 +186,7 @@ Make an AI request with automatic fallback and session management.
   - `stream` (boolean, optional): Enable streaming responses (default: false)
   - `sessionId` (string, optional): Session identifier for conversation history
   - `history` (array, optional): Previous conversation history
+  - `resumeEventId` (string, optional): Specific event ID to resume from for stream continuation
 
 #### `ai.close()`
 Close all provider connections and storage.
@@ -241,14 +242,14 @@ try {
 
 ## 🔄 Auto-Resume Functionality
 
-The AI provider includes advanced auto-resume capabilities that automatically recover interrupted streaming conversations:
+The AI provider includes advanced auto-resume capabilities that automatically recover interrupted streaming conversations by streaming stored events from the configured storage backend:
 
-### Automatic Stream Resumption
+### Stream Resumption with Storage
 
-When a streaming request is interrupted, the system can automatically resume from the last successfully received event:
+When a streaming request includes a `resumeEventId`, the system retrieves and streams stored events without calling the AI model again:
 
 ```javascript
-// First streaming request
+// First streaming request - events are automatically stored
 const stream1 = await ai.request({
   prompt: 'Write a long story about space exploration',
   options: {
@@ -257,25 +258,56 @@ const stream1 = await ai.request({
   }
 })
 
-// If interrupted, resume automatically with same sessionId
+// If interrupted after receiving some events, resume from specific event ID
 const stream2 = await ai.request({
   prompt: 'Continue the story', // This prompt is ignored for resume
   options: {
     stream: true,
-    sessionId: 'conversation-123', // Same session triggers auto-resume
-    resume: true                   // Explicitly enable resume (default: true)
+    sessionId: 'conversation-123',
+    resumeEventId: 'f47ac10b-58cc-4372-a567-0e02b2c3d479' // Resume from this event
   }
 })
 
-// Only missing events will be streamed
+// Only events after the resumeEventId will be streamed from storage
 ```
 
-### Event Id Identification
+### Storage-Based Stream Response
+
+When `resumeEventId` is provided, the response stream is entirely generated from storage:
+
+1. **Event Retrieval**: The provider queries the storage backend for all events in the session after the specified event ID
+2. **Storage Streaming**: Events are streamed directly from storage (memory/Valkey) in chronological order
+3. **No AI Model Call**: The AI model is not called - all content comes from previously stored events
+4. **Real-time Delivery**: Events are delivered as Server-Sent Events just like a fresh AI response
+
+```javascript
+// Example: Resume streaming retrieves stored events
+const resumeStream = await ai.request({
+  prompt: 'Any prompt', // Ignored for resume
+  options: {
+    stream: true,
+    sessionId: 'session-123',
+    resumeEventId: 'event-uuid-123'
+  }
+})
+
+// This stream contains events from storage, not from AI model
+for await (const chunk of resumeStream) {
+  const data = chunk.toString()
+  // Contains SSE events retrieved from storage:
+  // id: event-uuid-124
+  // event: content
+  // data: {"response": "stored content"}
+  console.log('Stored event:', data)
+}
+```
+
+### Event ID Identification
 
 All streaming events include unique identifiers for precise resumption:
 
 ```javascript
-// Streaming events include IDs
+// Streaming events include IDs for resumption tracking
 const reader = streamResponse.getReader()
 const decoder = new TextDecoder()
 
@@ -284,35 +316,35 @@ while (true) {
   if (done) break
   
   const chunk = decoder.decode(value)
-  // Example SSE format:
+  // Example SSE format with unique ID:
   // id: f47ac10b-58cc-4372-a567-0e02b2c3d479
   // event: content
   // data: {"response": "Text chunk"}
+  
+  // Client can track last received event ID for resume
 }
 ```
 
-### Resume Configuration
-
-Control resume behavior per request:
+### Resume vs Fresh Requests
 
 ```javascript
-// Disable resume for fresh response
-const response = await ai.request({
+// Fresh request - generates new content via AI model
+const freshResponse = await ai.request({
   prompt: 'New conversation',
   options: {
     sessionId: 'existing-session',
-    stream: true,
-    resume: false  // Force new request instead of resume
+    stream: true
+    // No resumeEventId = fresh AI model call
   }
 })
 
-// Resume is enabled by default when sessionId + stream = true
-const autoResumeResponse = await ai.request({
-  prompt: 'Continue',
+// Resume request - streams stored events from storage
+const resumeResponse = await ai.request({
+  prompt: 'Any prompt', // Ignored
   options: {
     sessionId: 'existing-session',
-    stream: true
-    // resume: true (default)
+    stream: true,
+    resumeEventId: 'last-received-event-id' // Streams from storage
   }
 })
 ```
