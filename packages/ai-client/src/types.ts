@@ -2,6 +2,7 @@
 // This package is designed to be standalone and not depend on other Platformatic modules
 export type TimeWindow = number | string
 export type AiSessionId = string
+export type AiEventId = string
 export type AiProvider = 'openai' | 'deepseek' | 'gemini'
 export type AiChatHistory = {
   prompt: string;
@@ -72,6 +73,7 @@ export interface AskOptions {
   history?: AiChatHistory
   stream?: boolean
   resume?: boolean
+  resumeEventId?: AiEventId
 }
 
 export interface AskResponse {

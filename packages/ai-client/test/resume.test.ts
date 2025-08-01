@@ -67,7 +67,12 @@ const mockFetch = (responses: Array<{ status: number, headers?: Record<string, s
   })
 }
 
-test('should pass resume parameter to server by default', async () => {
+test('should pass resume parameter to server by default for streaming', async (t) => {
+  const _prevFetch = globalThis.fetch
+  t.after(() => {
+    globalThis.fetch = _prevFetch
+  })
+
   let lastRequestBody: any = null
 
   const fetch = async (url: string, options: any) => {
@@ -77,36 +82,47 @@ test('should pass resume parameter to server by default', async () => {
       ok: true,
       status: 200,
       headers: new Headers({
-        'content-type': 'application/json',
+        'content-type': 'text/event-stream',
         'x-session-id': 'test-session'
       }),
-      json: async () => ({
-        text: 'Response',
-        sessionId: 'test-session',
-        result: 'COMPLETE'
+      body: new ReadableStream({
+        start (controller) {
+          controller.enqueue(new TextEncoder().encode('event: end\ndata: {"response": {"text": "Response", "sessionId": "test-session", "result": "COMPLETE"}}\n\n'))
+          controller.close()
+        }
       })
     }
   }
 
   // @ts-ignore - mock fetch
-  global.fetch = fetch
+  globalThis.fetch = fetch
 
   const client = buildClient({
     url: 'http://localhost:3000'
   })
 
-  await client.ask({
+  const response = await client.ask({
     prompt: 'Hello',
     sessionId: 'existing-session',
-    stream: false
+    stream: true
   })
 
-  // Should pass resume: true by default
+  // Consume the stream to complete the request
+  for await (const _message of response.stream) {
+    // Just consume the stream
+  }
+
+  // Should pass resume: true by default for streaming
   assert.equal(lastRequestBody.resume, true)
   assert.equal(lastRequestBody.sessionId, 'existing-session')
 })
 
-test('should pass resume: false when explicitly disabled', async () => {
+test('should pass resume: false when explicitly disabled for streaming', async (t) => {
+  const _prevFetch = globalThis.fetch
+  t.after(() => {
+    globalThis.fetch = _prevFetch
+  })
+
   let lastRequestBody: any = null
 
   const fetch = async (url: string, options: any) => {
@@ -116,32 +132,38 @@ test('should pass resume: false when explicitly disabled', async () => {
       ok: true,
       status: 200,
       headers: new Headers({
-        'content-type': 'application/json',
+        'content-type': 'text/event-stream',
         'x-session-id': 'test-session'
       }),
-      json: async () => ({
-        text: 'Response',
-        sessionId: 'test-session',
-        result: 'COMPLETE'
+      body: new ReadableStream({
+        start (controller) {
+          controller.enqueue(new TextEncoder().encode('event: end\ndata: {"response": {"text": "Response", "sessionId": "test-session", "result": "COMPLETE"}}\n\n'))
+          controller.close()
+        }
       })
     }
   }
 
   // @ts-ignore - mock fetch
-  global.fetch = fetch
+  globalThis.fetch = fetch
 
   const client = buildClient({
     url: 'http://localhost:3000'
   })
 
-  await client.ask({
+  const response = await client.ask({
     prompt: 'Hello',
     sessionId: 'existing-session',
-    stream: false,
+    stream: true,
     resume: false
   })
 
-  // Should pass resume: false when explicitly disabled
+  // Consume the stream to complete the request
+  for await (const _message of response.stream) {
+    // Just consume the stream
+  }
+
+  // Should pass resume: false when explicitly disabled for streaming
   assert.equal(lastRequestBody.resume, false)
   assert.equal(lastRequestBody.sessionId, 'existing-session')
 })
@@ -291,8 +313,8 @@ test('should not include resume parameter for non-streaming requests', async (t)
     stream: false
   })
 
-  // Should still include resume parameter even for non-streaming
-  assert.equal(lastRequestBody.resume, true)
+  // Should NOT include resume parameter for non-streaming requests
+  assert.equal(lastRequestBody.resume, undefined)
   assert.equal(lastRequestBody.stream, false)
 })
 
@@ -494,4 +516,146 @@ test('should handle resume with fresh request when no stored events', async (t) 
   assert.equal(requestCount, 1)
 
   await fastify.close()
+})
+
+test('should handle automatic error recovery on stream error event', async (t) => {
+  const _prevFetch = globalThis.fetch
+  t.after(() => {
+    globalThis.fetch = _prevFetch
+  })
+
+  let requestCount = 0
+  const sessionId = 'test-session-123'
+
+  const fetch = async (_url: string, _options: any) => {
+    requestCount++
+
+    if (requestCount === 1) {
+      // First request returns stream with error event
+      return {
+        ok: true,
+        status: 200,
+        headers: new Headers({
+          'content-type': 'text/event-stream',
+          'x-session-id': sessionId
+        }),
+        body: new ReadableStream({
+          start (controller) {
+            // Send some content first
+            controller.enqueue(new TextEncoder().encode('event: content\ndata: {"response": "Hello "}\nid: event-1\n\n'))
+            // Then send error event
+            controller.enqueue(new TextEncoder().encode('event: error\ndata: {"message": "Stream error occurred"}\nid: event-2\n\n'))
+            controller.close()
+          }
+        })
+      }
+    } else {
+      // Resume request returns successful completion
+      return {
+        ok: true,
+        status: 200,
+        headers: new Headers({
+          'content-type': 'text/event-stream',
+          'x-session-id': sessionId
+        }),
+        body: new ReadableStream({
+          start (controller) {
+            controller.enqueue(new TextEncoder().encode('event: content\ndata: {"response": "World!"}\nid: event-3\n\n'))
+            controller.enqueue(new TextEncoder().encode('event: end\ndata: {"response": {"text": "Hello World!", "sessionId": "' + sessionId + '", "result": "COMPLETE"}}\nid: event-4\n\n'))
+            controller.close()
+          }
+        })
+      }
+    }
+  }
+
+  // @ts-ignore - mock fetch
+  globalThis.fetch = fetch
+
+  const client = buildClient({
+    url: 'http://localhost:3000',
+    logger: { info: () => {}, error: () => {}, warn: () => {}, debug: () => {} }
+  })
+
+  const response = await client.ask({
+    prompt: 'Hello',
+    stream: true
+  })
+
+  const messages: any[] = []
+  for await (const message of response.stream) {
+    messages.push(message)
+  }
+
+  // Should have received content from first request and then resumed content
+  assert.ok(messages.length >= 2)
+  assert.equal(messages[0].type, 'content')
+  assert.equal(messages[0].content, 'Hello ')
+  assert.equal(messages[1].type, 'content')
+  assert.equal(messages[1].content, 'World!')
+
+  // Should have made 2 requests (original + resume)
+  assert.equal(requestCount, 2)
+})
+
+test('should handle unknown error types', async (t) => {
+  const _prevFetch = globalThis.fetch
+  t.after(() => {
+    globalThis.fetch = _prevFetch
+  })
+
+  const fetch = async (_url: string, _options: any) => {
+    // Simulate throwing a non-Error object
+    throw new Error('Unknown error occurred')
+  }
+
+  // @ts-ignore - mock fetch
+  globalThis.fetch = fetch
+
+  const client = buildClient({
+    url: 'http://localhost:3000'
+  })
+
+  try {
+    await client.ask({
+      prompt: 'Hello',
+      stream: false
+    })
+    assert.fail('Should have thrown an error')
+  } catch (error) {
+    assert.equal((error as Error).message, 'Unknown error occurred')
+  }
+})
+
+test('should handle HTTP error responses with error body', async (t) => {
+  const _prevFetch = globalThis.fetch
+  t.after(() => {
+    globalThis.fetch = _prevFetch
+  })
+
+  const fetch = async (_url: string, _options: any) => {
+    return {
+      ok: false,
+      status: 500,
+      statusText: 'Internal Server Error',
+      text: async () => 'Server is temporarily unavailable'
+    }
+  }
+
+  // @ts-ignore - mock fetch
+  globalThis.fetch = fetch
+
+  const client = buildClient({
+    url: 'http://localhost:3000'
+  })
+
+  try {
+    await client.ask({
+      prompt: 'Hello',
+      stream: false
+    })
+    assert.fail('Should have thrown an error')
+  } catch (error) {
+    assert.equal((error as Error).message, 'HTTP 500: Server is temporarily unavailable')
+  }
 })
