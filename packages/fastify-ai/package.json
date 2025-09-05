@@ -1,6 +1,6 @@
 {
   "name": "@platformatic/fastify-ai",
-  "version": "1.1.0-alpha.1",
+  "version": "1.1.0-alpha.2",
   "description": "The fastify AI plugin",
   "homepage": "https://github.com/platformatic/ai-warp",
   "author": "Platformatic Inc. <oss@platformatic.dev> (https://platformatic.dev)",
