@@ -32,6 +32,7 @@ jobs:
         run: pnpm run ci
 
   ai-client:
+    needs: setup
     strategy:
       matrix:
         node-version: [22, 24]
@@ -62,12 +63,13 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Run Tests
-        run: cd pakages/ai-client && pnpm run ci
+        run: cd packages/ai-client && pnpm run ci
         env:
           REDIS_URL: redis://localhost:6379
           VALKEY_URL: redis://localhost:6380
 
   ai-provider:
+    needs: setup
     strategy:
       matrix:
         node-version: [22, 24]
@@ -98,12 +100,13 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Run Tests
-        run: cd pakages/ai-provider && pnpm run ci
+        run: cd packages/ai-provider && pnpm run ci
         env:
           REDIS_URL: redis://localhost:6379
           VALKEY_URL: redis://localhost:6380
 
   ai-warp:
+    needs: setup
     strategy:
       matrix:
         node-version: [22, 24]
@@ -134,12 +137,13 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Run Tests
-        run: cd pakages/ai-warp && pnpm run ci
+        run: cd packages/ai-warp && pnpm run ci
         env:
           REDIS_URL: redis://localhost:6379
           VALKEY_URL: redis://localhost:6380
 
   fastify-ai:
+    needs: setup
     strategy:
       matrix:
         node-version: [22, 24]
