@@ -41,14 +41,14 @@ jobs:
       - name: Bump version
         id: bump
         run: |
+          pnpm -r exec pnpm version ${{ inputs.version }} --no-git-tag-version
           new_version=$(pnpm version ${{ inputs.version }} --no-git-tag-version | tail -n 1)
           echo "version=$new_version" >> $GITHUB_OUTPUT
-      - name: Bump version and push commit
+      - name: Commit version bump
         run: |
-          pnpm version ${{ inputs.version }} --no-git-tag-version
           git config --global user.name "${{ github.actor }}"
           git config --global user.email "${{ github.actor }}@users.noreply.github.com"
-          git commit -a -m "Bumped v${{ steps.bump.outputs.version }}"
+          git commit -a -m "Bumped ${{ steps.bump.outputs.version }}"
           git push origin HEAD:${{ github.ref }}
       - name: Publish new version
         run: |
@@ -56,4 +56,4 @@ jobs:
           pnpm -r publish publish --access public --tag ${{ inputs.prerelease == true && 'next' || 'latest' }}
       - name: Create release notes
         run: |
-          npx @matteo.collina/release-notes -a ${{ secrets.GITHUB_TOKEN }} -t v${{ steps.bump.outputs.version }} -r ${{ github.repository }} ${{ github.event.inputs.prerelease == 'true' && '-p' || '' }} -c ${{ github.ref }}
+          npx @matteo.collina/release-notes -a ${{ secrets.GITHUB_TOKEN }} -t ${{ steps.bump.outputs.version }} -r ${{ github.repository }} ${{ github.event.inputs.prerelease == 'true' && '-p' || '' }} -c ${{ github.ref }}
