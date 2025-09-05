@@ -1,6 +1,6 @@
-import { test } from 'node:test'
 import assert from 'node:assert'
-import { createApp, createDummyClient, mockOpenAiStream } from './helper/helper.ts'
+import { test } from 'node:test'
+import { createApp, createDummyClient, mockOpenAiStream } from './helper.ts'
 
 test('should handle resume parameter in stream request', async () => {
   let receivedRequest: any = null
@@ -26,7 +26,11 @@ test('should handle resume parameter in stream request', async () => {
     const stream = new ReadableStream({
       start (controller) {
         controller.enqueue(encoder.encode('event: content\ndata: {"response": "Test response"}\n\n'))
-        controller.enqueue(encoder.encode('event: end\ndata: {"response": {"text": "Test response", "sessionId": "test-session", "result": "COMPLETE"}}\n\n'))
+        controller.enqueue(
+          encoder.encode(
+            'event: end\ndata: {"response": {"text": "Test response", "sessionId": "test-session", "result": "COMPLETE"}}\n\n'
+          )
+        )
         controller.close()
       }
     })
@@ -73,7 +77,11 @@ test('should handle resume: false parameter', async () => {
     const stream = new ReadableStream({
       start (controller) {
         controller.enqueue(encoder.encode('event: content\ndata: {"response": "New response"}\n\n'))
-        controller.enqueue(encoder.encode('event: end\ndata: {"response": {"text": "New response", "sessionId": "test-session", "result": "COMPLETE"}}\n\n'))
+        controller.enqueue(
+          encoder.encode(
+            'event: end\ndata: {"response": {"text": "New response", "sessionId": "test-session", "result": "COMPLETE"}}\n\n'
+          )
+        )
         controller.close()
       }
     })
@@ -120,7 +128,11 @@ test('should default resume to true when not specified', async () => {
     const stream = new ReadableStream({
       start (controller) {
         controller.enqueue(encoder.encode('event: content\ndata: {"response": "Auto resume response"}\n\n'))
-        controller.enqueue(encoder.encode('event: end\ndata: {"response": {"text": "Auto resume response", "sessionId": "test-session", "result": "COMPLETE"}}\n\n'))
+        controller.enqueue(
+          encoder.encode(
+            'event: end\ndata: {"response": {"text": "Auto resume response", "sessionId": "test-session", "result": "COMPLETE"}}\n\n'
+          )
+        )
         controller.close()
       }
     })
@@ -211,7 +223,11 @@ test('should pass resume parameter to underlying AI request correctly', async ()
     const stream = new ReadableStream({
       start (controller) {
         controller.enqueue(encoder.encode('event: content\ndata: {"response": "Mock response"}\n\n'))
-        controller.enqueue(encoder.encode('event: end\ndata: {"response": {"text": "Mock response", "sessionId": "test-session", "result": "COMPLETE"}}\n\n'))
+        controller.enqueue(
+          encoder.encode(
+            'event: end\ndata: {"response": {"text": "Mock response", "sessionId": "test-session", "result": "COMPLETE"}}\n\n'
+          )
+        )
         controller.close()
       }
     })

@@ -1,11 +1,11 @@
-import { test } from 'node:test'
-import assert from 'node:assert'
 import { createSigner } from 'fast-jwt'
-import { createApp, createDummyClient } from './helper.ts'
+import assert from 'node:assert'
+import { test } from 'node:test'
+import { createApplication, createDummyClient } from './helper.ts'
 
 const SECRET = 'test-secret-key-for-jwt'
 
-test('should extract user from valid JWT token', async () => {
+test('should extract user from valid JWT token', async t => {
   const client = {
     ...createDummyClient(),
     request: async () => {
@@ -20,10 +20,10 @@ test('should extract user from valid JWT token', async () => {
     }
   }
 
-  const [app, _port] = await createApp({ client, authConfig })
+  const app = await createApplication(t, { client, authConfig })
 
   // Add a route to test user extraction
-  app.route({
+  app.getApplication().route({
     url: '/user',
     method: 'GET',
     handler: async (request, _reply) => {
@@ -31,8 +31,6 @@ test('should extract user from valid JWT token', async () => {
       return { user: request.user }
     }
   })
-
-  await app.start()
 
   const payload = { sub: 'user123', name: 'Test User' }
   const signer = createSigner({ key: SECRET })
@@ -47,14 +45,12 @@ test('should extract user from valid JWT token', async () => {
   })
 
   assert.equal(response.statusCode, 200)
-  const body = JSON.parse(response.body)
+  const body = JSON.parse(response.body as unknown as string)
   assert.equal(body.user.sub, 'user123')
   assert.equal(body.user.name, 'Test User')
-
-  await app.close()
 })
 
-test('should reject requests with invalid JWT token', async () => {
+test('should reject requests with invalid JWT token', async t => {
   const authConfig = {
     required: true,
     jwt: {
@@ -62,10 +58,10 @@ test('should reject requests with invalid JWT token', async () => {
     }
   }
 
-  const [app, _port] = await createApp({ authConfig })
+  const app = await createApplication(t, { authConfig })
 
   // Add a route to test user extraction
-  app.route({
+  app.getApplication().route({
     url: '/user',
     method: 'GET',
     handler: async (request, _reply) => {
@@ -74,7 +70,7 @@ test('should reject requests with invalid JWT token', async () => {
     }
   })
 
-  await app.start()
+  await app.start({ listen: true })
 
   const response = await app.inject({
     method: 'GET',
@@ -85,13 +81,11 @@ test('should reject requests with invalid JWT token', async () => {
   })
 
   assert.equal(response.statusCode, 401)
-  const body = JSON.parse(response.body)
+  const body = JSON.parse(response.body as unknown as string)
   assert.equal(body.message, 'Unauthorized')
-
-  await app.close()
 })
 
-test('should reject requests with missing JWT token', async () => {
+test('should reject requests with missing JWT token', async t => {
   const authConfig = {
     required: true,
     jwt: {
@@ -99,10 +93,10 @@ test('should reject requests with missing JWT token', async () => {
     }
   }
 
-  const [app, _port] = await createApp({ authConfig })
+  const app = await createApplication(t, { authConfig })
 
   // Add a route to test user extraction
-  app.route({
+  app.getApplication().route({
     url: '/user',
     method: 'GET',
     handler: async (request, _reply) => {
@@ -111,7 +105,7 @@ test('should reject requests with missing JWT token', async () => {
     }
   })
 
-  await app.start()
+  await app.start({ listen: true })
 
   const response = await app.inject({
     method: 'GET',
@@ -119,13 +113,11 @@ test('should reject requests with missing JWT token', async () => {
   })
 
   assert.equal(response.statusCode, 401)
-  const body = JSON.parse(response.body)
+  const body = JSON.parse(response.body as unknown as string)
   assert.equal(body.message, 'Unauthorized')
-
-  await app.close()
 })
 
-test('should populate request.user for AI endpoints', async () => {
+test('should populate request.user for AI endpoints', async t => {
   const client = {
     ...createDummyClient(),
     request: async () => {
@@ -140,10 +132,10 @@ test('should populate request.user for AI endpoints', async () => {
     }
   }
 
-  const [app, _port] = await createApp({ client, authConfig })
+  const app = await createApplication(t, { client, authConfig })
 
   // Add a hook to verify user is populated
-  app.addHook('onRequest', async (request, _reply) => {
+  app.getApplication().addHook('onRequest', async (request, _reply) => {
     if (request.url === '/api/v1/prompt') {
       // @ts-ignore
       assert.ok(request.user, 'User should be populated')
@@ -152,7 +144,7 @@ test('should populate request.user for AI endpoints', async () => {
     }
   })
 
-  await app.start()
+  await app.start({ listen: true })
 
   const payload = { sub: 'user123', name: 'Test User' }
   const signer = createSigner({ key: SECRET })
@@ -170,13 +162,11 @@ test('should populate request.user for AI endpoints', async () => {
   })
 
   assert.equal(response.statusCode, 200)
-  const body = JSON.parse(response.body)
+  const body = JSON.parse(response.body as unknown as string)
   assert.equal(body.text, 'Hello authenticated user')
-
-  await app.close()
 })
 
-test('should work with JWT namespace option', async () => {
+test('should work with JWT namespace option', async t => {
   const authConfig = {
     required: true,
     jwt: {
@@ -185,10 +175,10 @@ test('should work with JWT namespace option', async () => {
     }
   }
 
-  const [app, _port] = await createApp({ authConfig })
+  const app = await createApplication(t, { authConfig })
 
   // Add a route to test user extraction
-  app.route({
+  app.getApplication().route({
     url: '/user',
     method: 'GET',
     handler: async (request, _reply) => {
@@ -197,7 +187,7 @@ test('should work with JWT namespace option', async () => {
     }
   })
 
-  await app.start()
+  await app.start({ listen: true })
 
   const payload = {
     sub: 'user123',
@@ -216,15 +206,13 @@ test('should work with JWT namespace option', async () => {
   })
 
   assert.equal(response.statusCode, 200)
-  const body = JSON.parse(response.body)
+  const body = JSON.parse(response.body as unknown as string)
   assert.equal(body.user.sub, 'user123')
   assert.equal(body.user.name, 'Test User')
   assert.equal(body.user.role, 'admin')
-
-  await app.close()
 })
 
-test('should reject unauthenticated requests to AI endpoints when auth is configured', async () => {
+test('should reject unauthenticated requests to AI endpoints when auth is configured', async t => {
   const client = {
     ...createDummyClient(),
     request: async () => {
@@ -239,8 +227,8 @@ test('should reject unauthenticated requests to AI endpoints when auth is config
     }
   }
 
-  const [app, _port] = await createApp({ client, authConfig })
-  await app.start()
+  const app = await createApplication(t, { client, authConfig })
+  await app.start({ listen: true })
 
   const response = await app.inject({
     method: 'POST',
@@ -251,13 +239,11 @@ test('should reject unauthenticated requests to AI endpoints when auth is config
   })
 
   assert.equal(response.statusCode, 401)
-  const body = JSON.parse(response.body)
+  const body = JSON.parse(response.body as unknown as string)
   assert.equal(body.message, 'Unauthorized')
-
-  await app.close()
 })
 
-test('should reject unauthenticated requests to custom routes when auth is configured', async () => {
+test('should reject unauthenticated requests to custom routes when auth is configured', async t => {
   const authConfig = {
     required: true,
     jwt: {
@@ -265,10 +251,10 @@ test('should reject unauthenticated requests to custom routes when auth is confi
     }
   }
 
-  const [app, _port] = await createApp({ authConfig })
+  const app = await createApplication(t, { authConfig })
 
   // Add a route to test auth enforcement
-  app.route({
+  app.getApplication().route({
     url: '/test',
     method: 'GET',
     handler: async (_request, _reply) => {
@@ -276,7 +262,7 @@ test('should reject unauthenticated requests to custom routes when auth is confi
     }
   })
 
-  await app.start()
+  await app.start({ listen: true })
 
   const response = await app.inject({
     method: 'GET',
@@ -284,13 +270,11 @@ test('should reject unauthenticated requests to custom routes when auth is confi
   })
 
   assert.equal(response.statusCode, 401)
-  const body = JSON.parse(response.body)
+  const body = JSON.parse(response.body as unknown as string)
   assert.equal(body.message, 'Unauthorized')
-
-  await app.close()
 })
 
-test('should not enforce auth when required is false', async () => {
+test('should not enforce auth when required is false', async t => {
   const client = {
     ...createDummyClient(),
     request: async () => {
@@ -305,8 +289,8 @@ test('should not enforce auth when required is false', async () => {
     }
   }
 
-  const [app, _port] = await createApp({ client, authConfig })
-  await app.start()
+  const app = await createApplication(t, { client, authConfig })
+  await app.start({ listen: true })
 
   const response = await app.inject({
     method: 'POST',
@@ -317,13 +301,11 @@ test('should not enforce auth when required is false', async () => {
   })
 
   assert.equal(response.statusCode, 200)
-  const body = JSON.parse(response.body)
+  const body = JSON.parse(response.body as unknown as string)
   assert.equal(body.text, 'Hello')
-
-  await app.close()
 })
 
-test('should work without auth options', async () => {
+test('should work without auth options', async t => {
   const client = {
     ...createDummyClient(),
     request: async () => {
@@ -331,8 +313,8 @@ test('should work without auth options', async () => {
     }
   }
 
-  const [app, _port] = await createApp({ client })
-  await app.start()
+  const app = await createApplication(t, { client })
+  await app.start({ listen: true })
 
   const response = await app.inject({
     method: 'POST',
@@ -343,8 +325,6 @@ test('should work without auth options', async () => {
   })
 
   assert.equal(response.statusCode, 200)
-  const body = JSON.parse(response.body)
+  const body = JSON.parse(response.body as unknown as string)
   assert.equal(body.text, 'Hello')
-
-  await app.close()
 })

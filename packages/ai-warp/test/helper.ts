@@ -1,6 +1,5 @@
-import { buildServer } from '@platformatic/service'
-import stackable from '../dist/index.js'
-import type { AiWarpConfig } from '../config.js'
+import { type TestContext } from 'node:test'
+import { create } from '../src/index.ts'
 
 let apps = 0
 export function getPort (): number {
@@ -8,10 +7,10 @@ export function getPort (): number {
   return 3042 + apps
 }
 
-export async function createApp ({ client, authConfig }: { client?: any, authConfig?: any }) {
+export async function createApplication (t: TestContext, { client, authConfig }: { client?: any; authConfig?: any }) {
   const port = getPort()
 
-  const config: AiWarpConfig = {
+  const app = await create(import.meta.dirname, {
     server: {
       port,
       forceCloseConnections: true,
@@ -33,11 +32,12 @@ export async function createApp ({ client, authConfig }: { client?: any, authCon
       ]
     },
     auth: authConfig
-  }
+  })
 
-  const app = await buildServer(config, stackable)
+  t.after(() => app.stop())
 
-  return [app, port]
+  await app.init()
+  return app
 }
 
 export function createDummyClient () {

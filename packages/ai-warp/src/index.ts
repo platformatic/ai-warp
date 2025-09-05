@@ -1,187 +1,24 @@
-import type { FastifyError, FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
-import { Type } from '@fastify/type-provider-typebox'
-import { createError } from '@fastify/error'
-import { app as platformaticService, type Stackable, buildStackable as serviceBuildStackable } from '@platformatic/service'
-import { ConfigManager } from '@platformatic/config'
-import type { StackableInterface } from '@platformatic/config'
-import ai, { type AiChatHistory, type AiSessionId } from '@platformatic/fastify-ai'
-import { schema } from './lib/schema.js'
-import { Generator } from './lib/generator.js'
-import type { AiWarpConfig } from '../config.js'
-import fastifyUser from 'fastify-user'
+import type { ConfigurationOptions } from '@platformatic/foundation'
+import { create as createService, platformaticService, ServiceCapability } from '@platformatic/service'
+import type { FastifyInstance } from 'fastify'
+import fp from 'fastify-plugin'
+import type { AIWarpConfiguration } from './config.d.ts'
+import { plugin } from './lib/plugin.ts'
+import { schema } from './lib/schema.ts'
 
-const DEFAULT_PROMPT_PATH = '/api/v1/prompt'
-const DEFAULT_STREAM_PATH = '/api/v1/stream'
-
-export interface AiWarpMixin {
-  platformatic: {
-    configManager: ConfigManager<AiWarpConfig>
-    config: AiWarpConfig
-  }
+export async function aiWarp (app: FastifyInstance, capability: ServiceCapability) {
+  const config = (await capability.getConfig()) as AIWarpConfiguration
+  await platformaticService(app, capability)
+  await app.register(plugin, config)
 }
 
-export type AiRequestBody = {
-  prompt: string
-  context?: string
-  temperature?: number
-  history?: AiChatHistory
-  sessionId?: AiSessionId
+export async function create (
+  root: string | AIWarpConfiguration,
+  source?: string | AIWarpConfiguration,
+  context?: ConfigurationOptions
+) {
+  return createService(root, source, { schema, applicationFactory: fp(aiWarp), ...context })
 }
 
-const InternalServerError = createError('INTERNAL_SERVER_ERROR', 'Internal Server Error', 500)
-const UnauthorizedError = createError('UNAUTHORIZED', 'Unauthorized', 401)
-function isAFastifyError (object: object): object is FastifyError {
-  return 'code' in object && 'name' in object
-}
-
-type AiGenerator = new () => Generator
-
-async function buildStackable (opts: { config: string }): Promise<StackableInterface> {
-  return await serviceBuildStackable(opts, stackable)
-}
-
-const stackable: Stackable<AiWarpConfig, AiGenerator> = {
-  async app (app: FastifyInstance, _options: object) {
-    const fastify = app as unknown as FastifyInstance & AiWarpMixin
-    const { config } = fastify.platformatic
-
-    await fastify.register(platformaticService, config)
-    await fastify.register(ai, config.ai as any)
-
-    // Register fastify-user if auth options are provided
-    if (config.auth) {
-      // @ts-ignore
-      await fastify.register(fastifyUser, config.auth)
-
-      // Add onRequest hook to extract user from JWT and check auth
-      fastify.addHook('onRequest', async (request, _reply) => {
-        // @ts-ignore
-        await request.extractUser()
-
-        // Check if user is required but missing
-        const isAuthRequired = config.auth?.required === true
-        // @ts-ignore
-        const isMissingUser = request.user === undefined || request.user === null
-
-        if (isAuthRequired && isMissingUser) {
-          throw new UnauthorizedError()
-        }
-      })
-    }
-
-    const bodySchema = Type.Object({
-      context: Type.Optional(Type.String()),
-      temperature: Type.Optional(Type.Number()),
-      prompt: Type.String(),
-      history: Type.Optional(Type.Array(Type.Object({
-        prompt: Type.String(),
-        response: Type.String()
-      }))),
-      sessionId: Type.Optional(Type.String())
-    })
-
-    fastify.route({
-      url: config.ai.promptPath ?? DEFAULT_PROMPT_PATH,
-      method: 'POST',
-      schema: {
-        operationId: 'prompt',
-        body: bodySchema,
-        response: {
-          200: Type.Object({
-            text: Type.String(),
-            result: Type.String(),
-            sessionId: Type.String()
-          }),
-          default: Type.Object({
-            code: Type.Optional(Type.String()),
-            message: Type.String()
-          })
-        }
-      },
-      handler: async (request: FastifyRequest<{ Body: AiRequestBody }>, reply: FastifyReply) => {
-        try {
-          const { prompt, context, temperature, history, sessionId } = request.body
-          const response = await fastify.ai.request({
-            request,
-            prompt,
-            context,
-            temperature,
-            history,
-            sessionId,
-            stream: false
-          }, reply)
-
-          return reply.send(response)
-        } catch (error) {
-          if (error instanceof Object && isAFastifyError(error)) {
-            return error
-          } else {
-            const err = new InternalServerError()
-            err.cause = error
-            throw err
-          }
-        }
-      }
-    })
-
-    fastify.route({
-      url: config.ai.streamPath ?? DEFAULT_STREAM_PATH,
-      method: 'POST',
-      schema: {
-        operationId: 'stream',
-        produces: ['text/event-stream'],
-        body: bodySchema
-      },
-      handler: async (request: FastifyRequest<{ Body: AiRequestBody }>, reply: FastifyReply) => {
-        try {
-          const { prompt, context, temperature, history, sessionId } = request.body
-          const response = await fastify.ai.request({
-            request,
-            prompt,
-            context,
-            temperature,
-            history,
-            sessionId,
-            stream: true
-          }, reply)
-
-          return reply.send(response)
-        } catch (error) {
-          if (error instanceof Object && isAFastifyError(error)) {
-            return error
-          } else {
-            const err = new InternalServerError()
-            err.cause = error
-            throw err
-          }
-        }
-      }
-    })
-
-    // TODO client rate limit with @fastify/rate-limit on ai-warp service
-  },
-  configType: 'ai-warp-app',
-  schema,
-  Generator,
-  configManagerConfig: {
-    schema,
-    envWhitelist: ['PORT', 'HOSTNAME'],
-    allowToWatch: ['.env'],
-    schemaOptions: {
-      useDefaults: true,
-      coerceTypes: true,
-      allErrors: true,
-      strict: false
-    },
-    async transformConfig () {}
-  },
-  buildStackable
-}
-
-// break Fastify encapsulation
-
-// @ts-expect-error
-stackable.app[Symbol.for('skip-override')] = true
-
-export default stackable
-export { Generator, schema, buildStackable }
+export { Generator } from './lib/generator.ts'
+export { packageJson, schema, schemaComponents, version } from './lib/schema.ts'

@@ -1,22 +1,27 @@
 {
-  "name": "platformatic-warp",
+  "name": "ai-warp",
   "private": true,
   "version": "1.0.0",
-  "description": "The platformatic warp monorepo",
+  "description": "The platformatic AI warp monorepo",
+  "homepage": "https://github.com/platformatic/rabbitmq-hooks",
+  "author": "Platformatic Inc. <oss@platformatic.dev> (https://platformatic.dev)",
   "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/platformatic/rabbitmq-hooks.git"
+  },
+  "keywords": [
+    "ai",
+    "warp"
+  ],
+  "bugs": {
+    "url": "https://github.com/platformatic/rabbitmq-hooks/issues"
+  },
   "scripts": {
-    "clean": "rm -rf node_modules && rm -rf packages/*/node_modules && rm -rf examples/node_modules",
-    "test": "pnpm -r --workspace-concurrency=1 --if-present test",
-    "test:coverage": "pnpm -r --workspace-concurrency=1 --if-present test:coverage",
-    "lint": "pnpm -r --workspace-concurrency=1 --if-present lint",
-    "lint:fix": "pnpm -r --workspace-concurrency=1 --if-present lint:fix",
-    "build": "pnpm -r --workspace-concurrency=1 --if-present build",
-    "typecheck": "pnpm -r --workspace-concurrency=1 --if-present typecheck",
-    "check": "pnpm -r --workspace-concurrency=1 --if-present check",
+    "clean": "rm -rf node_modules pnpm-lock.yaml && rm -rf packages/*/node_modules && rm -rf examples/node_modules",
     "sync-version": "pnpm -r --workspace-concurrency=1 --if-present build && ./scripts/sync-version.sh && pnpm i"
   },
-  "author": "Platformatic Inc. <oss@platformatic.dev> (https://platformatic.dev)",
   "engines": {
-    "node": ">=22.16.0"
+    "node": ">=22.18.0"
   }
 }

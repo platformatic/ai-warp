@@ -1,6 +1,6 @@
-import { test } from 'node:test'
 import assert from 'node:assert'
-import { createApp, createDummyClient, mockOpenAiStream } from './helper/helper.ts'
+import { test } from 'node:test'
+import { createApp, createDummyClient, mockOpenAiStream } from './helper.ts'
 
 test('should be able to perform a basic prompt', async () => {
   const client = {
@@ -120,7 +120,7 @@ test('should call ai.close() when fastify closes', async () => {
   // Mock the ai.close method to track if it's called
   const originalClose = (app as any).ai.close
   if (originalClose) {
-    (app as any).ai.close = async () => {
+    ;(app as any).ai.close = async () => {
       closeCalled = true
       await originalClose()
     }
