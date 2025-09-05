@@ -104,6 +104,9 @@ importers:
       '@platformatic/fastify-ai':
         specifier: workspace:*
         version: link:../fastify-ai
+      '@platformatic/foundation':
+        specifier: ^3.0.2
+        version: 3.0.2
       '@platformatic/service':
         specifier: ^3.0.2
         version: 3.0.2(typescript@5.9.2)
