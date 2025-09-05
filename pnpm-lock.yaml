@@ -110,6 +110,9 @@ importers:
       '@platformatic/service':
         specifier: ^3.0.2
         version: 3.0.2(typescript@5.9.2)
+      ajv:
+        specifier: ^8.12.0
+        version: 8.17.1
       fastify-plugin:
         specifier: ^5.0.1
         version: 5.0.1

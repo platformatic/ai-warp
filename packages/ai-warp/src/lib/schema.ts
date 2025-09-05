@@ -1,6 +1,8 @@
 import { schema as serviceSchema } from '@platformatic/service'
+import { type JSONSchemaType } from 'ajv'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
+import type { AIWarpConfiguration } from '../config.js'
 
 export const packageJson = JSON.parse(readFileSync(resolve(import.meta.dirname, '../../package.json'), 'utf-8'))
 export const version = packageJson.version
@@ -259,7 +261,7 @@ export const schemaComponents = {
   auth
 }
 
-export const schema = structuredClone(serviceSchema)
+export const schema = structuredClone(serviceSchema) as JSONSchemaType<AIWarpConfiguration>
 
 schema.$id = `https://schemas.platformatic.dev/@platformatic/ai-warp/${packageJson.version}.json`
 schema.title = 'AI Warp configuration'
