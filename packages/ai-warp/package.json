@@ -1,54 +1,53 @@
 {
   "name": "@platformatic/ai-warp",
   "version": "1.0.0",
-  "type": "module",
-  "description": "The Platformatic warp AI service",
+  "description": "The Platformatic AI provider interface",
+  "homepage": "https://github.com/platformatic/ai-warp",
+  "author": "Platformatic Inc. <oss@platformatic.dev> (https://platformatic.dev)",
   "license": "Apache-2.0",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
-  "exports": {
-    ".": {
-      "import": "./dist/index.js",
-      "types": "./dist/index.d.ts",
-      "require": "./dist/index.js"
-    }
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/platformatic/ai-warp.git"
+  },
+  "keywords": [
+    "ai",
+    "warp"
+  ],
+  "bugs": {
+    "url": "https://github.com/platformatic/ai-warp/issues"
   },
   "files": [
     "dist",
+    "LICENSE",
     "README.md"
   ],
-  "bin": {
-    "create-ai-warp": "./dist/cli/create.js",
-    "start-ai-warp": "./dist/cli/start.js"
-  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "type": "module",
   "scripts": {
-    "service-create": "pnpm build && node ./dist/cli/create.js",
-    "service-start": "pnpm build && node ./dist/cli/start.js -c ./ai-warp-app/platformatic.json",
-    "build:config": "pnpm run build && node --experimental-strip-types src/lib/schema.ts --dump-schema  > schema.json && json2ts > config.d.ts < schema.json",
-    "test": "pnpm build && node --test --experimental-strip-types test/*.test.ts",
-    "test:coverage": "pnpm build && c8 -c test/config/c8-local.json node --test --env-file=test/config/env --no-warnings test/**.test.ts",
-    "lint": "eslint src test",
-    "lint:fix": "eslint src test --fix",
-    "build": "tsc -p tsconfig.build.json && cp config.d.ts dist/",
+    "build": "tsc -p tsconfig.build.json",
+    "prebuild": "node -e 'import {schema} from \"./src/lib/schema.ts\"; console.log(JSON.stringify(schema, null, 2))' > schema.json && json2ts > src/config.d.ts < schema.json",
+    "postbuild": "cp src/config.d.ts dist/config.d.ts",
+    "lint": "eslint --cache",
+    "test": "c8 --reporter text --reporter html node --disable-warning=ExperimentalWarning --experimental-strip-types --test --test-reporter=cleaner-spec-reporter --test-concurrency=1 --test-timeout=300000 test/*.test.ts",
     "typecheck": "tsc --noEmit",
-    "clean": "rm -rf dist;",
-    "check": "pnpm clean && pnpm lint && pnpm typecheck && pnpm test && pnpm build",
-    "prepublish": "pnpm build"
-  },
-  "author": "Platformatic Inc. <oss@platformatic.dev> (https://platformatic.dev)",
-  "engines": {
-    "node": ">=22.16.0"
+    "ci": "pnpm run lint && pnpm run test && pnpm run typecheck && pnpm run build",
+    "clean": "rm -rf dist",
+    "prepublishOnly": "pnpm run build",
+    "postpublish": "git push origin && git push origin -f --tags"
   },
   "dependencies": {
-    "@fastify/type-provider-typebox": "^5.2.0",
     "@fastify/error": "^4.2.0",
-    "@platformatic/config": "^2.72.0",
+    "@fastify/type-provider-typebox": "^5.2.0",
     "@platformatic/fastify-ai": "workspace:*",
-    "@platformatic/generators": "^2.72.0",
-    "@platformatic/service": "^2.72.0",
+    "@platformatic/foundation": "^3.0.2",
+    "@platformatic/service": "^3.0.2",
+    "ajv": "^8.12.0",
+    "fastify-plugin": "^5.0.1",
     "fastify-user": "^1.4.0"
   },
   "devDependencies": {
+    "@platformatic/generators": "^3.0.2",
     "@types/node": "^22.13.9",
     "c8": "^10.1.3",
     "cleaner-spec-reporter": "^0.5.0",
@@ -61,5 +60,8 @@
     "pino": "^9.7.0",
     "pino-pretty": "^13.0.0",
     "typescript": "^5.8.2"
+  },
+  "engines": {
+    "node": ">=22.18.0"
   }
 }

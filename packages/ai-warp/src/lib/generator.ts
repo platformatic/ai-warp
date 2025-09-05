@@ -1,24 +1,13 @@
-import { fileURLToPath } from 'node:url'
-import { join, dirname } from 'node:path'
-import { readFile } from 'node:fs/promises'
+import type { ConfigFieldDefinition } from '@platformatic/generators'
 import { Generator as ServiceGenerator } from '@platformatic/service'
-import { BaseGenerator } from '@platformatic/generators'
-import { schema } from './schema.js'
-import { generateGlobalTypesFile } from './templates/types.js'
-import { generatePlugins } from '@platformatic/generators/lib/create-plugin.js'
-
-interface PackageJson {
-  name: string
-  version: string
-  devDependencies: Record<string, string>
-}
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { packageJson, schema } from './schema.ts'
 
 const PLACEHOLDER_API_KEY = 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'
 
-class AiWarpGenerator extends ServiceGenerator {
-  private _packageJson: PackageJson | null = null
-
-  getDefaultConfig (): { [x: string]: BaseGenerator.JSONValue } {
+export class Generator extends ServiceGenerator {
+  getDefaultConfig () {
     const defaultBaseConfig = super.getDefaultConfig()
 
     const dir = import.meta.dirname || dirname(fileURLToPath(import.meta.url))
@@ -34,7 +23,7 @@ class AiWarpGenerator extends ServiceGenerator {
     return Object.assign({}, defaultBaseConfig, defaultConfig)
   }
 
-  getConfigFieldsDefinitions (): BaseGenerator.ConfigFieldDefinition[] {
+  getConfigFieldsDefinitions () {
     const serviceConfigFieldsDefs = super.getConfigFieldsDefinitions()
     return [
       ...serviceConfigFieldsDefs,
@@ -59,12 +48,11 @@ class AiWarpGenerator extends ServiceGenerator {
         type: 'string',
         configValue: 'aiGeminiApiKey'
       }
-    ]
+    ] as ConfigFieldDefinition[]
   }
 
-  async _getConfigFileContents (): Promise<{ [x: string]: BaseGenerator.JSONValue }> {
+  async _getConfigFileContents () {
     const baseConfig = await super._getConfigFileContents()
-    const packageJson = await this.getStackablePackageJson()
 
     const aiConfig = {
       providers: {},
@@ -94,7 +82,9 @@ class AiWarpGenerator extends ServiceGenerator {
     }
 
     const config = {
-      $schema: this.config.localSchema as boolean ? './stackable.schema.json' : `https://schemas.platformatic.dev/@platformatic/ai-warp/${packageJson.version}.json`,
+      $schema: (this.config.localSchema as boolean)
+        ? './stackable.schema.json'
+        : `https://schemas.platformatic.dev/@platformatic/ai-warp/${packageJson.version}.json`,
       module: packageJson.name,
       ai: aiConfig
     }
@@ -102,7 +92,7 @@ class AiWarpGenerator extends ServiceGenerator {
     return Object.assign({}, baseConfig, config)
   }
 
-  async _beforePrepare (): Promise<void> {
+  async _beforePrepare () {
     await super._beforePrepare()
 
     if (this.config.aiOpenaiApiKey) {
@@ -129,20 +119,13 @@ class AiWarpGenerator extends ServiceGenerator {
       this.addEnvVar('PLT_GEMINI_API_KEY', PLACEHOLDER_API_KEY, { overwrite: false, default: true })
     }
 
-    const packageJson = await this.getStackablePackageJson()
-
     this.config.dependencies = {
       [packageJson.name]: `^${packageJson.version}`
     }
   }
 
-  async _afterPrepare (): Promise<void> {
-    const packageJson = await this.getStackablePackageJson()
-    this.addFile({
-      path: '',
-      file: 'global.d.ts',
-      contents: generateGlobalTypesFile(packageJson.name)
-    })
+  async _afterPrepare () {
+    await super._afterPrepare()
 
     if (this.config.localSchema as boolean) {
       this.addFile({
@@ -151,36 +134,9 @@ class AiWarpGenerator extends ServiceGenerator {
         contents: JSON.stringify(schema, null, 2)
       })
     }
-
-    if (this.config.plugin !== undefined && this.config.plugin) {
-      const plugins = generatePlugins(this.config.typescript ?? false)
-      for (const plugin of plugins) {
-        this.addFile(plugin)
-      }
-    }
   }
 
-  async getStackablePackageJson (): Promise<PackageJson> {
-    if (this._packageJson == null) {
-      const packageJsonPath = this.config.aiWarpPackageJsonPath
-      const packageJsonFile = await readFile(packageJsonPath, 'utf8')
-      const packageJson: Partial<PackageJson> = JSON.parse(packageJsonFile)
-
-      if (packageJson.name === undefined || packageJson.name === null) {
-        throw new Error('Missing package name in package.json')
-      }
-
-      if (packageJson.version === undefined || packageJson.version === null) {
-        throw new Error('Missing package version in package.json')
-      }
-
-      this._packageJson = packageJson as PackageJson
-      return packageJson as PackageJson
-    }
-    return this._packageJson
-  }
-
-  async prepareQuestions (): Promise<void> {
+  async prepareQuestions () {
     this.questions.push({
       type: 'checkbox',
       name: 'aiProviders',
@@ -215,6 +171,3 @@ class AiWarpGenerator extends ServiceGenerator {
     })
   }
 }
-
-export default AiWarpGenerator
-export { AiWarpGenerator as Generator }

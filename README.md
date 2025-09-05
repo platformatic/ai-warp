@@ -37,7 +37,6 @@ Hello Alice, welcome to Watt 2.72.0!
 ? What is your OpenAI API key? [hidden]
 ? What is your Gemini API key? [hidden]
 ? Do you want to create another service? no
-? Do you want to use TypeScript? no
 ? What port do you want to use? 3042
 ```
 

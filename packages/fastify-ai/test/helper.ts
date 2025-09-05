@@ -1,6 +1,6 @@
-import pino, { type Logger } from 'pino'
 import fastify from 'fastify'
-import ai, { type AiPluginOptions, type AiChatHistory } from '../../src/index.ts'
+import pino, { type Logger } from 'pino'
+import ai, { type AiChatHistory, type AiPluginOptions } from '../src/index.ts'
 
 export async function createApp ({ client, logger, customOptions }: { client: any, logger?: Logger, customOptions?: Partial<AiPluginOptions> }) {
   if (!logger) {

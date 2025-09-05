@@ -1,0 +1,59 @@
+name: Publish release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'The version number to tag and release'
+        required: true
+        type: string
+      prerelease:
+        description: 'Release as pre-release'
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  release-npm:
+    runs-on: ubuntu-latest
+    environment: main
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Use supported Node.js Version
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Restore cached dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.pnpm-store
+          key: node-modules-${{ hashFiles('package.json') }}
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: latest
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Bump version
+        id: bump
+        run: |
+          pnpm -r exec pnpm version ${{ inputs.version }} --no-git-tag-version
+          new_version=$(pnpm version ${{ inputs.version }} --no-git-tag-version | tail -n 1)
+          echo "version=$new_version" >> $GITHUB_OUTPUT
+      - name: Commit version bump
+        run: |
+          git config --global user.name "${{ github.actor }}"
+          git config --global user.email "${{ github.actor }}@users.noreply.github.com"
+          git commit -a -m "Bumped ${{ steps.bump.outputs.version }}"
+          git push origin HEAD:${{ github.ref }}
+      - name: Publish new version
+        run: |
+          npm install npm -g
+          pnpm -r publish publish --access public --tag ${{ inputs.prerelease == true && 'next' || 'latest' }}
+      - name: Create release notes
+        run: |
+          npx @matteo.collina/release-notes -a ${{ secrets.GITHUB_TOKEN }} -t ${{ steps.bump.outputs.version }} -r ${{ github.repository }} ${{ github.event.inputs.prerelease == 'true' && '-p' || '' }} -c ${{ github.ref }}

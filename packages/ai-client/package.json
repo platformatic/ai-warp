@@ -2,19 +2,38 @@
   "name": "@platformatic/ai-client",
   "version": "1.0.0",
   "description": "The Platformatic AI client",
-  "license": "Apache-2.0",
-  "scripts": {
-    "test": "node --test --experimental-strip-types test/*.test.ts",
-    "test:coverage": "node --test --experimental-strip-types --experimental-test-coverage --test-coverage-lines 100 --test-coverage-functions 100 --test-coverage-exclude=test/** test/*.test.ts",
-    "lint": "eslint src test",
-    "lint:fix": "eslint src test --fix",
-    "build": "tsc -p tsconfig.build.json",
-    "typecheck": "tsc --noEmit",
-    "clean": "rm -rf dist;",
-    "check": "pnpm clean && pnpm lint && pnpm typecheck && pnpm test && pnpm build",
-    "prepublish": "pnpm build"
-  },
+  "homepage": "https://github.com/platformatic/ai-warp",
   "author": "Platformatic Inc. <oss@platformatic.dev> (https://platformatic.dev)",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/platformatic/ai-warp.git"
+  },
+  "keywords": [
+    "ai",
+    "client"
+  ],
+  "bugs": {
+    "url": "https://github.com/platformatic/ai-warp/issues"
+  },
+  "files": [
+    "dist",
+    "LICENSE",
+    "README.md"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "lint": "eslint --cache",
+    "test": "c8 --reporter text --reporter html node --disable-warning=ExperimentalWarning --experimental-strip-types --test --test-reporter=cleaner-spec-reporter --test-concurrency=1 --test-timeout=300000 test/*.test.ts",
+    "typecheck": "tsc --noEmit",
+    "ci": "pnpm run lint && pnpm run test && pnpm run typecheck && pnpm run build",
+    "clean": "rm -rf dist",
+    "prepublishOnly": "pnpm run build",
+    "postpublish": "git push origin && git push origin -f --tags"
+  },
   "devDependencies": {
     "@platformatic/ai-provider": "workspace:*",
     "@types/node": "^22.13.9",
@@ -28,18 +47,6 @@
     "typescript": "^5.8.2"
   },
   "engines": {
-    "node": ">=22.16.0"
-  },
-  "type": "module",
-  "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
-  "exports": {
-    ".": {
-      "import": "./dist/index.js",
-      "types": "./dist/index.d.ts"
-    }
-  },
-  "files": [
-    "dist"
-  ]
+    "node": ">=22.18.0"
+  }
 }
