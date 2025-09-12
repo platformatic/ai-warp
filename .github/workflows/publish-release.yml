@@ -53,7 +53,7 @@ jobs:
       - name: Publish new version
         run: |
           npm install npm -g
-          pnpm -r exec npm publish --access public --tag ${{ inputs.prerelease == true && 'next' || 'latest' }}
+          pnpm -r publish --access public --tag ${{ inputs.prerelease == true && 'next' || 'latest' }}
       - name: Create release notes
         run: |
           npx @matteo.collina/release-notes -a ${{ secrets.GITHUB_TOKEN }} -t ${{ steps.bump.outputs.version }} -r ${{ github.repository }} ${{ github.event.inputs.prerelease == 'true' && '-p' || '' }} -c ${{ github.ref }}
