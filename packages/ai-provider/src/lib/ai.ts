@@ -418,7 +418,7 @@ export class Ai {
    * @param models - List of models to select from
    * @param skip - List of models to skip
    * @returns Selected model with provider and limits
-   * TODO implement logic, for example round robin, random, least used, etc.
+   * TODO implement optional logic, for example round robin, random, least used, etc.
    */
   async selectModel (models: QueryModel[], skip?: string[]): Promise<ModelSelection | undefined> {
     if (models.length === 0) {
@@ -554,9 +554,12 @@ export class Ai {
     const context = await this.createContext(request)
 
     // Note the difference between request.sessionId and r.request.sessionId
-    // request.sessionId is the sessionId passed in the request
-    // r.request.sessionId is the sessionId of the request, that could be the request.sessionId or a new sessionId
+    // request.sessionId is the input sessionId
+    // r.request.sessionId is the sessionId of the request, that could be the input request.sessionId or a new sessionId
     if (context.request.resumeEventId && context.request.sessionId && context.request.stream) {
+      if(context.request.response !== ResponseType.SESSION) {
+        this.logger.warn('resumeEventId but response type is content')
+      }
       context.response.stream = createResponseStream(context.request.sessionId)
       this.resumeRequest(context.response.stream, context.request.sessionId, context.request.resumeEventId)
         .then((complete) => {
@@ -1123,18 +1126,18 @@ export class Ai {
   // retryable error: will retry with same model
   isErrorRetryableSameModel (error: FastifyError) {
     return error.code === 'PROVIDER_STREAM_ERROR' ||
-      error.code === 'PROVIDER_RESPONSE_ERROR' ||
-      error.code === 'PROVIDER_RESPONSE_MAX_TOKENS_ERROR'
+      error.code === 'PROVIDER_RESPONSE_ERROR'
   }
 
   isErrorToUpdateModelState (error: FastifyError) {
-    return error.code === 'PROVIDER_RATE_LIMIT_ERROR' ||
-      error.code === 'PROVIDER_REQUEST_TIMEOUT_ERROR' ||
-      error.code === 'PROVIDER_STREAM_ERROR' ||
-      error.code === 'PROVIDER_REQUEST_STREAM_TIMEOUT_ERROR' ||
+    return error.code === 'PROVIDER_STREAM_ERROR' ||
+      error.code === 'PROVIDER_RATE_LIMIT_ERROR' ||
       error.code === 'PROVIDER_RESPONSE_ERROR' ||
+      error.code === 'PROVIDER_REQUEST_TIMEOUT_ERROR' ||
+      error.code === 'PROVIDER_REQUEST_STREAM_TIMEOUT_ERROR' ||
       error.code === 'PROVIDER_RESPONSE_NO_CONTENT' ||
-      error.code === 'PROVIDER_EXCEEDED_QUOTA_ERROR'
+      error.code === 'PROVIDER_EXCEEDED_QUOTA_ERROR' ||
+      error.code === 'PROVIDER_RESPONSE_MAX_TOKENS_ERROR'
   }
 }
 

@@ -57,6 +57,7 @@ const response = await ai.request({
   }
 })
 
+// Response
 console.log(response.text)
 console.log(response.sessionId)
 
@@ -69,7 +70,7 @@ const streamResponse = await ai.request({
   }
 })
 
-// Process Node.js stream with for await loop
+// Process stream response
 try {
   for await (const chunk of streamResponse) {
     console.log('Chunk:', chunk.toString())
@@ -86,9 +87,9 @@ await ai.close()
 
 Configuration file settings are grouped as follows:
 
-### AiOptions
+### AI Options
 
-Main configuration object for the Ai class:
+Main configuration object for the AI class:
 
 - `logger` (Logger, required): Pino logger instance
 - `providers` (object, required): Provider configurations with API keys and optional custom clients
@@ -184,9 +185,10 @@ Make an AI request with automatic fallback and session management.
   - `temperature` (number, optional): Model temperature (0-1)
   - `maxTokens` (number, optional): Maximum tokens to generate
   - `stream` (boolean, optional): Enable streaming responses (default: false)
-  - `sessionId` (string, optional): Session identifier for conversation history
-  - `history` (array, optional): Previous conversation history
+  - `sessionId` (string, optional): Session identifier for conversation history; `sessionId` and `history` can't be provided at the same time
+  - `history` (array, optional): Previous conversation history; `sessionId` and `history` can't be provided at the same time
   - `resumeEventId` (string, optional): Specific event ID to resume from for stream continuation
+  - `response` (string, optional, default `content`): Indicate the response will contains only the response content from AI provider (default) or will include or also the session history including prompts (`session`). Values are `content` (default) and `session`. The `session` mode is preferred working with `resumeEventId`, see #ResumeResponse for a longer explaination
 
 #### `ai.close()`
 Close all provider connections and storage.
@@ -325,29 +327,18 @@ while (true) {
 }
 ```
 
-### Resume vs Fresh Requests
+### Resume Response
 
-```javascript
-// Fresh request - generates new content via AI model
-const freshResponse = await ai.request({
-  prompt: 'New conversation',
-  options: {
-    sessionId: 'existing-session',
-    stream: true
-    // No resumeEventId = fresh AI model call
-  }
-})
+TODO
 
-// Resume request - streams stored events from storage
-const resumeResponse = await ai.request({
-  prompt: 'Any prompt', // Ignored
-  options: {
-    sessionId: 'existing-session',
-    stream: true,
-    resumeEventId: 'last-received-event-id' // Streams from storage
-  }
-})
-```
+When working with resume, it's better to have a response type `session` to identify the content in the history.
+For example
+
+TODO
+
+Getting the content only can be confusing
+
+---
 
 ## 🗄️ Storage Architecture
 

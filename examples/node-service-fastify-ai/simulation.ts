@@ -1,13 +1,16 @@
 import { setTimeout as wait } from 'node:timers/promises'
-import type { AiChatHistory, AiContentResponse } from '@platformatic/ai-provider'
-import type { AskResponseContent, AskResponseStream } from '@platformatic/ai-client'
+import type { AiChatHistory } from '@platformatic/ai-provider'
+import type { AskResponseContent } from '@platformatic/ai-client'
 import { buildClient } from '@platformatic/ai-client'
 import { app } from './service.ts'
+
+const SIMULATE_RESUME = 'true'
 
 const url = 'http://localhost:3000'
 
 type Prompt = {
   stream?: boolean
+  resume?: boolean
   sessionId?: string
   history?: AiChatHistory
   prompts: string[]
@@ -17,18 +20,18 @@ type Prompt = {
 let lastSessionId: string | undefined
 const prompts: Prompt[] =
   [
-    {
-      stream: false,
-      prompts: [
-        'Can you help me to prepare a dinner?',
-        "I'd like to prepare a dinner for my 2 kids, they love fish and potatoes",
-        "Oh I forgot, they don't like garlic. Also, I don't think the cheese is a good idea to put on top of fish. Since you suggest to use the oven, add some tomatoes",
-        'Sounds delicious! Thank you'
-      ]
-    },
+    // {
+    //   stream: false,
+    //   prompts: [
+    //     'Can you help me to prepare a dinner?',
+    //     "I'd like to prepare a dinner for my 2 kids, they love fish and potatoes",
+    //     "Oh I forgot, they don't like garlic. Also, I don't think the cheese is a good idea to put on top of fish. Since you suggest to use the oven, add some tomatoes",
+    //     'Sounds delicious! Thank you'
+    //   ]
+    // },
 
     {
-      stream: false,
+      stream: true,
       prompts: [
         'Can you help me to prepare a dinner?',
         "I'd like to prepare a dinner for my 2 kids, they love fish and potatoes",
@@ -100,6 +103,15 @@ Italy is home to many beautiful seaside towns that are perfect for a family vaca
         'Can you help me to schedule a trip?',
         "I'd like to go on a nice sea town with my family in Italy",
       ]
+    },
+
+    {
+      stream: true,
+      resume: true,
+      prompts: [
+        'Can you help me to schedule a trip?',
+        "I'd like to go on a nice sea town with my family in Italy",
+      ]
     }
   ]
 
@@ -114,7 +126,8 @@ async function main() {
     promptPath: '/chat',
     streamPath: '/chat',
     headers: {
-      'Content-Type': 'application/json'
+      'Content-Type': 'application/json',
+      'x-resume': SIMULATE_RESUME
     }
   })
 
