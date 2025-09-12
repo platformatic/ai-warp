@@ -4,7 +4,7 @@ import { Readable, Transform } from 'node:stream'
 import type { Logger } from 'pino'
 import { type FastifyError } from '@fastify/error'
 
-import { type AiChatHistory, type Provider, type ProviderClient, type ProviderOptions, type ProviderRequestOptions, type ProviderResponse, type AiSessionId, createAiProvider, type AiEventId } from './provider.ts'
+import { type AiChatHistory, type Provider, type ProviderClient, type ProviderOptions, type ProviderRequestOptions, type ProviderResponse, type AiSessionId, createAiProvider, type AiEventId, type StreamResponseType } from './provider.ts'
 import { createStorage, type Storage, type AiStorageOptions } from './storage/index.ts'
 import { isStream, parseTimeWindow } from './utils.ts'
 import { HistoryGetError, ModelStateError, OptionError, ProviderNoModelsAvailableError, ProviderRateLimitError, ProviderRequestEndError, ProviderRequestStreamTimeoutError, ProviderRequestTimeoutError, ProviderStreamError } from './errors.ts'
@@ -83,7 +83,7 @@ export type ModelSelection = {
 }
 
 export type Request = {
-  prompt: string
+  prompt?: string
   models?: QueryModel[]
   options?: ProviderRequestOptions
 }
@@ -106,10 +106,11 @@ type ProviderContext = {
     resumeEventId?: AiEventId
     history?: AiChatHistory
     context?: string
-    prompt: string
+    prompt?: string
     temperature?: number
     onStreamChunk?: (response: string) => Promise<string>
     maxTokens?: number
+    streamResponseType: StreamResponseType
   }
 }
 
@@ -492,6 +493,9 @@ export class Ai {
     if (request.options?.resumeEventId && !request.options?.sessionId) {
       throw new OptionError('resumeEventId requires sessionId')
     }
+    if (!request.prompt && !request.options?.resumeEventId) {
+      throw new OptionError('prompt is missing')
+    }
 
     const context: ProviderContext = {
       sessionId: request.options?.sessionId ?? await this.createSessionId(),
@@ -508,6 +512,7 @@ export class Ai {
         temperature: request.options?.temperature,
         onStreamChunk: request.options?.onStreamChunk,
         maxTokens: request.options?.maxTokens,
+        streamResponseType: request.options?.streamResponseType ?? 'content',
       },
 
       response: {
@@ -557,14 +562,24 @@ export class Ai {
     // request.sessionId is the input sessionId
     // r.request.sessionId is the sessionId of the request, that could be the input request.sessionId or a new sessionId
     if (context.request.resumeEventId && context.request.sessionId && context.request.stream) {
-      if(context.request.response !== ResponseType.SESSION) {
-        this.logger.warn('resumeEventId but response type is content')
-      }
-      context.response.stream = createResponseStream(context.request.sessionId)
-      this.resumeRequest(context.response.stream, context.request.sessionId, context.request.resumeEventId)
+      const sessionId = context.request.sessionId!
+      context.response.stream = createResponseStream(sessionId)
+      this.resumeRequest(context.response.stream, sessionId, context.request.streamResponseType, context.request.resumeEventId)
         .then((complete) => {
+          // When the resume is complete: make a further request if prompt is provided or last event is a prompt
           if (!complete) {
-            return this._request(context)
+            if (context.request.prompt) { // TODO or lastEvent.data.prompt
+              return this._request(context)
+            }
+
+            // if the resume is complete but there is no prompt, send an end event and close the stream
+            const endEvent: HistoryEndEvent = {
+              event: 'end',
+              data: { response: 'COMPLETE' }
+            }
+            // TODO push end event to stream
+            context.response.stream!.push(null)
+            this.history.push(sessionId, createEventId(), endEvent, this.options.limits.historyExpiration)
           }
         })
         .catch((error) => {
@@ -577,19 +592,20 @@ export class Ai {
     return this._request(context)
   }
 
-  async _request (r: ProviderContext) {
+  async _request (context: ProviderContext) {
     try {
-      if (r.request.stream && !r.response.stream) {
-        r.response.stream = createResponseStream(r.sessionId)
+      if (context.request.stream && !context.response.stream) {
+        context.response.stream = createResponseStream(context.sessionId)
       }
-      return await this.providerRequest(r.sessionId, r) as Response
+      return await this.providerRequest(context.sessionId, context) as Response
     } catch (error) {
-      this.logger.error({ error, sessionId: r.sessionId }, 'ai request error')
+      this.logger.error({ error, sessionId: context.sessionId }, 'ai request error')
       throw error
     }
   }
 
   private async providerRequest (sessionId: AiSessionId, context: ProviderContext): Promise<ProviderResponse> {
+    const prompt: string = context.request.prompt!
     const models: QueryModel[] = context.request.models
     const skipModels: string[] = []
 
@@ -656,7 +672,7 @@ export class Ai {
         do {
           err = undefined
           try {
-            const providerPromise = selected.provider.provider.request(selected.model.name, context.request.prompt, options)
+            const providerPromise = selected.provider.provider.request(selected.model.name, prompt, options)
             providerResponse = await this.requestTimeout(
               providerPromise,
               this.options.limits.requestTimeout,
@@ -690,7 +706,7 @@ export class Ai {
         if (options.stream && isStream(providerResponse)) {
           // on retry the stream is already subscribed
           if (!context.response.subscribed) {
-            await this.subscribeToStorage(context.response.stream!, sessionId)
+            await this.subscribeToStorage(context.response.stream!, sessionId, context.request.streamResponseType)
             context.response.subscribed = true
           }
 
@@ -803,7 +819,10 @@ export class Ai {
     }
   }
 
-  async resumeRequest (stream: AiStreamResponse, sessionId: AiSessionId, resumeEventId: AiEventId): Promise<boolean> {
+  /**
+   * Resume a request from storage starting from a specific event id
+   */
+  async resumeRequest (stream: AiStreamResponse, sessionId: AiSessionId, streamResponseType: StreamResponseType, resumeEventId: AiEventId): Promise<boolean> {
     let complete = false
     try {
       const existingHistory = await this.history.rangeFromId(sessionId, resumeEventId)
@@ -826,7 +845,7 @@ export class Ai {
       }
 
       for (const event of events) {
-        this.sendEvent(stream, sessionId, event, complete)
+        this.sendEvent(stream, sessionId, streamResponseType, event, complete)
       }
     } catch (error) {
       this.logger.error({ error, sessionId }, 'Failed to resume stream')
@@ -835,18 +854,19 @@ export class Ai {
     return complete
   }
 
-  // Subscribe to storage updates for this session
-  async subscribeToStorage (stream: AiStreamResponse, sessionId: AiSessionId) {
-    const callback = (event: any) => this.sendEvent(stream, sessionId, event, false)
+  /** Subscribe to storage updates for this session and send events to the stream */
+  async subscribeToStorage (stream: AiStreamResponse, sessionId: AiSessionId, streamResponseType: StreamResponseType) {
+    const callback = (event: any) => this.sendEvent(stream, sessionId, streamResponseType, event, false)
     await this.storage.subscribe(sessionId, callback)
   }
 
-  sendEvent (stream: AiStreamResponse, sessionId: AiSessionId, event: any, close = true, callback?: (event: any) => void) {
+  sendEvent (stream: AiStreamResponse, sessionId: AiSessionId, streamResponseType: StreamResponseType, event: any, close = true, callback?: (event: any) => void) {
     try {
       if (event.event === 'content') {
         const encodedEvent = encodeEvent(event)
-        // TODO enable publish on prompt for realtime collaboration, handle on client side
-        if (event.type === 'prompt') {
+
+        // Filter out prompt events if streamResponseType is content
+        if (event.type === 'prompt' && streamResponseType === 'content') {
           return
         }
         stream.push(encodedEvent)
@@ -886,11 +906,6 @@ export class Ai {
 
           if (event.event === 'content') {
             const content = (event.data as any)?.response || ''
-
-            // TODO enable publish on prompt for realtime collaboration, handle on client side
-            if (event.type === 'prompt') {
-              continue
-            }
 
             const contentEvent: HistoryContentEvent = {
               event: 'content',

@@ -177,18 +177,18 @@ Initialize the AI instance, storage, and providers. Must be called before making
 #### `ai.request(request)`
 Make an AI request with automatic fallback and session management.
 
-**Options:**
-- `prompt` (string, required): User input prompt
+**Parameters:**
+- `prompt` (string, optional): User input prompt. It's required unless `resumeEventId` is set, in that case the response will be retrieved from the session, without performing a new request to the AI provider
 - `models` (array, optional): Specific models to use for this request
 - `options` (object, optional): Request configuration options
-  - `context` (string, optional): System context/instructions
-  - `temperature` (number, optional): Model temperature (0-1)
-  - `maxTokens` (number, optional): Maximum tokens to generate
+  - `context` (string, optional): System context/instructions for the AI
+  - `temperature` (number, optional): Model creativity/randomness (0-1, default varies by model)
+  - `maxTokens` (number, optional): Maximum tokens to generate in response
   - `stream` (boolean, optional): Enable streaming responses (default: false)
-  - `sessionId` (string, optional): Session identifier for conversation history; `sessionId` and `history` can't be provided at the same time
-  - `history` (array, optional): Previous conversation history; `sessionId` and `history` can't be provided at the same time
-  - `resumeEventId` (string, optional): Specific event ID to resume from for stream continuation
-  - `response` (string, optional, default `content`): Indicate the response will contains only the response content from AI provider (default) or will include or also the session history including prompts (`session`). Values are `content` (default) and `session`. The `session` mode is preferred working with `resumeEventId`, see #ResumeResponse for a longer explaination
+  - `sessionId` (string, optional): Session ID for conversation history (mutually exclusive with `history`)
+  - `history` (array, optional): Previous conversation history array (mutually exclusive with `sessionId`)
+  - `resumeEventId` (string, optional): Event ID to resume streaming from (requires `sessionId` and `stream: true`)
+  - `streamResponseType` (string, optional): Response streaming format - `'content'` (default) returns only AI responses, `'session'` includes both prompts and responses (recommended for stream resumption); see [Resume Response section](#resume-response) for details.
 
 #### `ai.close()`
 Close all provider connections and storage.
@@ -329,14 +329,85 @@ while (true) {
 
 ### Resume Response
 
-TODO
+When resuming streams, you can specify the response format using the `streamResponseType` option:
 
-When working with resume, it's better to have a response type `session` to identify the content in the history.
-For example
+#### Content Response (Default)
+The `content` format returns only AI-generated responses, filtering out user prompts. This is the default behavior and provides a clean stream of just the AI content.
 
-TODO
+```javascript
+const resumeStream = await ai.request({
+  prompt: 'Continue the story', // Ignored during resume
+  options: {
+    stream: true,
+    sessionId: 'session-123',
+    resumeEventId: 'event-uuid-123'
+    // streamResponseType: 'content' is default
+  }
+})
 
-Getting the content only can be confusing
+// Stream contains only response content:
+// id: event-uuid-124
+// event: content
+// data: {"response": "AI response text"}
+```
+
+When resuming from a specific event in a session with multiple conversations, only the content after the specified `resumeEventId` is streamed, excluding any subsequent prompts and responses:
+
+```javascript
+// Session history example:
+// [prompt1] -> [response1-chunk1, response1-chunk2] -> [prompt2] -> [response2-chunk1]
+
+const resumeStream = await ai.request({
+  prompt: 'ignored',
+  options: {
+    stream: true,
+    sessionId: 'session-123',
+    resumeEventId: 'response1-chunk1-id', // Resume from middle of first response
+    streamResponseType: 'content' // Only response content
+  }
+})
+
+// Will stream: response1-chunk2, response2-chunk1
+// Will NOT stream: prompt2 (filtered out)
+```
+
+#### Session Response
+The `session` format includes both user prompts and AI responses, providing complete conversation context. This is recommended when resuming streams as it offers full visibility into the conversation flow:
+
+```javascript
+const resumeStream = await ai.request({
+  prompt: 'Continue the story', // Ignored during resume
+  options: {
+    stream: true,
+    sessionId: 'session-123',
+    resumeEventId: 'event-uuid-123',
+    streamResponseType: 'session' // Include full session history
+  }
+})
+
+// Stream contains both prompts and responses in chronological order:
+// id: event-uuid-123
+// event: content
+// data: {"prompt": "Write a story about space", "type": "prompt"}
+// 
+// id: event-uuid-124
+// event: content
+// data: {"response": "Once upon a time, in a galaxy far away...", "type": "response"}
+// 
+// id: event-uuid-125
+// event: content
+// data: {"prompt": "Add more details about the spaceship", "type": "prompt"}
+// 
+// id: event-uuid-126
+// event: content
+// data: {"response": "The spaceship was massive, with gleaming metal hull...", "type": "response"}
+// 
+// id: event-uuid-127
+// event: end
+// data: {"response": "COMPLETE"}
+```
+
+This format provides complete conversation context, making it ideal for applications that need to distinguish between user inputs and AI responses during stream resumption.
 
 ---
 

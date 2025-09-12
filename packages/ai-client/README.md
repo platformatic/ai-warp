@@ -298,6 +298,8 @@ The client automatically tracks event IDs from all streaming responses. When you
 
 **Important**: The ai-provider will respond with the complete remaining response starting from the requested event ID. This means you'll receive all events from that point onwards, including any events you may have already processed before the interruption. The client handles this transparently by tracking the last received event ID automatically.
 
+See the example below
+
 #### AI-Provider Stream Flow
 
 The ai-provider handles streaming and resume through a sophisticated storage-based system:

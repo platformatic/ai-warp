@@ -15,6 +15,7 @@ export type AiChatHistory = {
 export type AiSessionId = string
 export type AiEventId = string
 
+export type StreamResponseType = 'content' | 'session'
 export type ProviderRequestOptions = {
   context?: string
   history?: AiChatHistory
@@ -22,6 +23,7 @@ export type ProviderRequestOptions = {
   resumeEventId?: AiEventId
   temperature?: number
   stream?: boolean
+  streamResponseType?: StreamResponseType
   onStreamChunk?: (response: string) => Promise<string>
   maxTokens?: number
 }
