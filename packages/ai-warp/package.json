@@ -18,6 +18,7 @@
   },
   "files": [
     "dist",
+    "schema.json",
     "LICENSE",
     "README.md"
   ],
@@ -33,7 +34,7 @@
     "typecheck": "tsc --noEmit",
     "ci": "pnpm run lint && pnpm run test && pnpm run typecheck && pnpm run build",
     "clean": "rm -rf dist",
-    "prepublishOnly": "pnpm run build",
+    "prepublishOnly": "pnpm run build && rm dist/tsconfig.build.tsbuildinfo",
     "postpublish": "git push origin && git push origin -f --tags"
   },
   "dependencies": {
