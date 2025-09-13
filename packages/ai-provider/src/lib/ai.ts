@@ -9,7 +9,7 @@ import { createStorage, type Storage, type AiStorageOptions } from './storage/in
 import { isStream, parseTimeWindow } from './utils.ts'
 import { HistoryGetError, ModelStateError, OptionError, ProviderNoModelsAvailableError, ProviderRateLimitError, ProviderRequestEndError, ProviderRequestStreamTimeoutError, ProviderRequestTimeoutError, ProviderStreamError } from './errors.ts'
 import { DEFAULT_HISTORY_EXPIRATION, DEFAULT_MAX_RETRIES, DEFAULT_RATE_LIMIT_MAX, DEFAULT_RATE_LIMIT_TIME_WINDOW, DEFAULT_REQUEST_TIMEOUT, DEFAULT_RESTORE_PROVIDER_COMMUNICATION_ERROR, DEFAULT_RESTORE_PROVIDER_EXCEEDED_QUOTA_ERROR, DEFAULT_RESTORE_RATE_LIMIT, DEFAULT_RESTORE_REQUEST_TIMEOUT, DEFAULT_RESTORE_RETRY, DEFAULT_RETRY_INTERVAL, DEFAULT_STORAGE } from './config.ts'
-import { createEventId, decodeEventStream, encodeEvent, type AiStreamEvent } from './event.ts'
+import { createEventId, decodeEventStream, encodeEvent, type AiStreamEvent, type AiStreamEventPrompt } from './event.ts'
 
 // supported providers
 export type AiProvider = 'openai' | 'deepseek' | 'gemini'
@@ -565,22 +565,22 @@ export class Ai {
       const sessionId = context.request.sessionId!
       context.response.stream = createResponseStream(sessionId)
       this.resumeRequest(context.response.stream, sessionId, context.request.streamResponseType, context.request.resumeEventId)
-        .then((complete) => {
+        .then(({ complete, prompt }) => {
           // When the resume is complete: make a further request if prompt is provided or last event is a prompt
-          if (!complete) {
-            if (context.request.prompt) { // TODO or lastEvent.data.prompt
-              return this._request(context)
-            }
-
-            // if the resume is complete but there is no prompt, send an end event and close the stream
-            const endEvent: HistoryEndEvent = {
-              event: 'end',
-              data: { response: 'COMPLETE' }
-            }
-            // TODO push end event to stream
-            context.response.stream!.push(null)
-            this.history.push(sessionId, createEventId(), endEvent, this.options.limits.historyExpiration)
+          if (!complete || context.request.prompt || prompt) {
+            if (prompt) { context.request.prompt = prompt }
+            // TODO edge case: can be 2 requests in case of context.request.prompt and prompt
+            return this._request(context)
           }
+
+          // if the resume is complete but there is no prompt, send an end event and close the stream
+          const endEvent: HistoryEndEvent = {
+            event: 'end',
+            data: { response: 'COMPLETE' }
+          }
+          context.response.stream!.push(encodeEvent({ id: createEventId(), ...endEvent }))
+          context.response.stream!.push(null)
+          this.history.push(sessionId, createEventId(), endEvent, this.options.limits.historyExpiration)
         })
         .catch((error) => {
           this.logger.error({ error, sessionId: context.request.sessionId }, 'Failed to resume stream, proceed with new request')
@@ -644,6 +644,15 @@ export class Ai {
       data: { prompt: context.request.prompt },
       type: 'prompt'
     }, this.options.limits.historyExpiration, false)
+
+    if (context.request.resumeEventId && context.request.streamResponseType === 'session') {
+      // ongoing resume stream response, send prompt
+      context.response.stream!.push(encodeEvent({
+        id: createEventId(),
+        event: 'content',
+        data: { prompt: context.request.prompt }
+      } as AiStreamEvent))
+    }
 
     const options = {
       context: context.request.context,
@@ -822,26 +831,46 @@ export class Ai {
   /**
    * Resume a request from storage starting from a specific event id
    */
-  async resumeRequest (stream: AiStreamResponse, sessionId: AiSessionId, streamResponseType: StreamResponseType, resumeEventId: AiEventId): Promise<boolean> {
+  async resumeRequest (stream: AiStreamResponse, sessionId: AiSessionId, streamResponseType: StreamResponseType, resumeEventId: AiEventId): Promise<{ complete: boolean, prompt: string | undefined }> {
     let complete = false
+    let prompt: string | undefined
+
     try {
       const existingHistory = await this.history.rangeFromId(sessionId, resumeEventId)
-
-      // lookup
       const events = []
-      for (const event of existingHistory) {
-        // do not send content on error
-        if (event?.event === 'error') {
-          events.length = 0
-          break
-        }
 
-        events.push(event)
-        // stop on end or error
-        if (event?.event === 'end') {
-          complete = event.data.response === 'COMPLETE'
-          break
+      console.log('existingHistory', existingHistory)
+
+      // on streamResponseType === 'content', send events of a single response
+      if (streamResponseType === 'content') {
+        for (const event of existingHistory) {
+          // do not send content on error
+          if (event?.event === 'error') {
+            events.length = 0
+            break
+          }
+
+          events.push(event)
+          // stop on end
+          if (event?.event === 'end') {
+            complete = event.data.response === 'COMPLETE'
+            break
+          }
         }
+      } else if (streamResponseType === 'session') {
+        // send all events but response with error
+        for (const event of existingHistory) {
+          // skip response containing error
+          if (event?.event === 'error' || event?.event === 'end') {
+            continue
+          }
+          events.push(event)
+        }
+      }
+
+      const lastEvent = existingHistory.at(-1) as AiStreamEvent
+      if (lastEvent?.event === 'content' && lastEvent.type === 'prompt') {
+        prompt = (lastEvent as unknown as AiStreamEventPrompt).prompt
       }
 
       for (const event of events) {
@@ -851,7 +880,7 @@ export class Ai {
       this.logger.error({ error, sessionId }, 'Failed to resume stream')
     }
 
-    return complete
+    return { complete, prompt }
   }
 
   /** Subscribe to storage updates for this session and send events to the stream */

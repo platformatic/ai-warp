@@ -142,8 +142,8 @@ export function mockGeminiStream (chunks: any[], error?: any) {
   return readable
 }
 
-export async function consumeStream (response: Readable): Promise<{ content: string[], end: string }> {
-  const content: string[] = []
+export async function consumeStream (response: Readable, responseType: 'session' | 'content' = 'content'): Promise<{ content: string[] | Object[], end: string }> {
+  const content: string[] | Object[] = []
   let end: string = ''
 
   return new Promise((resolve, reject) => {
@@ -155,11 +155,14 @@ export async function consumeStream (response: Readable): Promise<{ content: str
       const lines = eventData.split('\n')
 
       let currentEvent: string | null = null
+      let currentId: string | null = null
       let currentData: string | null = null
 
       for (const line of lines) {
         if (line.startsWith('event: ')) {
           currentEvent = line.substring(7).trim()
+        } else if (line.startsWith('id: ')) {
+          currentId = line.substring(4).trim()
         } else if (line.startsWith('data: ')) {
           currentData = line.substring(6).trim()
         } else if (line === '' && currentEvent && currentData) {
@@ -167,7 +170,7 @@ export async function consumeStream (response: Readable): Promise<{ content: str
           try {
             const parsedData = JSON.parse(currentData)
             if (currentEvent === 'content') {
-              content.push(parsedData.response)
+              content.push(responseType === 'content' ? parsedData.response : { id: currentId, event: currentEvent, data: parsedData })
             } else if (currentEvent === 'end') {
               end = parsedData.response
             }

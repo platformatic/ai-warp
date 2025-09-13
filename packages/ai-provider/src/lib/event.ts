@@ -19,6 +19,10 @@ export interface AiStreamEventContent {
   response: string
 }
 
+export interface AiStreamEventPrompt {
+  prompt: string
+}
+
 export interface AiStreamEventEnd {
   response: AiResponseResult
 }
@@ -29,7 +33,7 @@ export type AiStreamEvent = {
   id: string
   event: 'content'
   type: AiStreamEventType
-  data: AiStreamEventContent
+  data: AiStreamEventContent | AiStreamEventPrompt
 } |
 {
   id: string
