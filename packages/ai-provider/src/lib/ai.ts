@@ -633,6 +633,7 @@ export class Ai {
 
     // this is necessary in case the request is not resuming
     const history = await this.getHistory(context.request.sessionId, context.request.history)
+    console.log('history', history)
     const promptEventId = context.request.promptEventId ?? history.promptEventId ?? createEventId()
 
     this.history.push(sessionId, promptEventId, {
@@ -1011,22 +1012,41 @@ export class Ai {
     // TODO get and update history should be atomic for concurrent requests with same sessionId
 
     // load history from storage
-    let filteredHistory: AiStreamEvent[] = []
+    let contentHistory: AiStreamEvent[] = []
     try {
       const storedHistory = await this.history.range(sessionId!)
       if (!storedHistory || storedHistory.length < 1) { return { messages: [], promptEventId: undefined } }
 
-      // remove signal content events (error, end)
-      filteredHistory = storedHistory.filter((event: any) => event.event === 'content')
+      let prompt
+      let buffer: AiStreamEvent[] = []
+      for(const event of storedHistory) {
+        if (event?.type === 'prompt') {
+          // @ts-ignore
+          prompt = event
+          continue
+        }
+
+        if (event?.event === 'error') {
+          buffer.length = 0
+          continue
+        } else if (event?.event === 'end') {
+          contentHistory.push(prompt)
+          contentHistory.push(...buffer)
+          buffer.length = 0
+          prompt = undefined
+        }
+
+        buffer.push(event)
+      }
     } catch (err) {
       this.logger.error({ err, sessionId }, 'Failed to get history')
     }
 
-    if (filteredHistory.length < 1) {
+    if (contentHistory.length < 1) {
       return { messages: [], promptEventId: undefined }
     }
 
-    const lastEvent: AiStreamEvent = filteredHistory?.at(-1)!
+    const lastEvent: AiStreamEvent = contentHistory?.at(-1)!
     let messages: AiStreamEvent[] = []
     let promptEventId: AiEventId | undefined
 
@@ -1040,16 +1060,16 @@ export class Ai {
     // when last event is not end, last request is incomplete
     if (lastEvent.event !== 'end') {
       // go backward to get last prompt, if any
-      for (let i = filteredHistory.length - 1; i >= 0; i--) {
+      for (let i = contentHistory.length - 1; i >= 0; i--) {
         // @ts-ignore TODO fix types
-        if (filteredHistory[i].type === 'prompt') {
-          promptEventId = filteredHistory[i].id
-          messages = filteredHistory.slice(0, i)
+        if (contentHistory[i].type === 'prompt') {
+          promptEventId = contentHistory[i].id
+          messages = contentHistory.slice(0, i)
           break
         }
       }
     } else {
-      messages = filteredHistory ?? []
+      messages = contentHistory ?? []
     }
 
     return { messages: this.compactHistory(messages), promptEventId }
