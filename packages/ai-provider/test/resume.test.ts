@@ -49,10 +49,10 @@ test('should resume stream from first event ID', async (t) => {
   const originalSessionId = (originalResponse as any).sessionId
   assert.ok(originalSessionId)
 
-{  const { content, chunks } = await consumeStream(originalResponse, 'content')
-  assert.equal(chunks, 4)
-  assert.equal(content.join(''), 'Hello world!')
-}
+  { const { content, chunks } = await consumeStream(originalResponse, 'content')
+    assert.equal(chunks, 4)
+    assert.equal(content.join(''), 'Hello world!')
+  }
 
   // Wait a bit for background processing to complete
   await new Promise(resolve => setTimeout(resolve, 100))
@@ -78,11 +78,11 @@ test('should resume stream from first event ID', async (t) => {
   assert.ok(isStream(resumedResponse), 'Response should be a stream-like object')
   assert.equal((resumedResponse as any).sessionId, originalSessionId)
 
-{  // Should have received some chunks from the resume
-  const { content, chunks } = await consumeStream(resumedResponse, 'content')
-  assert.equal(chunks, 4)
-  assert.equal(content.join(''), 'Hello world!')
-}
+  {  // Should have received some chunks from the resume
+    const { content, chunks } = await consumeStream(resumedResponse, 'content')
+    assert.equal(chunks, 4)
+    assert.equal(content.join(''), 'Hello world!')
+  }
   // Verify that we only made one call to the provider (the original request)
   // The resume should not call the provider again
   assert.equal(client.stream.mock.calls.length, 1, 'Should have made one call to the provider')
@@ -525,26 +525,414 @@ test('should resume the session by a specific resume event id', async (t) => {
   }
 })
 
-test('should perform a provider request resuming an incomplete response with stream response type session', async (t) => {
+test.only('should perform a provider request resuming an incomplete response with stream response type session', async (t) => {
+  const client = {
+    ...createDummyClient(),
+    stream: mock.fn(async (_,request) => {
+      console.log(request.messages)
+
+if(request.messages.at(-1)?.content === 'First prompt') {
+  return mockOpenAiStream([
+    { choices: [{ delta: { content: 'Replace first prompt ' } }] },
+    { choices: [{ delta: { content: 'incomplete response' }, finish_reason: 'stop' }] }
+  ])
+} else if (request.messages.at(-1)?.content === 'Continue conversation') {
+  return mockOpenAiStream([
+    { choices: [{ delta: { content: 'Next ' } }] },
+    { choices: [{ delta: { content: 'response' }, finish_reason: 'stop' }] }
+  ])
+}
+      return mockOpenAiStream([      ])
+    })
+  }
+  const ai = await createAi({ t, client })
+
+  const sessionId = randomUUID()
+  const resumeEventId = randomUUID()
+
+  // Set up incomplete response history
+  await ai.history.push(sessionId, resumeEventId, {
+    event: 'content',
+    data: { prompt: 'First prompt' },
+    type: 'prompt'
+  }, historyExpiration)
+
+  await ai.history.push(sessionId, randomUUID(), {
+    event: 'content',
+    data: { response: 'Incomplete response chunk #1' },
+    type: 'response'
+  }, historyExpiration)
+  await ai.history.push(sessionId, randomUUID(), {
+    event: 'content',
+    data: { response: 'Incomplete response chunk #2' },
+    type: 'response'
+  }, historyExpiration)
+  // No 'end' event - simulates incomplete response
+
+  const response = await ai.request({
+    prompt: 'Continue conversation',
+    options: {
+      stream: true,
+      sessionId,
+      resumeEventId,
+      streamResponseType: 'session'
+    }
+  }) as AiStreamResponse
+
+  const { content } = await consumeStream(response, 'session')
+
+  console.log('content', content)
+
+  assert.equal(client.stream.mock.calls.length, 2, 'Should perform one provider request for incomplete response')
+  assert.equal(content.length, 5, 'Should return session content')
+  assert.deepEqual(content[0], { id: resumeEventId, event: 'content', data: { prompt: 'First prompt' } })
+  assert.deepEqual({ data: content[1].data, event: 'content' }, { event: 'content', data: { response: 'Replace first prompt ' } })
+  assert.deepEqual({ data: content[2].data, event: 'content' }, { event: 'content', data: { response: 'incomplete response' } })
+  assert.deepEqual({ data: content[3].data, event: 'content' }, { event: 'content', data: { prompt: 'Continue conversation' } })
+  assert.deepEqual({ data: content[4].data, event: 'content' }, { event: 'content', data: { response: 'Next response' } })
 })
 
 test('should not perform a provider request resuming an incomplete response with stream response type content', async (t) => {
+  const client = {
+    ...createDummyClient(),
+    stream: mock.fn(async () => {
+      return mockOpenAiStream([
+        { choices: [{ delta: { content: 'Should not be called' }, finish_reason: 'stop' }] }
+      ])
+    })
+  }
+  const ai = await createAi({ t, client })
+
+  const sessionId = randomUUID()
+  const resumeEventId = randomUUID()
+
+  // Set up incomplete response history
+  await ai.history.push(sessionId, resumeEventId, {
+    event: 'content',
+    data: { prompt: 'Test prompt' },
+    type: 'prompt'
+  }, historyExpiration)
+
+  await ai.history.push(sessionId, randomUUID(), {
+    event: 'content',
+    data: { response: 'Partial response' },
+    type: 'response'
+  }, historyExpiration)
+  // No 'end' event - simulates incomplete response
+
+  const response = await ai.request({
+    options: {
+      stream: true,
+      sessionId,
+      resumeEventId,
+      streamResponseType: 'content'
+    }
+  }) as AiStreamResponse
+
+  const { content } = await consumeStream(response, 'content')
+
+  assert.equal(client.stream.mock.calls.length, 0, 'Should not perform provider request when resuming incomplete response with content type')
+  assert.equal(content.join(''), 'Partial response', 'Should return existing partial response')
 })
 
 test('should perform 1 provider request resuming an incomplete response where last event is a prompt and the request has a prompt too, with response type content', async (t) => {
+  const client = {
+    ...createDummyClient(),
+    stream: mock.fn(async () => {
+      return mockOpenAiStream([
+        { choices: [{ delta: { content: 'Combined response' }, finish_reason: 'stop' }] }
+      ])
+    })
+  }
+  const ai = await createAi({ t, client })
+
+  const sessionId = randomUUID()
+  const resumeEventId = randomUUID()
+
+  // Set up history where last event is a prompt (incomplete)
+  await ai.history.push(sessionId, resumeEventId, {
+    event: 'content',
+    data: { prompt: 'Previous prompt' },
+    type: 'prompt'
+  }, historyExpiration)
+
+  await ai.history.push(sessionId, randomUUID(), {
+    event: 'content',
+    data: { response: 'Previous response' },
+    type: 'response'
+  }, historyExpiration)
+
+  await ai.history.push(sessionId, randomUUID(), {
+    event: 'end',
+    data: { response: 'COMPLETE' }
+  }, historyExpiration)
+
+  // Last event is another prompt without response
+  await ai.history.push(sessionId, randomUUID(), {
+    event: 'content',
+    data: { prompt: 'Hanging prompt' },
+    type: 'prompt'
+  }, historyExpiration)
+
+  const response = await ai.request({
+    prompt: 'New prompt',
+    options: {
+      stream: true,
+      sessionId,
+      resumeEventId,
+      streamResponseType: 'content'
+    }
+  }) as AiStreamResponse
+
+  const { content } = await consumeStream(response, 'content')
+
+  assert.equal(client.stream.mock.calls.length, 1, 'Should perform one provider request when both history and request have prompts')
+  assert.equal(content.join(''), 'Combined response', 'Should return new response')
 })
 
 test('should perform 2 provider requests resuming an incomplete response where last event is a prompt and the request has a prompt too, with response type session', async (t) => {
+  const client = {
+    ...createDummyClient(),
+    stream: mock.fn(async () => {
+      return mockOpenAiStream([
+        { choices: [{ delta: { content: 'Response for hanging prompt' }, finish_reason: 'stop' }] }
+      ])
+    })
+  }
+  const ai = await createAi({ t, client })
+
+  const sessionId = randomUUID()
+  const resumeEventId = randomUUID()
+
+  // Set up history where last event is a prompt (incomplete)
+  await ai.history.push(sessionId, resumeEventId, {
+    event: 'content',
+    data: { prompt: 'Previous prompt' },
+    type: 'prompt'
+  }, historyExpiration)
+
+  await ai.history.push(sessionId, randomUUID(), {
+    event: 'content',
+    data: { response: 'Previous response' },
+    type: 'response'
+  }, historyExpiration)
+
+  // Last event is a prompt without response
+  await ai.history.push(sessionId, randomUUID(), {
+    event: 'content',
+    data: { prompt: 'Hanging prompt' },
+    type: 'prompt'
+  }, historyExpiration)
+
+  const response = await ai.request({
+    prompt: 'Additional prompt',
+    options: {
+      stream: true,
+      sessionId,
+      resumeEventId,
+      streamResponseType: 'session'
+    }
+  }) as AiStreamResponse
+
+  const { content } = await consumeStream(response, 'session')
+
+  // With session response type, it should make 2 requests:
+  // 1. For the hanging prompt in history
+  // 2. For the new prompt in the request
+  assert.equal(client.stream.mock.calls.length, 2, 'Should perform two provider requests for session type with dual prompts')
+  assert.ok(content.length > 0, 'Should return session content')
 })
 
 test('should perform 1 provider request resuming an incomplete response where last event is a prompt and the request doesnt have a prompt, with response type content', async (t) => {
+  const client = {
+    ...createDummyClient(),
+    stream: mock.fn(async () => {
+      return mockOpenAiStream([
+        { choices: [{ delta: { content: 'Response to hanging prompt' }, finish_reason: 'stop' }] }
+      ])
+    })
+  }
+  const ai = await createAi({ t, client })
+
+  const sessionId = randomUUID()
+  const resumeEventId = randomUUID()
+
+  // Set up history where last event is a prompt (incomplete)
+  await ai.history.push(sessionId, resumeEventId, {
+    event: 'content',
+    data: { prompt: 'Previous prompt' },
+    type: 'prompt'
+  }, historyExpiration)
+
+  await ai.history.push(sessionId, randomUUID(), {
+    event: 'content',
+    data: { response: 'Previous response' },
+    type: 'response'
+  }, historyExpiration)
+
+  // Last event is a prompt without response
+  await ai.history.push(sessionId, randomUUID(), {
+    event: 'content',
+    data: { prompt: 'Hanging prompt' },
+    type: 'prompt'
+  }, historyExpiration)
+
+  const response = await ai.request({
+    options: {
+      stream: true,
+      sessionId,
+      resumeEventId,
+      streamResponseType: 'content'
+    }
+  }) as AiStreamResponse
+
+  const { content } = await consumeStream(response, 'content')
+
+  assert.equal(client.stream.mock.calls.length, 1, 'Should perform one provider request for hanging prompt')
+  assert.equal(content.join(''), 'Response to hanging prompt', 'Should return response to hanging prompt')
 })
 
 test('should perform 1 provider request resuming an incomplete response where last event is a prompt and the request doesnt have a prompt, with response type session', async (t) => {
+  const client = {
+    ...createDummyClient(),
+    stream: mock.fn(async () => {
+      return mockOpenAiStream([
+        { choices: [{ delta: { content: 'Response to hanging prompt' }, finish_reason: 'stop' }] }
+      ])
+    })
+  }
+  const ai = await createAi({ t, client })
+
+  const sessionId = randomUUID()
+  const resumeEventId = randomUUID()
+
+  // Set up history where last event is a prompt (incomplete)
+  await ai.history.push(sessionId, resumeEventId, {
+    event: 'content',
+    data: { prompt: 'Previous prompt' },
+    type: 'prompt'
+  }, historyExpiration)
+
+  await ai.history.push(sessionId, randomUUID(), {
+    event: 'content',
+    data: { response: 'Previous response' },
+    type: 'response'
+  }, historyExpiration)
+
+  // Last event is a prompt without response
+  await ai.history.push(sessionId, randomUUID(), {
+    event: 'content',
+    data: { prompt: 'Hanging prompt' },
+    type: 'prompt'
+  }, historyExpiration)
+
+  const response = await ai.request({
+    options: {
+      stream: true,
+      sessionId,
+      resumeEventId,
+      streamResponseType: 'session'
+    }
+  }) as AiStreamResponse
+
+  const { content } = await consumeStream(response, 'session')
+
+  assert.equal(client.stream.mock.calls.length, 1, 'Should perform one provider request for hanging prompt with session type')
+  assert.ok(content.length > 0, 'Should return session content')
 })
 
 test('should perform 1 provider request resuming an incomplete response where last event is an error, with response type session', async (t) => {
+  const client = {
+    ...createDummyClient(),
+    stream: mock.fn(async () => {
+      return mockOpenAiStream([
+        { choices: [{ delta: { content: 'Retry response' }, finish_reason: 'stop' }] }
+      ])
+    })
+  }
+  const ai = await createAi({ t, client })
+
+  const sessionId = randomUUID()
+  const resumeEventId = randomUUID()
+
+  // Set up history ending with an error
+  await ai.history.push(sessionId, resumeEventId, {
+    event: 'content',
+    data: { prompt: 'Test prompt' },
+    type: 'prompt'
+  }, historyExpiration)
+
+  await ai.history.push(sessionId, randomUUID(), {
+    event: 'content',
+    data: { response: 'Partial response' },
+    type: 'response'
+  }, historyExpiration)
+
+  await ai.history.push(sessionId, randomUUID(), {
+    event: 'error',
+    data: { code: 'PROVIDER_ERROR', message: 'Network timeout' },
+  }, historyExpiration)
+
+  const response = await ai.request({
+    prompt: 'Retry prompt',
+    options: {
+      stream: true,
+      sessionId,
+      resumeEventId,
+      streamResponseType: 'session'
+    }
+  }) as AiStreamResponse
+
+  const { content } = await consumeStream(response, 'session')
+
+  assert.equal(client.stream.mock.calls.length, 1, 'Should perform one provider request when resuming from error with session type')
+  assert.ok(content.length > 0, 'Should return session content after error recovery')
 })
 
 test('should perform 1 provider request resuming an incomplete response where last event is an error, with response type content', async (t) => {
+  const client = {
+    ...createDummyClient(),
+    stream: mock.fn(async () => {
+      return mockOpenAiStream([
+        { choices: [{ delta: { content: 'Retry response' }, finish_reason: 'stop' }] }
+      ])
+    })
+  }
+  const ai = await createAi({ t, client })
+
+  const sessionId = randomUUID()
+  const resumeEventId = randomUUID()
+
+  // Set up history ending with an error
+  await ai.history.push(sessionId, resumeEventId, {
+    event: 'content',
+    data: { prompt: 'Test prompt' },
+    type: 'prompt'
+  }, historyExpiration)
+
+  await ai.history.push(sessionId, randomUUID(), {
+    event: 'content',
+    data: { response: 'Partial response' },
+    type: 'response'
+  }, historyExpiration)
+
+  await ai.history.push(sessionId, randomUUID(), {
+    event: 'error',
+    data: { code: 'PROVIDER_ERROR', message: 'Network timeout' },
+  }, historyExpiration)
+
+  const response = await ai.request({
+    prompt: 'Retry prompt',
+    options: {
+      stream: true,
+      sessionId,
+      resumeEventId,
+      streamResponseType: 'content'
+    }
+  }) as AiStreamResponse
+
+  const { content } = await consumeStream(response, 'content')
+
+  assert.equal(client.stream.mock.calls.length, 1, 'Should perform one provider request when resuming from error with content type')
+  assert.equal(content.join(''), 'Retry response', 'Should return retry response after error recovery')
 })

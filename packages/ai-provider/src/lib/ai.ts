@@ -9,7 +9,7 @@ import { createStorage, type Storage, type AiStorageOptions } from './storage/in
 import { isStream, parseTimeWindow } from './utils.ts'
 import { HistoryGetError, ModelStateError, OptionError, ProviderNoModelsAvailableError, ProviderRateLimitError, ProviderRequestEndError, ProviderRequestStreamTimeoutError, ProviderRequestTimeoutError, ProviderStreamError } from './errors.ts'
 import { DEFAULT_HISTORY_EXPIRATION, DEFAULT_MAX_RETRIES, DEFAULT_RATE_LIMIT_MAX, DEFAULT_RATE_LIMIT_TIME_WINDOW, DEFAULT_REQUEST_TIMEOUT, DEFAULT_RESTORE_PROVIDER_COMMUNICATION_ERROR, DEFAULT_RESTORE_PROVIDER_EXCEEDED_QUOTA_ERROR, DEFAULT_RESTORE_RATE_LIMIT, DEFAULT_RESTORE_REQUEST_TIMEOUT, DEFAULT_RESTORE_RETRY, DEFAULT_RETRY_INTERVAL, DEFAULT_STORAGE } from './config.ts'
-import { createEventId, decodeEventStream, encodeEvent, type AiStreamEvent, type AiStreamEventPrompt } from './event.ts'
+import { createEventId, decodeEventStream, encodeEvent, type AiStreamEvent } from './event.ts'
 
 // supported providers
 export type AiProvider = 'openai' | 'deepseek' | 'gemini'
@@ -567,7 +567,7 @@ export class Ai {
       this.resumeRequest(context.response.stream, sessionId, context.request.streamResponseType, context.request.resumeEventId)
         .then(({ complete, prompt }) => {
           // When the resume is not complete: make a further request if prompt is provided or last event is a prompt
-          if (!complete || 
+          if (!complete ||
             (context.request.streamResponseType === 'session' && (context.request.prompt || prompt))) {
             if (prompt) { context.request.prompt = prompt }
             // TODO edge case: can be 2 requests in case of context.request.prompt and prompt
@@ -834,7 +834,7 @@ export class Ai {
    */
   async resumeRequest (stream: AiStreamResponse, sessionId: AiSessionId, streamResponseType: StreamResponseType, resumeEventId: AiEventId): Promise<{ complete: boolean, prompt: string | undefined }> {
     let complete = false
-    let prompt: string | undefined
+    let lastPrompt: string | undefined
 
     try {
       const existingHistory = await this.history.rangeFromId(sessionId, resumeEventId)
@@ -843,6 +843,14 @@ export class Ai {
       // on streamResponseType === 'content', send events of a single response
       if (streamResponseType === 'content') {
         for (const event of existingHistory) {
+          // TODO fix types
+          // @ts-ignore
+          if (event?.type === 'prompt') {
+            // @ts-ignore
+            lastPrompt = event.data.prompt
+            continue
+          }
+
           // do not send content on error
           if (event?.event === 'error') {
             events.length = 0
@@ -853,23 +861,42 @@ export class Ai {
           // stop on end
           if (event?.event === 'end') {
             complete = event.data.response === 'COMPLETE'
+            lastPrompt = undefined
             break
           }
         }
       } else if (streamResponseType === 'session') {
         // send all events but response with error
+        // lookup for error and end event, collect only if end event is present and error is not
+        // stop in case of error
+        const buffer: AiStreamEvent[] = []
         for (const event of existingHistory) {
-          // skip response containing error
-          if (event?.event === 'error' || event?.event === 'end') {
+          // TODO fix types
+          // @ts-ignore
+          if (event?.type === 'prompt') {
+            // @ts-ignore
+            lastPrompt = event.data.prompt
+            events.push(event)
             continue
           }
-          events.push(event)
-        }
-      }
 
-      const lastEvent = existingHistory.at(-1) as AiStreamEvent
-      if (lastEvent?.event === 'content' && lastEvent.type === 'prompt') {
-        prompt = (lastEvent as unknown as AiStreamEventPrompt).prompt
+          // skip response containing error
+          if (event?.event === 'error') {
+            complete = false
+            break
+          } else if (event?.event === 'end') {
+            events.push(...buffer)
+            buffer.length = 0
+            lastPrompt = undefined
+            continue
+          }
+
+          buffer.push(event)
+        }
+
+        if (buffer.length > 0) {
+          complete = false
+        }
       }
 
       for (const event of events) {
@@ -879,7 +906,7 @@ export class Ai {
       this.logger.error({ error, sessionId }, 'Failed to resume stream')
     }
 
-    return { complete, prompt }
+    return { complete, prompt: lastPrompt }
   }
 
   /** Subscribe to storage updates for this session and send events to the stream */
