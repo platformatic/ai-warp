@@ -573,7 +573,6 @@ export class Ai {
           if (complete && !prompt && !context.request.prompt) {
             return
           }
-          // ? context.request.streamResponseType === 'session'
 
           // When the resume is not complete: make a further request wit the last prompt from resume
           if (prompt && !context.request.prompt) {
@@ -633,7 +632,6 @@ export class Ai {
 
     // this is necessary in case the request is not resuming
     const history = await this.getHistory(context.request.sessionId, context.request.history)
-    console.log('history', history)
     const promptEventId = context.request.promptEventId ?? history.promptEventId ?? createEventId()
 
     this.history.push(sessionId, promptEventId, {
@@ -1012,31 +1010,29 @@ export class Ai {
     // TODO get and update history should be atomic for concurrent requests with same sessionId
 
     // load history from storage
-    let contentHistory: AiStreamEvent[] = []
+    const contentHistory: AiStreamEvent[] = []
     try {
       const storedHistory = await this.history.range(sessionId!)
       if (!storedHistory || storedHistory.length < 1) { return { messages: [], promptEventId: undefined } }
 
-      let prompt
-      let buffer: AiStreamEvent[] = []
-      for(const event of storedHistory) {
+      const contentBuffer: AiStreamEvent[] = []
+      for (const event of storedHistory) {
         if (event?.type === 'prompt') {
           // @ts-ignore
-          prompt = event
+          contentHistory.push(event!)
           continue
         }
 
         if (event?.event === 'error') {
-          buffer.length = 0
+          contentBuffer.length = 0
           continue
         } else if (event?.event === 'end') {
-          contentHistory.push(prompt)
-          contentHistory.push(...buffer)
-          buffer.length = 0
-          prompt = undefined
+          contentHistory.push(...contentBuffer)
+          contentBuffer.length = 0
+          continue
         }
 
-        buffer.push(event)
+        contentBuffer.push(event)
       }
     } catch (err) {
       this.logger.error({ err, sessionId }, 'Failed to get history')
@@ -1047,7 +1043,6 @@ export class Ai {
     }
 
     const lastEvent: AiStreamEvent = contentHistory?.at(-1)!
-    let messages: AiStreamEvent[] = []
     let promptEventId: AiEventId | undefined
 
     // when last event is end, last request is complete, happy state
@@ -1058,46 +1053,28 @@ export class Ai {
     // in this case, remove the last prompt to be replaced by the new prompt
 
     // when last event is not end, last request is incomplete
-    if (lastEvent.event !== 'end') {
-      // go backward to get last prompt, if any
-      for (let i = contentHistory.length - 1; i >= 0; i--) {
-        // @ts-ignore TODO fix types
-        if (contentHistory[i].type === 'prompt') {
-          promptEventId = contentHistory[i].id
-          messages = contentHistory.slice(0, i)
-          break
-        }
-      }
-    } else {
-      messages = contentHistory ?? []
+    if (lastEvent.type === 'prompt') {
+      promptEventId = lastEvent.id
     }
 
-    return { messages: this.compactHistory(messages), promptEventId }
+    return { messages: this._compactHistory(contentHistory), promptEventId }
   }
 
-  private compactHistory (history: AiStreamEvent[]): AiChatHistory {
+  private _compactHistory (history: AiStreamEvent[]): AiChatHistory {
     const compactedHistory: AiChatHistory = []
-    const lastResponse: string[] = []
+    let lastResponse: string = ''
     let lastPrompt: string = ''
     for (const event of history) {
-    // @ts-ignore TODO fix types
       if (event.type === 'response') {
-      // @ts-ignore TODO fix types
-        lastResponse.push(event.data.response)
-      // @ts-ignore TODO fix types
+        lastResponse = event.data.response!
       } else if (event.type === 'prompt') {
-      // @ts-ignore TODO fix types
-        lastPrompt = event.data.prompt || '' // TODO warning?
-        if (lastResponse.length > 0) {
-          compactedHistory.push({ prompt: lastPrompt, response: lastResponse.join('') })
-          lastResponse.length = 0
-          lastPrompt = ''
-        }
+        lastPrompt = event.data.prompt!
       }
-    }
-
-    if (lastResponse.length > 0 || lastPrompt) {
-      compactedHistory.push({ prompt: lastPrompt, response: lastResponse.join('') })
+      if (lastResponse && lastPrompt) {
+        compactedHistory.push({ prompt: lastPrompt, response: lastResponse })
+        lastResponse = ''
+        lastPrompt = ''
+      }
     }
 
     return compactedHistory

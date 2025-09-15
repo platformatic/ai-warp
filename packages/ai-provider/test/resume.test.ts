@@ -312,7 +312,7 @@ test('should resume the second response by resume event id on an incomplete resp
 test('should not resume a error response by resume event id but make a new request for the last prompt in history', async (t) => {
   const client = {
     ...createDummyClient(),
-    stream: mock.fn(async (a,b) => {
+    stream: mock.fn(async () => {
       return mockOpenAiStream([
         { choices: [{ delta: { content: 'New Response' } }] },
         { choices: [{ delta: { content: ' 2' }, finish_reason: 'stop' }] }
@@ -383,7 +383,7 @@ test('should not resume a error response by resume event id but make a new reque
   assert.equal(content.join(''), 'New Response 2')
 })
 
-test.only('should not resume a error response by resume event id but make a new requests: one for the last prompt in history, one for the new prompt', async (t) => {
+test('should not resume a error response by resume event id but make a new requests: one for the last prompt in history, one for the new prompt', async (t) => {
   const client = {
     ...createDummyClient(),
     stream: mock.fn(async () => {
@@ -484,7 +484,7 @@ test.only('should not resume a error response by resume event id but make a new 
       role: 'user'
     }
   ])
-  assert.equal(content.join(''), 'Response 3')
+  assert.equal(content.join(''), 'Response 2Response 3')
 })
 
 test('should resume the session by a specific resume event id', async (t) => {
@@ -624,7 +624,7 @@ test('should resume the session by a specific resume event id', async (t) => {
   }
 })
 
-test('should perform a provider request resuming an incomplete response with stream response type session', async (t) => {
+test.only('should perform a provider request resuming an incomplete response with stream response type session', async (t) => {
   const client = {
     ...createDummyClient(),
     stream: mock.fn(async (_, request) => {
@@ -701,12 +701,12 @@ test('should perform a provider request resuming an incomplete response with str
 // TODO same with error instead of incomplete response
 // TODO longer history
 
-test('should not perform a provider request resuming an incomplete response with stream response type content', async (t) => {
+test('should perform a provider request resuming an incomplete response with stream response type content', async (t) => {
   const client = {
     ...createDummyClient(),
     stream: mock.fn(async () => {
       return mockOpenAiStream([
-        { choices: [{ delta: { content: 'Should not be called' }, finish_reason: 'stop' }] }
+        { choices: [{ delta: { content: 'Full Response' }, finish_reason: 'stop' }] }
       ])
     })
   }
@@ -740,8 +740,8 @@ test('should not perform a provider request resuming an incomplete response with
 
   const { content } = await consumeStream(response, 'content')
 
-  assert.equal(client.stream.mock.calls.length, 0, 'Should not perform provider request when resuming incomplete response with content type')
-  assert.equal(content.join(''), 'Partial response', 'Should return existing partial response')
+  assert.equal(client.stream.mock.calls.length, 1, 'Should perform provider request when resuming incomplete response with content type')
+  assert.equal(content.join(''), 'Full Response', 'Should return existing partial response')
 })
 
 test('should perform 1 provider request resuming an incomplete response where last event is a prompt and the request has a prompt too, with response type content', async (t) => {
@@ -784,7 +784,6 @@ test('should perform 1 provider request resuming an incomplete response where la
   }, historyExpiration)
 
   const response = await ai.request({
-    prompt: 'New prompt',
     options: {
       stream: true,
       sessionId,

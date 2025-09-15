@@ -378,7 +378,7 @@ describe('session', () => {
   }
 })
 
-describe('compactHistory', () => {
+describe('_compactHistory', () => {
   for (const storage of storages) {
     test(`should load history from storage format and compact in history format / last event: end, with ${storage.type} storage`, async (t) => {
       const ai = await createAi({ t, storage })
@@ -411,7 +411,7 @@ describe('compactHistory', () => {
       // Test the compactHistory method directly - only pass content events
       const events = await ai.history.range(sessionId)
       const contentEvents = events.filter(e => e.event === 'content')
-      const compactedHistory = ai['compactHistory'](contentEvents)
+      const compactedHistory = ai['_compactHistory'](contentEvents)
 
       // Should have one complete conversation pair
       assert.equal(compactedHistory.length, 1, 'Should have one compact history entry')
@@ -444,7 +444,7 @@ describe('compactHistory', () => {
       // Test the compactHistory method directly - only pass content events
       const events = await ai.history.range(sessionId)
       const contentEvents = events.filter(e => e.event === 'content')
-      const compactedHistory = ai['compactHistory'](contentEvents)
+      const compactedHistory = ai['_compactHistory'](contentEvents)
 
       // Should have one incomplete conversation pair (response is partial)
       assert.equal(compactedHistory.length, 1, 'Should have one compact history entry')
@@ -478,7 +478,7 @@ describe('compactHistory', () => {
       // Test the compactHistory method directly - only pass content events
       const events = await ai.history.range(sessionId)
       const contentEvents = events.filter(e => e.event === 'content')
-      const compactedHistory = ai['compactHistory'](contentEvents)
+      const compactedHistory = ai['_compactHistory'](contentEvents)
 
       // Should have one incomplete conversation pair (response is partial/ongoing)
       assert.equal(compactedHistory.length, 1, 'Should have one compact history entry')
@@ -517,7 +517,7 @@ describe('compactHistory', () => {
       // Test the compactHistory method directly - only pass content events
       const events = await ai.history.range(sessionId)
       const contentEvents = events.filter(e => e.event === 'content')
-      const compactedHistory = ai['compactHistory'](contentEvents)
+      const compactedHistory = ai['_compactHistory'](contentEvents)
 
       assert.equal(compactedHistory.length, 1, 'Should have one compact history entry')
       assert.equal(compactedHistory[0].prompt, 'Tell me a joke', 'Prompt should be the second prompt due to compaction logic')
@@ -529,7 +529,7 @@ describe('compactHistory', () => {
     test(`should handle empty history array, with ${storage.type} storage`, async (t) => {
       const ai = await createAi({ t, storage })
 
-      const compactedHistory = ai['compactHistory']([])
+      const compactedHistory = ai['_compactHistory']([])
 
       assert.equal(compactedHistory.length, 0, 'Empty history should return empty array')
     })
@@ -550,7 +550,7 @@ describe('compactHistory', () => {
         }
       ]
 
-      const compactedHistory = ai['compactHistory'](contentEvents)
+      const compactedHistory = ai['_compactHistory'](contentEvents)
 
       // Should have one entry with the last prompt and empty response
       assert.equal(compactedHistory.length, 1, 'Should have one compact history entry')
@@ -574,7 +574,7 @@ describe('compactHistory', () => {
         }
       ]
 
-      const compactedHistory = ai['compactHistory'](contentEvents)
+      const compactedHistory = ai['_compactHistory'](contentEvents)
 
       // Should have one entry with empty prompt and concatenated responses
       assert.equal(compactedHistory.length, 1, 'Should have one compact history entry')
@@ -623,7 +623,7 @@ describe('compactHistory', () => {
         }
       ]
 
-      const compactedHistory = ai['compactHistory'](contentEvents)
+      const compactedHistory = ai['_compactHistory'](contentEvents)
 
       assert.equal(compactedHistory.length, 3, 'Should have three compact history entries')
 
@@ -658,7 +658,7 @@ describe('compactHistory', () => {
         }
       ]
 
-      const compactedHistory = ai['compactHistory'](contentEvents)
+      const compactedHistory = ai['_compactHistory'](contentEvents)
 
       assert.equal(compactedHistory.length, 2, 'Should have two compact history entries')
 
@@ -697,7 +697,7 @@ describe('compactHistory', () => {
         }
       ]
 
-      const compactedHistory = ai['compactHistory'](contentEvents)
+      const compactedHistory = ai['_compactHistory'](contentEvents)
 
       assert.equal(compactedHistory.length, 2, 'Should have two compact history entries')
 
@@ -756,7 +756,7 @@ describe('compactHistory', () => {
         }
       ]
 
-      const compactedHistory = ai['compactHistory'](contentEvents)
+      const compactedHistory = ai['_compactHistory'](contentEvents)
 
       assert.equal(compactedHistory.length, 2, 'Should have two compact history entries')
 
@@ -798,7 +798,7 @@ describe('compactHistory', () => {
         }
       ]
 
-      const compactedHistory = ai['compactHistory'](contentEvents)
+      const compactedHistory = ai['_compactHistory'](contentEvents)
 
       // The algorithm processes prompts sequentially, so only the last prompt gets paired with responses
       assert.equal(compactedHistory.length, 1, 'Should have one compact history entry')
