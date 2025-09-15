@@ -309,10 +309,90 @@ test('should resume the second response by resume event id on an incomplete resp
   assert.equal(content.join(''), 'Response 2')
 })
 
-test('should not resume a error response by resume event id but make a new request', async (t) => {
+test('should not resume a error response by resume event id but make a new request for the last prompt in history', async (t) => {
+  const client = {
+    ...createDummyClient(),
+    stream: mock.fn(async (a,b) => {
+      return mockOpenAiStream([
+        { choices: [{ delta: { content: 'New Response' } }] },
+        { choices: [{ delta: { content: ' 2' }, finish_reason: 'stop' }] }
+      ])
+    })
+  }
+  const ai = await createAi({ t, client })
+
+  const sessionId = randomUUID()
+  await ai.history.push(sessionId, randomUUID(), {
+    event: 'content',
+    data: { prompt: 'Prompt 1' },
+    type: 'prompt'
+  }, historyExpiration)
+
+  await ai.history.push(sessionId, randomUUID(), {
+    event: 'content',
+    data: { response: 'Response 1' },
+    type: 'response'
+  }, historyExpiration)
+
+  await ai.history.push(sessionId, randomUUID(), {
+    event: 'end',
+    data: { response: 'COMPLETE' }
+  }, historyExpiration)
+
+  // Second response
+  const resumeEventId = randomUUID()
+  await ai.history.push(sessionId, resumeEventId, {
+    event: 'content',
+    data: { prompt: 'Prompt 2' },
+    type: 'prompt'
+  }, historyExpiration)
+
+  await ai.history.push(sessionId, randomUUID(), {
+    event: 'content',
+    data: { response: 'Response 2 erroring' },
+    type: 'response'
+  }, historyExpiration)
+
+  await ai.history.push(sessionId, randomUUID(), {
+    event: 'error',
+    data: { code: 'PROVIDER_ERROR', message: 'Connection failed' },
+  }, historyExpiration)
+
+  const response = await ai.request({
+    options: { stream: true, sessionId, resumeEventId }
+  }) as AiStreamResponse
+
+  const { content } = await consumeStream(response)
+
+  assert.equal(client.stream.mock.calls.length, 1, 'Should have one request call')
+  // @ts-ignore
+  assert.deepEqual(client.stream.mock.calls[0].arguments[1].messages, [
+    {
+      content: 'Prompt 1',
+      role: 'user'
+    },
+    {
+      content: 'Response 1',
+      role: 'assistant'
+    },
+    {
+      content: 'Prompt 2',
+      role: 'user'
+    }
+  ])
+  assert.equal(content.join(''), 'New Response 2')
+})
+
+test.only('should not resume a error response by resume event id but make a new requests: one for the last prompt in history, one for the new prompt', async (t) => {
   const client = {
     ...createDummyClient(),
     stream: mock.fn(async () => {
+      if (client.stream.mock.calls.length === 0) {
+        return mockOpenAiStream([
+          { choices: [{ delta: { content: 'Response 2' }, finish_reason: 'stop' }] }
+        ])
+      }
+
       return mockOpenAiStream([
         { choices: [{ delta: { content: 'Response' } }] },
         { choices: [{ delta: { content: ' 3' }, finish_reason: 'stop' }] }
@@ -349,7 +429,7 @@ test('should not resume a error response by resume event id but make a new reque
 
   await ai.history.push(sessionId, randomUUID(), {
     event: 'content',
-    data: { response: 'Response 2' },
+    data: { response: 'Response 2 erroring' },
     type: 'response'
   }, historyExpiration)
 
@@ -365,16 +445,35 @@ test('should not resume a error response by resume event id but make a new reque
 
   const { content } = await consumeStream(response)
 
-  assert.equal(client.stream.mock.calls.length, 1, 'Should have one request call')
+  assert.equal(client.stream.mock.calls.length, 2)
   // @ts-ignore
   assert.deepEqual(client.stream.mock.calls[0].arguments[1].messages, [
     {
-      content: 'Prompt 2',
+      content: 'Prompt 1',
       role: 'user'
     },
     {
       content: 'Response 1',
       role: 'assistant'
+    },
+    {
+      content: 'Prompt 2',
+      role: 'user'
+    }
+  ])
+  // @ts-ignore
+  assert.deepEqual(client.stream.mock.calls[1].arguments[1].messages, [
+    {
+      content: 'Prompt 1',
+      role: 'user'
+    },
+    {
+      content: 'Response 1',
+      role: 'assistant'
+    },
+    {
+      content: 'Prompt 2',
+      role: 'user'
     },
     {
       content: 'Response 2',
@@ -525,24 +624,22 @@ test('should resume the session by a specific resume event id', async (t) => {
   }
 })
 
-test.only('should perform a provider request resuming an incomplete response with stream response type session', async (t) => {
+test('should perform a provider request resuming an incomplete response with stream response type session', async (t) => {
   const client = {
     ...createDummyClient(),
-    stream: mock.fn(async (_,request) => {
-      console.log(request.messages)
-
-if(request.messages.at(-1)?.content === 'First prompt') {
-  return mockOpenAiStream([
-    { choices: [{ delta: { content: 'Replace first prompt ' } }] },
-    { choices: [{ delta: { content: 'incomplete response' }, finish_reason: 'stop' }] }
-  ])
-} else if (request.messages.at(-1)?.content === 'Continue conversation') {
-  return mockOpenAiStream([
-    { choices: [{ delta: { content: 'Next ' } }] },
-    { choices: [{ delta: { content: 'response' }, finish_reason: 'stop' }] }
-  ])
-}
-      return mockOpenAiStream([      ])
+    stream: mock.fn(async (_, request) => {
+      if (request.messages.at(-1)?.content === 'First prompt') {
+        return mockOpenAiStream([
+          { choices: [{ delta: { content: 'Replace first ' } }] },
+          { choices: [{ delta: { content: 'incomplete response' }, finish_reason: 'stop' }] }
+        ])
+      } else if (request.messages.at(-1)?.content === 'Continue conversation') {
+        return mockOpenAiStream([
+          { choices: [{ delta: { content: 'Next ' } }] },
+          { choices: [{ delta: { content: 'response' }, finish_reason: 'stop' }] }
+        ])
+      }
+      return mockOpenAiStream([])
     })
   }
   const ai = await createAi({ t, client })
@@ -581,16 +678,28 @@ if(request.messages.at(-1)?.content === 'First prompt') {
 
   const { content } = await consumeStream(response, 'session')
 
-  console.log('content', content)
-
   assert.equal(client.stream.mock.calls.length, 2, 'Should perform one provider request for incomplete response')
-  assert.equal(content.length, 5, 'Should return session content')
+  assert.equal(content.length, 6, 'Should return session content')
   assert.deepEqual(content[0], { id: resumeEventId, event: 'content', data: { prompt: 'First prompt' } })
-  assert.deepEqual({ data: content[1].data, event: 'content' }, { event: 'content', data: { response: 'Replace first prompt ' } })
+  assert.deepEqual({ data: content[1].data, event: 'content' }, { event: 'content', data: { response: 'Replace first ' } })
   assert.deepEqual({ data: content[2].data, event: 'content' }, { event: 'content', data: { response: 'incomplete response' } })
   assert.deepEqual({ data: content[3].data, event: 'content' }, { event: 'content', data: { prompt: 'Continue conversation' } })
-  assert.deepEqual({ data: content[4].data, event: 'content' }, { event: 'content', data: { response: 'Next response' } })
+  assert.deepEqual({ data: content[4].data, event: 'content' }, { event: 'content', data: { response: 'Next ' } })
+  assert.deepEqual({ data: content[5].data, event: 'content' }, { event: 'content', data: { response: 'response' } })
+
+  assert.deepEqual(client.stream.mock.calls[0].arguments[1].messages, [
+    { role: 'user', content: 'First prompt' }
+  ])
+
+  assert.deepEqual(client.stream.mock.calls[1].arguments[1].messages, [
+    { role: 'user', content: 'First prompt' },
+    { role: 'assistant', content: 'Replace first incomplete response' },
+    { role: 'user', content: 'Continue conversation' }
+  ])
 })
+
+// TODO same with error instead of incomplete response
+// TODO longer history
 
 test('should not perform a provider request resuming an incomplete response with stream response type content', async (t) => {
   const client = {

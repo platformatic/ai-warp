@@ -9,7 +9,7 @@ import { createStorage, type Storage, type AiStorageOptions } from './storage/in
 import { isStream, parseTimeWindow } from './utils.ts'
 import { HistoryGetError, ModelStateError, OptionError, ProviderNoModelsAvailableError, ProviderRateLimitError, ProviderRequestEndError, ProviderRequestStreamTimeoutError, ProviderRequestTimeoutError, ProviderStreamError } from './errors.ts'
 import { DEFAULT_HISTORY_EXPIRATION, DEFAULT_MAX_RETRIES, DEFAULT_RATE_LIMIT_MAX, DEFAULT_RATE_LIMIT_TIME_WINDOW, DEFAULT_REQUEST_TIMEOUT, DEFAULT_RESTORE_PROVIDER_COMMUNICATION_ERROR, DEFAULT_RESTORE_PROVIDER_EXCEEDED_QUOTA_ERROR, DEFAULT_RESTORE_RATE_LIMIT, DEFAULT_RESTORE_REQUEST_TIMEOUT, DEFAULT_RESTORE_RETRY, DEFAULT_RETRY_INTERVAL, DEFAULT_STORAGE } from './config.ts'
-import { createEventId, decodeEventStream, encodeEvent, type AiStreamEvent } from './event.ts'
+import { createEventId, decodeEventStream, encodeEvent, type AiStreamEvent, type AiStreamEventPrompt } from './event.ts'
 
 // supported providers
 export type AiProvider = 'openai' | 'deepseek' | 'gemini'
@@ -107,11 +107,15 @@ type ProviderContext = {
     history?: AiChatHistory
     context?: string
     prompt?: string
+    promptEventId?: AiEventId
     temperature?: number
     onStreamChunk?: (response: string) => Promise<string>
     maxTokens?: number
     streamResponseType: StreamResponseType
   }
+
+  // callback to run a following request without closing the stream
+  next?: () => Promise<void> | void
 }
 
 export type AiResponseResult = 'COMPLETE' | 'INCOMPLETE_MAX_TOKENS' | 'INCOMPLETE_UNKNOWN'
@@ -565,23 +569,32 @@ export class Ai {
       const sessionId = context.request.sessionId!
       context.response.stream = createResponseStream(sessionId)
       this.resumeRequest(context.response.stream, sessionId, context.request.streamResponseType, context.request.resumeEventId)
-        .then(({ complete, prompt }) => {
-          // When the resume is not complete: make a further request if prompt is provided or last event is a prompt
-          if (!complete ||
-            (context.request.streamResponseType === 'session' && (context.request.prompt || prompt))) {
-            if (prompt) { context.request.prompt = prompt }
-            // TODO edge case: can be 2 requests in case of context.request.prompt and prompt
-            return this._request(context)
+        .then(({ complete, prompt, promptEventId }) => {
+          if (complete && !prompt && !context.request.prompt) {
+            return
           }
+          // ? context.request.streamResponseType === 'session'
 
-          // if the resume is complete but there is no prompt, send an end event and close the stream
-          // const endEvent: HistoryEndEvent = {
-          //   event: 'end',
-          //   data: { response: 'COMPLETE' }
-          // }
-          // context.response.stream!.push(encodeEvent({ id: createEventId(), ...endEvent }))
-          // context.response.stream!.push(null)
-          // this.history.push(sessionId, createEventId(), endEvent, this.options.limits.historyExpiration)
+          // When the resume is not complete: make a further request wit the last prompt from resume
+          if (prompt && !context.request.prompt) {
+            context.request.prompt = prompt
+            return this._request(context)
+          } else if (!prompt && context.request.prompt) {
+            // When a new prompt is provided on the new request, make a further request
+            return this._request(context)
+          } else if (prompt && context.request.prompt) {
+            // Edge case: both prompt and context.request.prompt because the last requqest is incomplete and a new prompt is provided in the new request
+            const requestPrompt = context.request.prompt
+            const c = { ...context }
+            c.request.prompt = prompt
+            c.request.promptEventId = promptEventId
+            c.next = () => {
+              context.request.prompt = requestPrompt
+              context.request.promptEventId = undefined
+              this._request(context)
+            }
+            return this._request(c)
+          }
         })
         .catch((error) => {
           this.logger.error({ error, sessionId: context.request.sessionId }, 'Failed to resume stream, proceed with new request')
@@ -618,29 +631,11 @@ export class Ai {
 
     this.pubsub.listen(sessionId)
 
-    // TODO refactor this part to own function
-    let history
-    let promptEventId: string | undefined
-    if (context.request.sessionId) {
-      // TODO get and update history should be atomic for concurrent requests with same sessionId
-      // concurrent requests should fail until the first one is complete
-      const h = await this.getHistory(sessionId)
-      // when last event is end, last request is complete, happy state
-      // when last event is error, last request is incomplete, so surely it's a resume
-      // when last event is a content and type is response, last request is incomplete, state is not clear: probabily it's a resume
+    // this is necessary in case the request is not resuming
+    const history = await this.getHistory(context.request.sessionId, context.request.history)
+    const promptEventId = context.request.promptEventId ?? history.promptEventId ?? createEventId()
 
-      // when last event is a content and type is prompt, edge case: last event got an error before getting the response >
-      // in this case, remove the last prompt to be replaced by the new prompt
-      if (h?.history && h?.last?.event === 'content' && h.last.type === 'prompt') {
-        h.history.splice(h.history.length - 1, 1)
-        promptEventId = h.last.id
-      }
-      history = h?.history
-    } else {
-      history = context.request.history
-    }
-
-    this.history.push(sessionId, promptEventId ?? createEventId(), {
+    this.history.push(sessionId, promptEventId, {
       event: 'content',
       data: { prompt: context.request.prompt },
       type: 'prompt'
@@ -649,7 +644,7 @@ export class Ai {
     if (context.request.resumeEventId && context.request.streamResponseType === 'session') {
       // ongoing resume stream response, send prompt
       context.response.stream!.push(encodeEvent({
-        id: createEventId(),
+        id: promptEventId,
         event: 'content',
         data: { prompt: context.request.prompt }
       } as AiStreamEvent))
@@ -659,7 +654,7 @@ export class Ai {
       context: context.request.context,
       temperature: context.request.temperature,
       stream: context.request.stream,
-      history,
+      history: history.messages,
       maxTokens: context.request.maxTokens ?? this.options.limits.maxTokens
     }
 
@@ -724,6 +719,10 @@ export class Ai {
 
           this.pipeStreamResponseToStorage(sessionId, providerResponse as Readable)
             .then(() => {
+              if (context.next) {
+                context.next()
+                return
+              }
               // on success
               // close the stream
               context.response.stream!.push(null)
@@ -770,6 +769,7 @@ export class Ai {
         }
 
         this.pubsub.remove(sessionId)
+        context.next?.()
         return {
           text: (providerResponse as any).text || '',
           result: mapResultError((providerResponse as any).result),
@@ -832,9 +832,10 @@ export class Ai {
   /**
    * Resume a request from storage starting from a specific event id
    */
-  async resumeRequest (stream: AiStreamResponse, sessionId: AiSessionId, streamResponseType: StreamResponseType, resumeEventId: AiEventId): Promise<{ complete: boolean, prompt: string | undefined }> {
+  async resumeRequest (stream: AiStreamResponse, sessionId: AiSessionId, streamResponseType: StreamResponseType, resumeEventId: AiEventId)
+    : Promise<{ complete: boolean, prompt: string | undefined, promptEventId: AiEventId | undefined }> {
     let complete = false
-    let lastPrompt: string | undefined
+    let lastPrompt: AiStreamEventPrompt | undefined
 
     try {
       const existingHistory = await this.history.rangeFromId(sessionId, resumeEventId)
@@ -847,7 +848,7 @@ export class Ai {
           // @ts-ignore
           if (event?.type === 'prompt') {
             // @ts-ignore
-            lastPrompt = event.data.prompt
+            lastPrompt = event
             continue
           }
 
@@ -875,8 +876,7 @@ export class Ai {
           // @ts-ignore
           if (event?.type === 'prompt') {
             // @ts-ignore
-            lastPrompt = event.data.prompt
-            events.push(event)
+            lastPrompt = event
             continue
           }
 
@@ -885,6 +885,8 @@ export class Ai {
             complete = false
             break
           } else if (event?.event === 'end') {
+            // collect request-response pair only when complete
+            events.push(lastPrompt)
             events.push(...buffer)
             buffer.length = 0
             lastPrompt = undefined
@@ -906,7 +908,8 @@ export class Ai {
       this.logger.error({ error, sessionId }, 'Failed to resume stream')
     }
 
-    return { complete, prompt: lastPrompt }
+    // @ts-ignore TODO fix types
+    return { complete, prompt: lastPrompt?.data?.prompt, promptEventId: lastPrompt?.id }
   }
 
   /** Subscribe to storage updates for this session and send events to the stream */
@@ -1000,29 +1003,70 @@ export class Ai {
     }
   }
 
-  async getHistory (sessionId: AiSessionId): Promise<{ history: AiChatHistory, last?: AiStreamEvent } | undefined> {
+  async getHistory (sessionId?: AiSessionId, history?: AiChatHistory): Promise<{ messages: AiChatHistory, promptEventId?: AiEventId }> {
+    if (history) {
+      return { messages: history, promptEventId: undefined }
+    }
+    // if history and not sessionId, logic error, should not happen
+    // TODO get and update history should be atomic for concurrent requests with same sessionId
+
+    // load history from storage
+    let filteredHistory: AiStreamEvent[] = []
     try {
-      const storedHistory = await this.history.range(sessionId)
-      if (!storedHistory || storedHistory.length < 1) { return }
+      const storedHistory = await this.history.range(sessionId!)
+      if (!storedHistory || storedHistory.length < 1) { return { messages: [], promptEventId: undefined } }
 
-      const lastEvent: AiStreamEvent | undefined = storedHistory.at(-1)
-      if (!lastEvent) { return }
-
-      const history: HistoryContentEvent[] = storedHistory.filter((event: any) => event.event === 'content') as HistoryContentEvent[]
-      return { history: this.compactHistory(history), last: lastEvent }
+      // remove signal content events (error, end)
+      filteredHistory = storedHistory.filter((event: any) => event.event === 'content')
     } catch (err) {
       this.logger.error({ err, sessionId }, 'Failed to get history')
     }
+
+    if (filteredHistory.length < 1) {
+      return { messages: [], promptEventId: undefined }
+    }
+
+    const lastEvent: AiStreamEvent = filteredHistory?.at(-1)!
+    let messages: AiStreamEvent[] = []
+    let promptEventId: AiEventId | undefined
+
+    // when last event is end, last request is complete, happy state
+    // when last event is error, last request is incomplete, so surely it's a resume
+    // when last event is a content and type is response, last request is incomplete, state is not clear: probabily it's a resume
+
+    // when last event is a content and type is prompt, edge case: last event got an error before getting the response >
+    // in this case, remove the last prompt to be replaced by the new prompt
+
+    // when last event is not end, last request is incomplete
+    if (lastEvent.event !== 'end') {
+      // go backward to get last prompt, if any
+      for (let i = filteredHistory.length - 1; i >= 0; i--) {
+        // @ts-ignore TODO fix types
+        if (filteredHistory[i].type === 'prompt') {
+          promptEventId = filteredHistory[i].id
+          messages = filteredHistory.slice(0, i)
+          break
+        }
+      }
+    } else {
+      messages = filteredHistory ?? []
+    }
+
+    return { messages: this.compactHistory(messages), promptEventId }
   }
 
-  private compactHistory (history: HistoryContentEvent[]): AiChatHistory {
+  private compactHistory (history: AiStreamEvent[]): AiChatHistory {
     const compactedHistory: AiChatHistory = []
     const lastResponse: string[] = []
     let lastPrompt: string = ''
     for (const event of history) {
+    // @ts-ignore TODO fix types
       if (event.type === 'response') {
+      // @ts-ignore TODO fix types
         lastResponse.push(event.data.response)
+      // @ts-ignore TODO fix types
       } else if (event.type === 'prompt') {
+      // @ts-ignore TODO fix types
         lastPrompt = event.data.prompt || '' // TODO warning?
         if (lastResponse.length > 0) {
           compactedHistory.push({ prompt: lastPrompt, response: lastResponse.join('') })
