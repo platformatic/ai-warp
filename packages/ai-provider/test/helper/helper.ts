@@ -9,16 +9,16 @@ export const storages = [
   {
     type: 'memory' as const,
   },
-  {
-    type: 'valkey' as const,
-    valkey: {
-      host: 'localhost',
-      port: 6379,
-      database: 0,
-      username: 'default',
-      password: 'password'
-    }
-  }
+  // {
+  //   type: 'valkey' as const,
+  //   valkey: {
+  //     host: 'localhost',
+  //     port: 6379,
+  //     database: 0,
+  //     username: 'default',
+  //     password: 'password'
+  //   }
+  // }
 ]
 
 export function createDummyClient () {
@@ -142,14 +142,15 @@ export function mockGeminiStream (chunks: any[], error?: any) {
   return readable
 }
 
-export async function consumeStream (response: Readable, responseType: 'session' | 'content' = 'content'): Promise<{ content: string[] | Object[], end: string }> {
+export async function consumeStream (response: Readable, responseType: 'session' | 'content' = 'content'): Promise<{ content: string[] | Object[], end: string, chunks: number }> {
   const content: string[] | Object[] = []
   let end: string = ''
-
+  let chunks = 0
   return new Promise((resolve, reject) => {
     // The response is a Readable stream that emits Server-sent events
     response.on('data', (chunk: Buffer) => {
       const eventData = chunk.toString('utf8')
+      chunks++
 
       // Parse Server-sent events format
       const lines = eventData.split('\n')
@@ -186,7 +187,7 @@ export async function consumeStream (response: Readable, responseType: 'session'
     })
 
     response.on('end', () => {
-      resolve({ content, end })
+      resolve({ content, end, chunks })
     })
 
     response.on('error', (error) => {

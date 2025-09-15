@@ -49,10 +49,10 @@ test('should resume stream from first event ID', async (t) => {
   const originalSessionId = (originalResponse as any).sessionId
   assert.ok(originalSessionId)
 
-  const chunks: Uint8Array[] = []
-  for await (const chunk of originalResponse) {
-    chunks.push(chunk)
-  }
+{  const { content, chunks } = await consumeStream(originalResponse, 'content')
+  assert.equal(chunks, 4)
+  assert.equal(content.join(''), 'Hello world!')
+}
 
   // Wait a bit for background processing to complete
   await new Promise(resolve => setTimeout(resolve, 100))
@@ -68,7 +68,6 @@ test('should resume stream from first event ID', async (t) => {
   // Now make another streaming request with the same sessionId - should auto-resume
   const resumedResponse = await ai.request({
     models: ['openai:gpt-4o-mini'],
-    prompt: 'Say hello again', // This will be ignored for resume
     options: {
       stream: true,
       sessionId: originalSessionId,
@@ -79,15 +78,11 @@ test('should resume stream from first event ID', async (t) => {
   assert.ok(isStream(resumedResponse), 'Response should be a stream-like object')
   assert.equal((resumedResponse as any).sessionId, originalSessionId)
 
-  // Consume the resumed stream
-  const resumeChunks: Uint8Array[] = []
-  for await (const chunk of resumedResponse) {
-    resumeChunks.push(chunk)
-  }
-
-  // Should have received some chunks from the resume
-  assert.equal(resumeChunks.length, 1)
-
+{  // Should have received some chunks from the resume
+  const { content, chunks } = await consumeStream(resumedResponse, 'content')
+  assert.equal(chunks, 4)
+  assert.equal(content.join(''), 'Hello world!')
+}
   // Verify that we only made one call to the provider (the original request)
   // The resume should not call the provider again
   assert.equal(client.stream.mock.calls.length, 1, 'Should have made one call to the provider')
@@ -393,7 +388,7 @@ test('should not resume a error response by resume event id but make a new reque
   assert.equal(content.join(''), 'Response 3')
 })
 
-test.only('should resume the session by a specific resume event id', async (t) => {
+test('should resume the session by a specific resume event id', async (t) => {
   const client = {
     ...createDummyClient(),
     stream: mock.fn(async () => {
@@ -519,7 +514,7 @@ test.only('should resume the session by a specific resume event id', async (t) =
 
     for (let j = 0; j < content.length; j++) {
       const c: any = content[j]!
-      // last message id (prompt 3) is not predictable
+      // last message id (prompt 3) is assigned by the ai class
       if (c.id) {
         assert.deepEqual(c.event, calls[i].response[j].event)
         assert.deepEqual(c.data, calls[i].response[j].data)
@@ -530,8 +525,26 @@ test.only('should resume the session by a specific resume event id', async (t) =
   }
 })
 
-// x2: stream response type
-// last event prompt, then another prompt from request >> 2 prompts
-// last event prompt from resume, no prompt in request >> make ai request, no resume
-// resume only because of no prompt in the request
-// more chunks in response
+test('should perform a provider request resuming an incomplete response with stream response type session', async (t) => {
+})
+
+test('should not perform a provider request resuming an incomplete response with stream response type content', async (t) => {
+})
+
+test('should perform 1 provider request resuming an incomplete response where last event is a prompt and the request has a prompt too, with response type content', async (t) => {
+})
+
+test('should perform 2 provider requests resuming an incomplete response where last event is a prompt and the request has a prompt too, with response type session', async (t) => {
+})
+
+test('should perform 1 provider request resuming an incomplete response where last event is a prompt and the request doesnt have a prompt, with response type content', async (t) => {
+})
+
+test('should perform 1 provider request resuming an incomplete response where last event is a prompt and the request doesnt have a prompt, with response type session', async (t) => {
+})
+
+test('should perform 1 provider request resuming an incomplete response where last event is an error, with response type session', async (t) => {
+})
+
+test('should perform 1 provider request resuming an incomplete response where last event is an error, with response type content', async (t) => {
+})

@@ -566,21 +566,22 @@ export class Ai {
       context.response.stream = createResponseStream(sessionId)
       this.resumeRequest(context.response.stream, sessionId, context.request.streamResponseType, context.request.resumeEventId)
         .then(({ complete, prompt }) => {
-          // When the resume is complete: make a further request if prompt is provided or last event is a prompt
-          if (!complete || context.request.prompt || prompt) {
+          // When the resume is not complete: make a further request if prompt is provided or last event is a prompt
+          if (!complete || 
+            (context.request.streamResponseType === 'session' && (context.request.prompt || prompt))) {
             if (prompt) { context.request.prompt = prompt }
             // TODO edge case: can be 2 requests in case of context.request.prompt and prompt
             return this._request(context)
           }
 
           // if the resume is complete but there is no prompt, send an end event and close the stream
-          const endEvent: HistoryEndEvent = {
-            event: 'end',
-            data: { response: 'COMPLETE' }
-          }
-          context.response.stream!.push(encodeEvent({ id: createEventId(), ...endEvent }))
-          context.response.stream!.push(null)
-          this.history.push(sessionId, createEventId(), endEvent, this.options.limits.historyExpiration)
+          // const endEvent: HistoryEndEvent = {
+          //   event: 'end',
+          //   data: { response: 'COMPLETE' }
+          // }
+          // context.response.stream!.push(encodeEvent({ id: createEventId(), ...endEvent }))
+          // context.response.stream!.push(null)
+          // this.history.push(sessionId, createEventId(), endEvent, this.options.limits.historyExpiration)
         })
         .catch((error) => {
           this.logger.error({ error, sessionId: context.request.sessionId }, 'Failed to resume stream, proceed with new request')
@@ -838,8 +839,6 @@ export class Ai {
     try {
       const existingHistory = await this.history.rangeFromId(sessionId, resumeEventId)
       const events = []
-
-      console.log('existingHistory', existingHistory)
 
       // on streamResponseType === 'content', send events of a single response
       if (streamResponseType === 'content') {

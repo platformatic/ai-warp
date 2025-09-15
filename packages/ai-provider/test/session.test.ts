@@ -97,7 +97,7 @@ describe('session', () => {
   })
 
   for (const storage of storages) {
-    test(`should load history when request has session id but not history, non-streaming, with ${storage.type} storage`, async (t) => {
+    test(`should load history when request has session id, non-streaming, with ${storage.type} storage`, async (t) => {
       const client = {
         ...createDummyClient(),
         request: mock.fn(async () => {
@@ -151,7 +151,7 @@ describe('session', () => {
       assert.equal(response.sessionId, sessionId)
     })
 
-    test(`should load history when request has session id but not history, stream, with ${storage.type} storage`, async (t) => {
+    test(`should load history when request has session id, stream, with ${storage.type} storage`, async (t) => {
       const client = {
         ...createDummyClient(),
         stream: mock.fn(async () => {
@@ -242,7 +242,7 @@ describe('session', () => {
       assert.equal(response.sessionId, sessionId)
     })
 
-    test(`should load history when request has session id but not history, stream, with ${storage.type} storage`, async (t) => {
+    test(`should load history when request has session id, stream, with ${storage.type} storage`, async (t) => {
       const client = {
         ...createDummyClient(),
         stream: mock.fn(async () => {
@@ -279,7 +279,7 @@ describe('session', () => {
       ])
     })
 
-    test(`should load history when request has session id but not history, non-streaming, with resume (no resume), with ${storage.type} storage`, async (t) => {
+    test(`should load history when request has session id, non-streaming, no resume, with ${storage.type} storage`, async (t) => {
       const client = {
         ...createDummyClient(),
         request: mock.fn(async () => {
@@ -334,7 +334,7 @@ describe('session', () => {
       assert.equal(response.sessionId, sessionId)
     })
 
-    test(`should load history when request has session id but not history, stream, with resume, with ${storage.type} storage`, async (t) => {
+    test(`should load history when request has session id by resume id, without calling the provider, response type content, with ${storage.type} storage`, async (t) => {
       const client = {
         ...createDummyClient(),
         stream: mock.fn(async () => {
@@ -372,7 +372,7 @@ describe('session', () => {
 
       const { content } = await consumeStream(response)
 
-      assert.equal(client.stream.mock.calls.length, 0, 'Should have no request call')
+      assert.equal(client.stream.mock.calls.length, 0)
       assert.equal(content.join(''), 'Response 1')
     })
   }
