@@ -640,7 +640,7 @@ export class Ai {
 
     if (context.request.resumeEventId) {
       // ongoing resume stream response, send prompt
-      context.response.stream!.push(encodeEvent({
+      context.response.stream?.push(encodeEvent({
         id: promptEventId,
         event: 'content',
         data: { prompt: context.request.prompt }
@@ -997,7 +997,6 @@ export class Ai {
     }
 
     // TODO !!! HANDLE INCOMPLETE RESPONSE: FINALIZE? CLEAN UP?
-    // console.log(' >>> contentHistory', contentHistory)
 
     const lastEvent: AiStreamEventContent = contentHistory!.at(-1)!
     let promptEventId: AiEventId | undefined
@@ -1042,8 +1041,6 @@ export class Ai {
       }
       buffer.push(event)
     }
-
-    console.log(' >>> compactedHistory', compactHistory)
 
     return compactHistory
   }

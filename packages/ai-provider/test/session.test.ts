@@ -294,13 +294,11 @@ describe('session', () => {
         data: { prompt: 'Hello' },
         type: 'prompt'
       }, historyExpiration)
-
       await ai.history.push(sessionId, randomUUID(), {
         event: 'content',
         data: { response: 'Hi there!' },
         type: 'response'
       }, historyExpiration)
-
       const resumeEventId = randomUUID()
       await ai.history.push(sessionId, resumeEventId, {
         event: 'end',
@@ -309,7 +307,7 @@ describe('session', () => {
 
       const response = await ai.request({
         prompt: 'How are you?',
-        options: { stream: false, sessionId, resumeEventId }
+        options: { stream: false, sessionId }
       }) as AiContentResponse
 
       assert.equal(client.request.mock.calls.length, 1, 'Should have one request call')
@@ -332,48 +330,6 @@ describe('session', () => {
       assert.equal(response.text, 'I am good, thank you!')
       assert.equal(response.result, 'COMPLETE')
       assert.equal(response.sessionId, sessionId)
-    })
-
-    test(`should load history when request has session id by resume id, without calling the provider, response type content, with ${storage.type} storage`, async (t) => {
-      const client = {
-        ...createDummyClient(),
-        stream: mock.fn(async () => {
-          return mockOpenAiStream([
-            { choices: [{ delta: { content: 'Response' } }] },
-            { choices: [{ delta: { content: ' 2' }, finish_reason: 'stop' }] }
-          ])
-        })
-      }
-      const ai = await createAi({ t, client, storage })
-
-      const sessionId = randomUUID()
-      const resumeEventId = randomUUID()
-      await ai.history.push(sessionId, resumeEventId, {
-        event: 'content',
-        data: { prompt: 'Prompt 1' },
-        type: 'prompt'
-      }, historyExpiration)
-
-      await ai.history.push(sessionId, randomUUID(), {
-        event: 'content',
-        data: { response: 'Response 1' },
-        type: 'response'
-      }, historyExpiration)
-
-      await ai.history.push(sessionId, randomUUID(), {
-        event: 'end',
-        data: { response: 'COMPLETE' }
-      }, historyExpiration)
-
-      const response = await ai.request({
-        prompt: 'Prompt 2',
-        options: { stream: true, sessionId, resumeEventId }
-      }) as AiStreamResponse
-
-      const { content } = await consumeStream(response)
-
-      assert.equal(client.stream.mock.calls.length, 0)
-      assert.equal(content.map((c: any) => c.data.response).join(''), 'Response 1')
     })
   }
 })

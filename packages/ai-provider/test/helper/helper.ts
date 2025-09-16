@@ -152,8 +152,6 @@ export async function consumeStream (response: Readable): Promise<{ content: Obj
       const eventData = chunk.toString('utf8')
       chunks++
 
-      console.log(' >>> eventData', eventData)
-
       // Parse Server-sent events format
       const lines = eventData.split('\n')
 
