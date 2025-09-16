@@ -274,17 +274,16 @@ const stream2 = await ai.request({
 
 ### Storage-Based Stream Response
 
-When `resumeEventId` is provided, the response stream is entirely generated from storage:
+When `resumeEventId` is provided, the response stream retrieve the events from storage:
 
 1. **Event Retrieval**: The provider queries the storage backend for all events in the session after the specified event ID
 2. **Storage Streaming**: Events are streamed directly from storage (memory/Valkey) in chronological order
-3. **No AI Model Call**: The AI model is not called - all content comes from previously stored events
+3. **AI Model Call**: When the respose is not complete, the AI model is called
 4. **Real-time Delivery**: Events are delivered as Server-Sent Events just like a fresh AI response
 
 ```javascript
 // Example: Resume streaming retrieves stored events
 const resumeStream = await ai.request({
-  prompt: 'Any prompt', // Ignored for resume
   options: {
     stream: true,
     sessionId: 'session-123',
@@ -300,6 +299,28 @@ for await (const chunk of resumeStream) {
   // event: content
   // data: {"response": "stored content"}
   console.log('Stored event:', data)
+}
+```
+
+```javascript
+// Example: Resume streaming retrieves stored events then run the prompt
+const resumeStream = await ai.request({
+  prompt: 'Next prompt',
+  options: {
+    stream: true,
+    sessionId: 'session-123',
+    resumeEventId: 'event-uuid-123'
+  }
+})
+
+// This stream contains events from storage, then from AI model
+for await (const chunk of resumeStream) {
+  const data = chunk.toString()
+  // Contains SSE events retrieved from storage:
+  // id: event-uuid-124
+  // event: content
+  // data: {"response": "stored content"}
+  console.log('Event:', data)
 }
 ```
 
@@ -363,6 +384,14 @@ const resumeStream = await ai.request({
 ```
 
 This format provides complete conversation context, making it ideal for applications that need to distinguish between user inputs and AI responses during stream resumption.
+
+### Edge cases
+
+TODO 
+- when last event in storage is a prompt
+- when last event in storage is a response error
+- when the last response in the storage is not complete
+- when last event in storage is a prompt and another prompt has been requested
 
 ---
 

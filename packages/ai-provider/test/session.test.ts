@@ -407,16 +407,18 @@ describe('_compactHistory', () => {
         data: { response: 'COMPLETE' }
       }, historyExpiration)
 
-      // Test what the actual getHistory method returns (which should compact)
-      // Test the compactHistory method directly - only pass content events
+      // Test the compactHistory method directly - pass all events (including end)
       const events = await ai.history.range(sessionId)
-      const contentEvents = events.filter(e => e.event === 'content')
-      const compactedHistory = ai['_compactHistory'](contentEvents)
+      const compactedHistory = ai['_compactHistory'](events)
 
-      // Should have one complete conversation pair
-      assert.equal(compactedHistory.length, 1, 'Should have one compact history entry')
-      assert.equal(compactedHistory[0].prompt, 'What is AI?', 'Prompt should match')
-      assert.equal(compactedHistory[0].response, 'AI stands for Artificial Intelligence. It is a field of computer science.', 'Response should be concatenated')
+      // Should have prompt and both response events
+      assert.equal(compactedHistory.length, 3, 'Should have three compact history entries')
+      assert.equal(compactedHistory[0].type, 'prompt', 'First event should be prompt')
+      assert.equal(compactedHistory[0].data.prompt, 'What is AI?', 'Prompt should match')
+      assert.equal(compactedHistory[1].type, 'response', 'Second event should be response')
+      assert.equal(compactedHistory[1].data.response, 'AI stands for Artificial Intelligence. It is', 'First response should match')
+      assert.equal(compactedHistory[2].type, 'response', 'Third event should be response')
+      assert.equal(compactedHistory[2].data.response, ' a field of computer science.', 'Second response should match')
     })
 
     test(`should load history from storage format and compact in history format / last event: error, with ${storage.type} storage`, async (t) => {
@@ -441,15 +443,14 @@ describe('_compactHistory', () => {
         data: { code: 'PROVIDER_ERROR', message: 'Connection failed' },
       }, historyExpiration)
 
-      // Test the compactHistory method directly - only pass content events
+      // Test the compactHistory method directly - pass all events (including error)
       const events = await ai.history.range(sessionId)
-      const contentEvents = events.filter(e => e.event === 'content')
-      const compactedHistory = ai['_compactHistory'](contentEvents)
+      const compactedHistory = ai['_compactHistory'](events)
 
-      // Should have one incomplete conversation pair (response is partial)
+      // Should have prompt only since error cleared the buffer
       assert.equal(compactedHistory.length, 1, 'Should have one compact history entry')
-      assert.equal(compactedHistory[0].prompt, 'Tell me a story', 'Prompt should match')
-      assert.equal(compactedHistory[0].response, 'Once upon a time', 'Response should be partial')
+      assert.equal(compactedHistory[0].type, 'prompt', 'Event should be prompt type')
+      assert.equal(compactedHistory[0].data.prompt, 'Tell me a story', 'Prompt should match')
     })
 
     test(`should load history from storage format and compact in history format / last event: content and type: response, with ${storage.type} storage`, async (t) => {
@@ -475,15 +476,14 @@ describe('_compactHistory', () => {
         type: 'response'
       }, historyExpiration)
 
-      // Test the compactHistory method directly - only pass content events
+      // Test the compactHistory method directly - pass all events
       const events = await ai.history.range(sessionId)
-      const contentEvents = events.filter(e => e.event === 'content')
-      const compactedHistory = ai['_compactHistory'](contentEvents)
+      const compactedHistory = ai['_compactHistory'](events)
 
-      // Should have one incomplete conversation pair (response is partial/ongoing)
+      // Should have only the prompt since responses are buffered until end event
       assert.equal(compactedHistory.length, 1, 'Should have one compact history entry')
-      assert.equal(compactedHistory[0].prompt, 'Explain quantum physics', 'Prompt should match')
-      assert.equal(compactedHistory[0].response, 'Quantum physics is the branch of physics that deals', 'Response should be concatenated partial response')
+      assert.equal(compactedHistory[0].type, 'prompt', 'First event should be prompt')
+      assert.equal(compactedHistory[0].data.prompt, 'Explain quantum physics', 'Prompt should match')
     })
 
     test(`should load history from storage format and compact in history format / last event: content and type: prompt, with ${storage.type} storage`, async (t) => {
@@ -514,16 +514,18 @@ describe('_compactHistory', () => {
         type: 'prompt'
       }, historyExpiration)
 
-      // Test the compactHistory method directly - only pass content events
+      // Test the compactHistory method directly - pass all events (including end)
       const events = await ai.history.range(sessionId)
-      const contentEvents = events.filter(e => e.event === 'content')
-      const compactedHistory = ai['_compactHistory'](contentEvents)
+      const compactedHistory = ai['_compactHistory'](events)
 
-      assert.equal(compactedHistory.length, 1, 'Should have one compact history entry')
-      assert.equal(compactedHistory[0].prompt, 'Tell me a joke', 'Prompt should be the second prompt due to compaction logic')
-      assert.equal(compactedHistory[0].response, 'The weather is sunny today.', 'Response should be from the first conversation')
-
-      // Note: This behavior shows that the last prompt without response gets the previous response
+      // Should have the prompt, response, and the new prompt
+      assert.equal(compactedHistory.length, 3, 'Should have three compact history entries')
+      assert.equal(compactedHistory[0].type, 'prompt', 'First event should be prompt')
+      assert.equal(compactedHistory[0].data.prompt, 'What is the weather?', 'First prompt should match')
+      assert.equal(compactedHistory[1].type, 'response', 'Second event should be response')
+      assert.equal(compactedHistory[1].data.response, 'The weather is sunny today.', 'Response should match')
+      assert.equal(compactedHistory[2].type, 'prompt', 'Third event should be prompt')
+      assert.equal(compactedHistory[2].data.prompt, 'Tell me a joke', 'Second prompt should match')
     })
 
     test(`should handle empty history array, with ${storage.type} storage`, async (t) => {
@@ -537,13 +539,15 @@ describe('_compactHistory', () => {
     test(`should handle history with only prompts (no responses), with ${storage.type} storage`, async (t) => {
       const ai = await createAi({ t, storage })
 
-      const contentEvents: HistoryContentEvent[] = [
+      const contentEvents: AiStreamEvent[] = [
         {
+          id: randomUUID(),
           event: 'content',
           data: { prompt: 'First question' },
           type: 'prompt'
         },
         {
+          id: randomUUID(),
           event: 'content',
           data: { prompt: 'Second question' },
           type: 'prompt'
@@ -552,22 +556,26 @@ describe('_compactHistory', () => {
 
       const compactedHistory = ai['_compactHistory'](contentEvents)
 
-      // Should have one entry with the last prompt and empty response
-      assert.equal(compactedHistory.length, 1, 'Should have one compact history entry')
-      assert.equal(compactedHistory[0].prompt, 'Second question', 'Should have the last prompt')
-      assert.equal(compactedHistory[0].response, '', 'Response should be empty')
+      // Should have both prompt events
+      assert.equal(compactedHistory.length, 2, 'Should have two compact history entries')
+      assert.equal(compactedHistory[0].type, 'prompt', 'First event should be prompt')
+      assert.equal(compactedHistory[0].data.prompt, 'First question', 'First prompt should match')
+      assert.equal(compactedHistory[1].type, 'prompt', 'Second event should be prompt')
+      assert.equal(compactedHistory[1].data.prompt, 'Second question', 'Second prompt should match')
     })
 
     test(`should handle history with only responses (no prompts), with ${storage.type} storage`, async (t) => {
       const ai = await createAi({ t, storage })
 
-      const contentEvents: HistoryContentEvent[] = [
+      const contentEvents: AiStreamEvent[] = [
         {
+          id: randomUUID(),
           event: 'content',
           data: { response: 'First response' },
           type: 'response'
         },
         {
+          id: randomUUID(),
           event: 'content',
           data: { response: 'Second response' },
           type: 'response'
@@ -576,47 +584,52 @@ describe('_compactHistory', () => {
 
       const compactedHistory = ai['_compactHistory'](contentEvents)
 
-      // Should have one entry with empty prompt and concatenated responses
-      assert.equal(compactedHistory.length, 1, 'Should have one compact history entry')
-      assert.equal(compactedHistory[0].prompt, '', 'Prompt should be empty')
-      assert.equal(compactedHistory[0].response, 'First responseSecond response', 'Should concatenate all responses')
+      // Should have no events because responses are buffered until end event
+      assert.equal(compactedHistory.length, 0, 'Should have no compact history entries since responses are buffered')
     })
 
     test(`should handle multiple complete conversation pairs, with ${storage.type} storage`, async (t) => {
       const ai = await createAi({ t, storage })
 
-      const contentEvents: HistoryContentEvent[] = [
+      const contentEvents: AiStreamEvent[] = [
         {
+          id: randomUUID(),
           event: 'content',
           data: { prompt: 'What is AI?' },
           type: 'prompt'
         },
         {
+          id: randomUUID(),
           event: 'content',
           data: { response: 'AI is artificial intelligence' },
           type: 'response'
         },
         {
+          id: randomUUID(),
           event: 'content',
           data: { prompt: 'How does it work?' },
           type: 'prompt'
         },
         {
+          id: randomUUID(),
           event: 'content',
           data: { response: 'It uses algorithms and data' },
           type: 'response'
         },
         {
+          id: randomUUID(),
           event: 'content',
           data: { prompt: 'Tell me more' },
           type: 'prompt'
         },
         {
+          id: randomUUID(),
           event: 'content',
           data: { response: 'AI can learn from' },
           type: 'response'
         },
         {
+          id: randomUUID(),
           event: 'content',
           data: { response: ' experience and improve' },
           type: 'response'
@@ -625,33 +638,37 @@ describe('_compactHistory', () => {
 
       const compactedHistory = ai['_compactHistory'](contentEvents)
 
+      // Should have all 3 prompts since responses are buffered
       assert.equal(compactedHistory.length, 3, 'Should have three compact history entries')
 
-      assert.equal(compactedHistory[0].prompt, 'How does it work?', 'First entry uses second prompt')
-      assert.equal(compactedHistory[0].response, 'AI is artificial intelligence', 'First response is from first response')
+      assert.equal(compactedHistory[0].type, 'prompt', 'First entry should be prompt')
+      assert.equal(compactedHistory[0].data.prompt, 'What is AI?', 'First prompt should match')
 
-      assert.equal(compactedHistory[1].prompt, 'Tell me more', 'Second entry uses third prompt')
-      assert.equal(compactedHistory[1].response, 'It uses algorithms and data', 'Second response is from second response')
+      assert.equal(compactedHistory[1].type, 'prompt', 'Second entry should be prompt')
+      assert.equal(compactedHistory[1].data.prompt, 'How does it work?', 'Second prompt should match')
 
-      assert.equal(compactedHistory[2].prompt, '', 'Third entry has empty prompt (no more prompts)')
-      assert.equal(compactedHistory[2].response, 'AI can learn from experience and improve', 'Third response is remaining concatenated responses')
+      assert.equal(compactedHistory[2].type, 'prompt', 'Third entry should be prompt')
+      assert.equal(compactedHistory[2].data.prompt, 'Tell me more', 'Third prompt should match')
     })
 
     test(`should handle history starting with orphaned response, with ${storage.type} storage`, async (t) => {
       const ai = await createAi({ t, storage })
 
-      const contentEvents: HistoryContentEvent[] = [
+      const contentEvents: AiStreamEvent[] = [
         {
+          id: randomUUID(),
           event: 'content',
           data: { response: 'This is an orphaned response' },
           type: 'response'
         },
         {
+          id: randomUUID(),
           event: 'content',
           data: { prompt: 'What is this?' },
           type: 'prompt'
         },
         {
+          id: randomUUID(),
           event: 'content',
           data: { response: 'This is a proper response' },
           type: 'response'
@@ -660,37 +677,36 @@ describe('_compactHistory', () => {
 
       const compactedHistory = ai['_compactHistory'](contentEvents)
 
-      assert.equal(compactedHistory.length, 2, 'Should have two compact history entries')
-
-      // First entry should pair the orphaned response with the first prompt
-      assert.equal(compactedHistory[0].prompt, 'What is this?', 'First prompt should be the actual prompt')
-      assert.equal(compactedHistory[0].response, 'This is an orphaned response', 'Should use the orphaned response')
-
-      // Second entry should have the proper response with empty prompt (leftover)
-      assert.equal(compactedHistory[1].prompt, '', 'Second prompt should be empty')
-      assert.equal(compactedHistory[1].response, 'This is a proper response', 'Second response should match')
+      // Should have only the prompt since responses are buffered until end event
+      assert.equal(compactedHistory.length, 1, 'Should have one compact history entry')
+      assert.equal(compactedHistory[0].type, 'prompt', 'First event should be prompt')
+      assert.equal(compactedHistory[0].data.prompt, 'What is this?', 'Prompt should match')
     })
 
     test(`should handle undefined/empty prompt and response data, with ${storage.type} storage`, async (t) => {
       const ai = await createAi({ t, storage })
 
-      const contentEvents: HistoryContentEvent[] = [
+      const contentEvents: AiStreamEvent[] = [
         {
+          id: randomUUID(),
           event: 'content',
           data: { prompt: undefined },
           type: 'prompt'
         },
         {
+          id: randomUUID(),
           event: 'content',
           data: { response: undefined },
           type: 'response'
         },
         {
+          id: randomUUID(),
           event: 'content',
           data: {},
           type: 'prompt'
         },
         {
+          id: randomUUID(),
           event: 'content',
           data: { response: '' },
           type: 'response'
@@ -699,15 +715,14 @@ describe('_compactHistory', () => {
 
       const compactedHistory = ai['_compactHistory'](contentEvents)
 
+      // Should have both prompt events
       assert.equal(compactedHistory.length, 2, 'Should have two compact history entries')
 
-      // The algorithm converts undefined prompt to empty string with: event.data.prompt || ''
-      // When undefined gets pushed to array and then joined, it becomes empty string, not "undefined"
-      assert.equal(compactedHistory[0].prompt, '', 'First prompt should be empty string (from missing data)')
-      assert.equal(compactedHistory[0].response, '', 'First response should be empty when response is undefined due to JS array behavior')
+      assert.equal(compactedHistory[0].type, 'prompt', 'First event should be prompt')
+      assert.equal(compactedHistory[0].data.prompt, undefined, 'First prompt should be undefined')
 
-      assert.equal(compactedHistory[1].prompt, '', 'Second prompt should be empty')
-      assert.equal(compactedHistory[1].response, '', 'Second response should be empty')
+      assert.equal(compactedHistory[1].type, 'prompt', 'Second event should be prompt')
+      assert.equal(compactedHistory[1].data.prompt, undefined, 'Second prompt should be undefined (empty data)')
     })
 
     test(`should handle complex alternating pattern with multiple responses per prompt, with ${storage.type} storage`, async (t) => {
@@ -758,13 +773,17 @@ describe('_compactHistory', () => {
 
       const compactedHistory = ai['_compactHistory'](contentEvents)
 
-      assert.equal(compactedHistory.length, 2, 'Should have two compact history entries')
+      // Should have all 3 prompts since responses are buffered without end event
+      assert.equal(compactedHistory.length, 3, 'Should have three compact history entries')
 
-      assert.equal(compactedHistory[0].prompt, 'Give me an example', 'First entry uses the second prompt')
-      assert.equal(compactedHistory[0].response, 'Quantum physics is a branch of physics that studies matter and energy', 'First response is from the first set of responses')
+      assert.equal(compactedHistory[0].type, 'prompt', 'First entry should be prompt')
+      assert.equal(compactedHistory[0].data.prompt, 'Explain quantum physics', 'First prompt should match')
 
-      assert.equal(compactedHistory[1].prompt, 'Tell me about wave-particle duality', 'Second entry uses the third prompt')
-      assert.equal(compactedHistory[1].response, 'An example is the double-slit experiment', 'Second response is from the second set of responses')
+      assert.equal(compactedHistory[1].type, 'prompt', 'Second entry should be prompt')
+      assert.equal(compactedHistory[1].data.prompt, 'Give me an example', 'Second prompt should match')
+
+      assert.equal(compactedHistory[2].type, 'prompt', 'Third entry should be prompt')
+      assert.equal(compactedHistory[2].data.prompt, 'Tell me about wave-particle duality', 'Third prompt should match')
     })
 
     test(`should handle mixed scenario with gaps and multiple prompts, with ${storage.type} storage`, async (t) => {
@@ -810,10 +829,18 @@ describe('_compactHistory', () => {
 
       const compactedHistory = ai['_compactHistory'](contentEvents)
 
-      // The algorithm processes prompts sequentially, so only the last prompt gets paired with responses
-      assert.equal(compactedHistory.length, 1, 'Should have one compact history entry')
-      assert.equal(compactedHistory[0].prompt, 'Third question', 'Should have the last prompt')
-      assert.equal(compactedHistory[0].response, 'Combined response for all questions', 'Should have concatenated responses')
+      // Should have all 3 prompts and 2 response events once the end event triggers
+      assert.equal(compactedHistory.length, 5, 'Should have five compact history entries')
+      assert.equal(compactedHistory[0].type, 'prompt', 'First event should be prompt')
+      assert.equal(compactedHistory[0].data.prompt, 'First question', 'First prompt should match')
+      assert.equal(compactedHistory[1].type, 'prompt', 'Second event should be prompt')
+      assert.equal(compactedHistory[1].data.prompt, 'Second question', 'Second prompt should match')
+      assert.equal(compactedHistory[2].type, 'prompt', 'Third event should be prompt')
+      assert.equal(compactedHistory[2].data.prompt, 'Third question', 'Third prompt should match')
+      assert.equal(compactedHistory[3].type, 'response', 'Fourth event should be response')
+      assert.equal(compactedHistory[3].data.response, 'Combined response', 'First response should match')
+      assert.equal(compactedHistory[4].type, 'response', 'Fifth event should be response')
+      assert.equal(compactedHistory[4].data.response, ' for all questions', 'Second response should match')
     })
   }
 })

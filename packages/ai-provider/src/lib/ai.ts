@@ -1044,7 +1044,7 @@ export class Ai {
     }
 
     console.log(' >>> compactedHistory', compactHistory)
-    
+
     return compactHistory
   }
 
