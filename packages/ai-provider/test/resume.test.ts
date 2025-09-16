@@ -691,8 +691,58 @@ test('should perform a provider request resuming an incomplete response', async 
   ])
 })
 
-test.todo('should get error when resuming an incomplete response without end event', async (t) => {
+test('should get error when resuming an incomplete response without end event', async (t) => {
+  const client = {
+    ...createDummyClient(),
+    stream: mock.fn(async () => {
+      return mockOpenAiStream([
+        { choices: [{ delta: { content: 'New response' }, finish_reason: 'stop' }] }
+      ])
+    })
+  }
+  const ai = await createAi({ t, client })
 
+  const sessionId = randomUUID()
+  const resumeEventId = randomUUID()
+
+  // Set up history with incomplete response (no end/error event)
+  await ai.history.push(sessionId, resumeEventId, {
+    event: 'content',
+    data: { prompt: 'Test prompt' },
+    type: 'prompt'
+  }, historyExpiration)
+
+  await ai.history.push(sessionId, randomUUID(), {
+    event: 'content',
+    data: { response: 'Incomplete response chunk 1' },
+    type: 'response'
+  }, historyExpiration)
+
+  await ai.history.push(sessionId, randomUUID(), {
+    event: 'content',
+    data: { response: 'Incomplete response chunk 2' },
+    type: 'response'
+  }, historyExpiration)
+
+  // No end or error event - this should cause "Incomplete response in storage" error
+
+  try {
+    const response = await ai.request({
+      prompt: 'Continue conversation',
+      options: {
+        stream: true,
+        sessionId,
+        resumeEventId,
+      }
+    }) as AiStreamResponse
+
+    // Try to consume the stream, this should trigger the error
+    await consumeStream(response)
+    
+    assert.fail('Should have thrown "Incomplete response in storage" error')
+  } catch (error: any) {
+    assert.equal(error.message, 'Incomplete response in storage', 'Should throw specific error for incomplete response')
+  }
 })
 
 test('should perform 2 provider requests resuming an incomplete response where last event is a prompt and the request has a prompt too', async (t) => {
