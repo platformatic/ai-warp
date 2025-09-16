@@ -9,7 +9,7 @@ import { createStorage, type Storage, type AiStorageOptions } from './storage/in
 import { isStream, parseTimeWindow } from './utils.ts'
 import { HistoryGetError, ModelStateError, OptionError, ProviderNoModelsAvailableError, ProviderRateLimitError, ProviderRequestEndError, ProviderRequestStreamTimeoutError, ProviderRequestTimeoutError, ProviderStreamError } from './errors.ts'
 import { DEFAULT_HISTORY_EXPIRATION, DEFAULT_MAX_RETRIES, DEFAULT_RATE_LIMIT_MAX, DEFAULT_RATE_LIMIT_TIME_WINDOW, DEFAULT_REQUEST_TIMEOUT, DEFAULT_RESTORE_PROVIDER_COMMUNICATION_ERROR, DEFAULT_RESTORE_PROVIDER_EXCEEDED_QUOTA_ERROR, DEFAULT_RESTORE_RATE_LIMIT, DEFAULT_RESTORE_REQUEST_TIMEOUT, DEFAULT_RESTORE_RETRY, DEFAULT_RETRY_INTERVAL, DEFAULT_STORAGE } from './config.ts'
-import { createEventId, decodeEventStream, encodeEvent, type AiStreamEvent, type AiStreamEventPrompt } from './event.ts'
+import { createEventId, decodeEventStream, encodeEvent, type AiStreamEvent, type AiStreamEventContent, type AiStreamEventPrompt } from './event.ts'
 
 // supported providers
 export type AiProvider = 'openai' | 'deepseek' | 'gemini'
@@ -856,8 +856,8 @@ export class Ai {
           buffer.length = 0
           complete = false
           break
-        } 
-        
+        }
+
         if (event?.event === 'end') {
           // collect request-response pair only when complete
           events.push(lastPrompt)
@@ -980,45 +980,26 @@ export class Ai {
     // if history and not sessionId, logic error, should not happen
     // TODO get and update history should be atomic for concurrent requests with same sessionId
 
-    // load history from storage
-    const contentHistory: AiStreamEvent[] = []
+    // load history from storage and compact it
+    let contentHistory: AiStreamEventContent[]
     try {
       const storedHistory = await this.history.range(sessionId!)
       if (!storedHistory || storedHistory.length < 1) {
         return { messages: [], promptEventId: undefined }
       }
 
-      const contentBuffer: AiStreamEvent[] = []
-      for (const event of storedHistory) {
-        // @ts-ignore TODO fix types
-        if (event?.type === 'prompt') {
-          // @ts-ignore
-          contentHistory.push(event!)
-          continue
-        }
-        if (event?.event === 'error') {
-          contentBuffer.length = 0
-          continue
-        }
-        if (event?.event === 'end') {
-          contentHistory.push(...contentBuffer)
-          contentBuffer.length = 0
-          continue
-        }
-        contentBuffer.push(event)
+      contentHistory = this._compactHistory(storedHistory)
+      if (contentHistory.length < 1) {
+        return { messages: [], promptEventId: undefined }
       }
     } catch (err) {
       this.logger.error({ err, sessionId }, 'Failed to get history')
     }
 
-    if (contentHistory.length < 1) {
-      return { messages: [], promptEventId: undefined }
-    }
-
     // TODO !!! HANDLE INCOMPLETE RESPONSE: FINALIZE? CLEAN UP?
     // console.log(' >>> contentHistory', contentHistory)
 
-    const lastEvent: AiStreamEvent = contentHistory?.at(-1)!
+    const lastEvent: AiStreamEventContent = contentHistory!.at(-1)!
     let promptEventId: AiEventId | undefined
 
     // when last event is end, last request is complete, happy state
@@ -1034,10 +1015,40 @@ export class Ai {
       promptEventId = lastEvent.id
     }
 
-    return { messages: this._compactHistory(contentHistory), promptEventId }
+    return { messages: this._toHistoryMessages(contentHistory!), promptEventId }
   }
 
-  private _compactHistory (history: AiStreamEvent[]): AiChatHistory {
+  /**
+   * Merge consecutive events of the same type into a single event
+   */
+  private _compactHistory (history: AiStreamEvent[]): AiStreamEventContent[] {
+    const compactHistory: AiStreamEventContent[] = []
+    const buffer: AiStreamEventContent[] = []
+    for (const event of history) {
+    // @ts-ignore TODO fix types
+      if (event?.type === 'prompt') {
+      // @ts-ignore
+        compactHistory.push(event!)
+        continue
+      }
+      if (event?.event === 'error') {
+        buffer.length = 0
+        continue
+      }
+      if (event?.event === 'end') {
+        compactHistory.push(...buffer)
+        buffer.length = 0
+        continue
+      }
+      buffer.push(event)
+    }
+
+    console.log(' >>> compactedHistory', compactHistory)
+    
+    return compactHistory
+  }
+
+  private _toHistoryMessages (history: AiStreamEventContent[]): AiChatHistory {
     const compactedHistory: AiChatHistory = []
     let lastResponse: string = ''
     let lastPrompt: string = ''

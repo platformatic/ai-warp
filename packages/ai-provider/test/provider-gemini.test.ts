@@ -149,7 +149,7 @@ test('GeminiProvider - should be able to perform a prompt with stream', async ()
 
   assert.ok(isStream(response))
 
-  const {content} = await consumeStream(response)
+  const { content } = await consumeStream(response)
   assert.equal(content.map((c: any) => c.data.response).join(''), 'Hello! I am doing well.')
 
   // @ts-ignore
@@ -588,7 +588,7 @@ test('GeminiProvider - should handle streaming with finish reason', async () => 
     }
   }) as AiStreamResponse
 
-  const {content, end} = await consumeStream(response)
+  const { content, end } = await consumeStream(response)
   assert.equal(content.map((c: any) => c.data.response).join(''), 'Streaming response')
   assert.equal(end, 'COMPLETE')
 })

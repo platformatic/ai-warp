@@ -831,7 +831,7 @@ test('should handle complete response when max tokens not reached', async () => 
 
       return {
         choices: [{
-          message: {            content: 'This is a complete response.'          },
+          message: { content: 'This is a complete response.' },
           finish_reason: 'stop' // Indicates natural completion
         }]
       }

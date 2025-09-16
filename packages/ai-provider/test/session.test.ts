@@ -1,7 +1,7 @@
 import { test, mock, describe } from 'node:test'
 import assert from 'node:assert'
 import pino from 'pino'
-import { Ai, type AiContentResponse, type AiStreamResponse } from '../src/index.ts'
+import { Ai, type AiStreamEvent, type AiContentResponse, type AiStreamResponse } from '../src/index.ts'
 import { type HistoryContentEvent } from '../src/lib/ai.ts'
 import { consumeStream, createAi, createDummyClient, mockOpenAiStream, storages } from './helper/helper.ts'
 import { isStream } from '../src/lib/utils.ts'
@@ -770,31 +770,41 @@ describe('_compactHistory', () => {
     test(`should handle mixed scenario with gaps and multiple prompts, with ${storage.type} storage`, async (t) => {
       const ai = await createAi({ t, storage })
 
-      const contentEvents: HistoryContentEvent[] = [
+      const contentEvents: AiStreamEvent[] = [
         {
+          id: randomUUID(),
           event: 'content',
           data: { prompt: 'First question' },
           type: 'prompt'
         },
         {
+          id: randomUUID(),
           event: 'content',
           data: { prompt: 'Second question' },
           type: 'prompt'
         },
         {
+          id: randomUUID(),
           event: 'content',
           data: { prompt: 'Third question' },
           type: 'prompt'
         },
         {
+          id: randomUUID(),
           event: 'content',
           data: { response: 'Combined response' },
           type: 'response'
         },
         {
+          id: randomUUID(),
           event: 'content',
           data: { response: ' for all questions' },
           type: 'response'
+        },
+        {
+          id: randomUUID(),
+          event: 'end',
+          data: { response: 'COMPLETE' }
         }
       ]
 

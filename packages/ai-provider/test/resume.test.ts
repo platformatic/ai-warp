@@ -50,7 +50,7 @@ test.only('should resume stream from first event ID', async (t) => {
   const originalSessionId = (originalResponse as any).sessionId
   assert.ok(originalSessionId)
 
-  { 
+  {
     const { content, chunks } = await consumeStream(originalResponse)
     assert.equal(chunks, 4)
     assert.equal(content.map((c: any) => c.data.response).join(''), 'Hello world!')

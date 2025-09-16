@@ -15,7 +15,7 @@ const stringifyEventData = fastJson({
   }
 })
 
-export interface AiStreamEventContent {
+export interface AiStreamEventResponse {
   response: string
 }
 
@@ -28,13 +28,14 @@ export interface AiStreamEventEnd {
 }
 
 export type AiStreamEventType = 'prompt' | 'response'
-
-export type AiStreamEvent = {
+export type AiStreamEventContent = {
   id: string
   event: 'content'
   type: AiStreamEventType
-  data: AiStreamEventContent | AiStreamEventPrompt
-} |
+  data: AiStreamEventResponse | AiStreamEventPrompt
+}
+
+export type AiStreamEvent = AiStreamEventContent |
 {
   id: string
   event: 'end'
@@ -88,7 +89,7 @@ export function decodeEventStream (chunk: string): AiStreamEvent[] {
           events.push({
             id: createEventId(),
             event: 'content',
-            data: parsedData as AiStreamEventContent,
+            data: parsedData as AiStreamEventResponse,
             type: currentType as AiStreamEventType
           })
         } if (currentEvent === 'end') {
