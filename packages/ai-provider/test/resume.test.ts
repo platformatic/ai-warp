@@ -738,7 +738,7 @@ test('should get error when resuming an incomplete response without end event', 
 
     // Try to consume the stream, this should trigger the error
     await consumeStream(response)
-    
+
     assert.fail('Should have thrown "Incomplete response in storage" error')
   } catch (error: any) {
     assert.equal(error.message, 'Incomplete response in storage', 'Should throw specific error for incomplete response')

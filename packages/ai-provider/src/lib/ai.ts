@@ -589,7 +589,7 @@ export class Ai {
 
             // close the stream
             context.response.stream!.push(null)
-            
+
             return
           }
 
