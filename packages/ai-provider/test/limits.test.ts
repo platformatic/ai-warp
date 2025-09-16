@@ -466,7 +466,7 @@ test('should timeout streaming request between chunks', async () => {
           readable.push(Buffer.from('data: {"choices": [{"delta": {"content": "chunk1"}}]}\n\n'))
 
           // Wait longer than timeout before second chunk
-          await new Promise(resolve => setTimeout(resolve, 200))
+          await wait(200)
 
           // This should never be reached due to timeout
           readable.push(Buffer.from('data: {"choices": [{"delta": {"content": "chunk2"}}]}\n\n'))
@@ -818,7 +818,7 @@ test('should handle max tokens limit in streaming response', async () => {
 
   const { content, end } = await consumeStream(response)
 
-  assert.equal(content.join(''), 'This is a truncated response')
+  assert.equal(content.map((c: any) => c.data.response).join(''), 'This is a truncated response')
   assert.equal(end, 'INCOMPLETE_MAX_TOKENS')
 })
 
@@ -831,9 +831,7 @@ test('should handle complete response when max tokens not reached', async () => 
 
       return {
         choices: [{
-          message: {
-            content: 'This is a complete response.'
-          },
+          message: {            content: 'This is a complete response.'          },
           finish_reason: 'stop' // Indicates natural completion
         }]
       }
@@ -908,7 +906,7 @@ test('should handle complete streaming response when max tokens not reached', as
 
   const { content, end } = await consumeStream(response)
 
-  assert.equal(content.join(''), 'Complete response.')
+  assert.equal(content.map((c: any) => c.data.response).join(''), 'Complete response.')
   assert.equal(end, 'COMPLETE')
   // Note: The consumeStream helper doesn't currently parse the final result event
   // so we can't assert on finalResult here
@@ -1049,7 +1047,7 @@ test('should retry streaming request on retryable error and succeed', async (t) 
   assert.ok(isStream(response))
 
   const { content } = await consumeStream(response)
-  assert.equal(content.join(''), 'Success after retry')
+  assert.equal(content.map((c: any) => c.data.response).join(''), 'Success after retry')
 
   // @ts-ignore
   assert.equal(client.stream.mock.calls.length, 1) // Only one call made before failure
@@ -1204,7 +1202,7 @@ test('should retry streaming request with different models when first model fail
 
   assert.ok(isStream(response))
   const { content } = await consumeStream(response)
-  assert.equal(content.join(''), 'Success from deepseek')
+  assert.equal(content.map((c: any) => c.data.response).join(''), 'Success from deepseek')
 
   // @ts-ignore
   assert.equal(client.stream.mock.calls.length, 2)
@@ -1430,7 +1428,7 @@ test('should respect retry interval in streaming requests', async (t) => {
   assert.ok(isStream(response))
 
   const { content } = await consumeStream(response)
-  assert.equal(content.join(''), 'Success after interval wait')
+  assert.equal(content.map((c: any) => c.data.response).join(''), 'Success after interval wait')
   // @ts-ignore
   assert.equal(client.stream.mock.calls.length, 3)
 

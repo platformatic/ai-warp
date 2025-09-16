@@ -188,7 +188,7 @@ describe('session', () => {
 
       const { content } = await consumeStream(response)
 
-      assert.equal(content.join(''), 'Response 2')
+      assert.equal(content.map((c: any) => c.data.response).join(''), 'Response 2')
       assert.equal(client.stream.mock.calls.length, 1, 'Should have one request call')
       // @ts-ignore
       assert.deepEqual(client.stream.mock.calls[0].arguments[1].messages, [
@@ -268,7 +268,7 @@ describe('session', () => {
 
       const { content } = await consumeStream(response)
 
-      assert.equal(content.join(''), 'A Response Again')
+      assert.equal(content.map((c: any) => c.data.response).join(''), 'A Response Again')
       assert.equal(client.stream.mock.calls.length, 1, 'Should have one request call')
       // @ts-ignore
       assert.deepEqual(client.stream.mock.calls[0].arguments[1].messages, [
@@ -373,7 +373,7 @@ describe('session', () => {
       const { content } = await consumeStream(response)
 
       assert.equal(client.stream.mock.calls.length, 0)
-      assert.equal(content.join(''), 'Response 1')
+      assert.equal(content.map((c: any) => c.data.response).join(''), 'Response 1')
     })
   }
 })

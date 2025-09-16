@@ -149,8 +149,8 @@ test('GeminiProvider - should be able to perform a prompt with stream', async ()
 
   assert.ok(isStream(response))
 
-  const result = await consumeStream(response) as { content: string[], end: string }
-  assert.equal(result.content.join(''), 'Hello! I am doing well.')
+  const {content} = await consumeStream(response)
+  assert.equal(content.map((c: any) => c.data.response).join(''), 'Hello! I am doing well.')
 
   // @ts-ignore
   const streamCall = client.stream.mock.calls[0].arguments[1]
@@ -588,9 +588,9 @@ test('GeminiProvider - should handle streaming with finish reason', async () => 
     }
   }) as AiStreamResponse
 
-  const result = await consumeStream(response) as { content: string[], end: string }
-  assert.equal(result.content.join(''), 'Streaming response')
-  assert.equal(result.end, 'COMPLETE')
+  const {content, end} = await consumeStream(response)
+  assert.equal(content.map((c: any) => c.data.response).join(''), 'Streaming response')
+  assert.equal(end, 'COMPLETE')
 })
 
 test('GeminiProvider - should handle empty generation config when no options provided', async () => {

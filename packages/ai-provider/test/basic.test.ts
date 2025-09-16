@@ -212,7 +212,7 @@ test('should be able to perform a prompt with stream', async (t) => {
 
   const { content } = await consumeStream(response)
 
-  assert.equal(content.join(''), 'Sure, I can help you with math.')
+  assert.equal(content.map((c: any) => c.data.response).join(''), 'Sure, I can help you with math.')
 
   //  @ts-ignore
   assert.deepEqual(client.stream.mock.calls[0].arguments[1], {

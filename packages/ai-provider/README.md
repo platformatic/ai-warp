@@ -188,7 +188,6 @@ Make an AI request with automatic fallback and session management.
   - `sessionId` (string, optional): Session ID for conversation history (mutually exclusive with `history`)
   - `history` (array, optional): Previous conversation history array (mutually exclusive with `sessionId`)
   - `resumeEventId` (string, optional): Event ID to resume streaming from (requires `sessionId` and `stream: true`)
-  - `streamResponseType` (string, optional): Response streaming format - `'content'` (default) returns only AI responses, `'session'` includes both prompts and responses (recommended for stream resumption); see [Resume Response section](#resume-response) for details.
 
 #### `ai.close()`
 Close all provider connections and storage.
@@ -329,59 +328,15 @@ while (true) {
 
 ### Resume Response
 
-When resuming streams, you can specify the response format using the `streamResponseType` option:
-
-#### Content Response (Default)
-The `content` format returns only AI-generated responses, filtering out user prompts. This is the default behavior and provides a clean stream of just the AI content.
+When resuming streams, includes both user prompts and AI responses, providing complete conversation context. This is recommended when resuming streams as it offers full visibility into the conversation flow:
 
 ```javascript
 const resumeStream = await ai.request({
-  prompt: 'Continue the story', // Ignored during resume
+  prompt: 'Continue the story', // Will perform another prompt following the resume
   options: {
     stream: true,
     sessionId: 'session-123',
     resumeEventId: 'event-uuid-123'
-    // streamResponseType: 'content' is default
-  }
-})
-
-// Stream contains only response content:
-// id: event-uuid-124
-// event: content
-// data: {"response": "AI response text"}
-```
-
-When resuming from a specific event in a session with multiple conversations, only the content after the specified `resumeEventId` is streamed, excluding any subsequent prompts and responses:
-
-```javascript
-// Session history example:
-// [prompt1] -> [response1-chunk1, response1-chunk2] -> [prompt2] -> [response2-chunk1]
-
-const resumeStream = await ai.request({
-  prompt: 'ignored',
-  options: {
-    stream: true,
-    sessionId: 'session-123',
-    resumeEventId: 'response1-chunk1-id', // Resume from middle of first response
-    streamResponseType: 'content' // Only response content
-  }
-})
-
-// Will stream: response1-chunk2, response2-chunk1
-// Will NOT stream: prompt2 (filtered out)
-```
-
-#### Session Response
-The `session` format includes both user prompts and AI responses, providing complete conversation context. This is recommended when resuming streams as it offers full visibility into the conversation flow:
-
-```javascript
-const resumeStream = await ai.request({
-  prompt: 'Continue the story', // Ignored during resume
-  options: {
-    stream: true,
-    sessionId: 'session-123',
-    resumeEventId: 'event-uuid-123',
-    streamResponseType: 'session' // Include full session history
   }
 })
 

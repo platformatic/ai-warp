@@ -1,3 +1,4 @@
+import { setTimeout as wait } from 'node:timers/promises'
 import { mock, test } from 'node:test'
 import assert from 'node:assert'
 import { randomUUID } from 'node:crypto'
@@ -10,7 +11,7 @@ const apiKey = 'test'
 const logger = pino({ level: 'silent' })
 const historyExpiration = 10_000
 
-test('should resume stream from first event ID', async (t) => {
+test.only('should resume stream from first event ID', async (t) => {
   const client = {
     ...createDummyClient(),
     stream: mock.fn(async () => {
@@ -49,13 +50,14 @@ test('should resume stream from first event ID', async (t) => {
   const originalSessionId = (originalResponse as any).sessionId
   assert.ok(originalSessionId)
 
-  { const { content, chunks } = await consumeStream(originalResponse, 'content')
+  { 
+    const { content, chunks } = await consumeStream(originalResponse)
     assert.equal(chunks, 4)
-    assert.equal(content.join(''), 'Hello world!')
+    assert.equal(content.map((c: any) => c.data.response).join(''), 'Hello world!')
   }
 
   // Wait a bit for background processing to complete
-  await new Promise(resolve => setTimeout(resolve, 100))
+  await wait(100)
 
   // Get the history to find event IDs
   const history = await ai.history.range(originalSessionId)
@@ -79,9 +81,9 @@ test('should resume stream from first event ID', async (t) => {
   assert.equal((resumedResponse as any).sessionId, originalSessionId)
 
   {  // Should have received some chunks from the resume
-    const { content, chunks } = await consumeStream(resumedResponse, 'content')
+    const { content, chunks } = await consumeStream(resumedResponse)
     assert.equal(chunks, 4)
-    assert.equal(content.join(''), 'Hello world!')
+    assert.equal(content.map((c: any) => c.data.response).join(''), 'Hello world!')
   }
   // Verify that we only made one call to the provider (the original request)
   // The resume should not call the provider again
@@ -133,7 +135,7 @@ test('should make normal request when resume is disabled', async (t) => {
   }
 
   // Wait for background processing
-  await new Promise(resolve => setTimeout(resolve, 50))
+  await wait(100)
 
   // Make another streaming request with resume disabled - should make new provider call
   const response2 = await ai.request({
@@ -245,7 +247,7 @@ test('should get only the content of a specific resume event id, without prompt'
   const { content } = await consumeStream(response)
 
   assert.equal(client.stream.mock.calls.length, 0, 'Should have no request call')
-  assert.equal(content.join(''), 'Response 1')
+  assert.equal(content.map((c: any) => c.data.response).join(''), 'Response 1')
 })
 
 test('should resume the second response by resume event id on an incomplete response', async (t) => {
@@ -306,7 +308,7 @@ test('should resume the second response by resume event id on an incomplete resp
   const { content } = await consumeStream(response)
 
   assert.equal(client.stream.mock.calls.length, 0, 'Should have no request call')
-  assert.equal(content.join(''), 'Response 2')
+  assert.equal(content.map((c: any) => c.data.response).join(''), 'Response 2')
 })
 
 test('should not resume a error response by resume event id but make a new request for the last prompt in history', async (t) => {
@@ -380,7 +382,7 @@ test('should not resume a error response by resume event id but make a new reque
       role: 'user'
     }
   ])
-  assert.equal(content.join(''), 'New Response 2')
+  assert.equal(content.map((c: any) => c.data.response).join(''), 'New Response 2')
 })
 
 test('should not resume a error response by resume event id but make a new requests: one for the last prompt in history, one for the new prompt', async (t) => {
@@ -484,7 +486,7 @@ test('should not resume a error response by resume event id but make a new reque
       role: 'user'
     }
   ])
-  assert.equal(content.join(''), 'Response 2Response 3')
+  assert.equal(content.map((c: any) => c.data.response).join(''), 'Response 2Response 3')
 })
 
 test('should resume the session by a specific resume event id', async (t) => {
@@ -604,11 +606,10 @@ test('should resume the session by a specific resume event id', async (t) => {
         stream: true,
         sessionId,
         resumeEventId: calls[i].eventId,
-        streamResponseType: 'session'
       }
     }) as AiStreamResponse
 
-    const { content } = await consumeStream(response, 'session')
+    const { content } = await consumeStream(response)
     assert.equal(client.stream.mock.calls.length, 1, 'Should call the provider once to get response #3')
 
     for (let j = 0; j < content.length; j++) {
@@ -624,7 +625,7 @@ test('should resume the session by a specific resume event id', async (t) => {
   }
 })
 
-test.only('should perform a provider request resuming an incomplete response with stream response type session', async (t) => {
+test('should perform a provider request resuming an incomplete response with stream response type session', async (t) => {
   const client = {
     ...createDummyClient(),
     stream: mock.fn(async (_, request) => {
@@ -672,11 +673,11 @@ test.only('should perform a provider request resuming an incomplete response wit
       stream: true,
       sessionId,
       resumeEventId,
-      streamResponseType: 'session'
+
     }
   }) as AiStreamResponse
 
-  const { content } = await consumeStream(response, 'session')
+  const { content } = await consumeStream(response)
 
   assert.equal(client.stream.mock.calls.length, 2, 'Should perform one provider request for incomplete response')
   assert.equal(content.length, 6, 'Should return session content')
@@ -734,14 +735,14 @@ test('should perform a provider request resuming an incomplete response with str
       stream: true,
       sessionId,
       resumeEventId,
-      streamResponseType: 'content'
+
     }
   }) as AiStreamResponse
 
-  const { content } = await consumeStream(response, 'content')
+  const { content } = await consumeStream(response)
 
   assert.equal(client.stream.mock.calls.length, 1, 'Should perform provider request when resuming incomplete response with content type')
-  assert.equal(content.join(''), 'Full Response', 'Should return existing partial response')
+  assert.equal(content.map((c: any) => c.data.response).join(''), 'Full Response', 'Should return existing partial response')
 })
 
 test('should perform 1 provider request resuming an incomplete response where last event is a prompt and the request has a prompt too, with response type content', async (t) => {
@@ -788,14 +789,14 @@ test('should perform 1 provider request resuming an incomplete response where la
       stream: true,
       sessionId,
       resumeEventId,
-      streamResponseType: 'content'
+
     }
   }) as AiStreamResponse
 
-  const { content } = await consumeStream(response, 'content')
+  const { content } = await consumeStream(response)
 
   assert.equal(client.stream.mock.calls.length, 1, 'Should perform one provider request when both history and request have prompts')
-  assert.equal(content.join(''), 'Combined response', 'Should return new response')
+  assert.equal(content.map((c: any) => c.data.response).join(''), 'Combined response', 'Should return new response')
 })
 
 test('should perform 2 provider requests resuming an incomplete response where last event is a prompt and the request has a prompt too, with response type session', async (t) => {
@@ -838,11 +839,11 @@ test('should perform 2 provider requests resuming an incomplete response where l
       stream: true,
       sessionId,
       resumeEventId,
-      streamResponseType: 'session'
+
     }
   }) as AiStreamResponse
 
-  const { content } = await consumeStream(response, 'session')
+  const { content } = await consumeStream(response)
 
   // With session response type, it should make 2 requests:
   // 1. For the hanging prompt in history
@@ -890,14 +891,14 @@ test('should perform 1 provider request resuming an incomplete response where la
       stream: true,
       sessionId,
       resumeEventId,
-      streamResponseType: 'content'
+
     }
   }) as AiStreamResponse
 
-  const { content } = await consumeStream(response, 'content')
+  const { content } = await consumeStream(response)
 
   assert.equal(client.stream.mock.calls.length, 1, 'Should perform one provider request for hanging prompt')
-  assert.equal(content.join(''), 'Response to hanging prompt', 'Should return response to hanging prompt')
+  assert.equal(content.map((c: any) => c.data.response).join(''), 'Response to hanging prompt', 'Should return response to hanging prompt')
 })
 
 test('should perform 1 provider request resuming an incomplete response where last event is a prompt and the request doesnt have a prompt, with response type session', async (t) => {
@@ -939,11 +940,11 @@ test('should perform 1 provider request resuming an incomplete response where la
       stream: true,
       sessionId,
       resumeEventId,
-      streamResponseType: 'session'
+
     }
   }) as AiStreamResponse
 
-  const { content } = await consumeStream(response, 'session')
+  const { content } = await consumeStream(response)
 
   assert.equal(client.stream.mock.calls.length, 1, 'Should perform one provider request for hanging prompt with session type')
   assert.ok(content.length > 0, 'Should return session content')
@@ -987,11 +988,11 @@ test('should perform 1 provider request resuming an incomplete response where la
       stream: true,
       sessionId,
       resumeEventId,
-      streamResponseType: 'session'
+
     }
   }) as AiStreamResponse
 
-  const { content } = await consumeStream(response, 'session')
+  const { content } = await consumeStream(response)
 
   assert.equal(client.stream.mock.calls.length, 1, 'Should perform one provider request when resuming from error with session type')
   assert.ok(content.length > 0, 'Should return session content after error recovery')
@@ -1035,12 +1036,12 @@ test('should perform 1 provider request resuming an incomplete response where la
       stream: true,
       sessionId,
       resumeEventId,
-      streamResponseType: 'content'
+
     }
   }) as AiStreamResponse
 
-  const { content } = await consumeStream(response, 'content')
+  const { content } = await consumeStream(response)
 
   assert.equal(client.stream.mock.calls.length, 1, 'Should perform one provider request when resuming from error with content type')
-  assert.equal(content.join(''), 'Retry response', 'Should return retry response after error recovery')
+  assert.equal(content.map((c: any) => c.data.response).join(''), 'Retry response', 'Should return retry response after error recovery')
 })
