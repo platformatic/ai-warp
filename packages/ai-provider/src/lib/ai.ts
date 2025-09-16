@@ -570,23 +570,26 @@ export class Ai {
       this.resumeRequest(context.response.stream, sessionId, context.request.resumeEventId)
         .then(({ complete, prompt, promptEventId }) => {
           if (!prompt && !context.request.prompt) {
+            // remove the subscription
+            this.pubsub.remove(sessionId)
+
             if (!complete) {
               const endEvent: AiStreamEvent = {
                 id: createEventId(),
                 event: 'end',
                 data: { response: 'INCOMPLETE_UNKNOWN' }
               }
-              // remove the subscription
-              this.pubsub.remove(sessionId)
               // send end event
               this.history.push(sessionId, endEvent.id, endEvent, this.options.limits.historyExpiration)
                 .catch((error) => {
                   this.logger.error({ error, sessionId }, 'Failed to push end event')
                 })
               context.response.stream!.push(encodeEvent(endEvent))
-              // close the stream
-              context.response.stream!.push(null)
             }
+
+            // close the stream
+            context.response.stream!.push(null)
+            
             return
           }
 
@@ -895,7 +898,7 @@ export class Ai {
       }
 
       for (const event of events) {
-        this.sendEvent(stream, sessionId, event, complete)
+        this.sendEvent(stream, sessionId, event, false)
       }
     } catch (error) {
       this.logger.error({ error, sessionId }, 'Failed to resume stream')
@@ -918,7 +921,6 @@ export class Ai {
         const encodedEvent = encodeEvent(event)
         stream.push(encodedEvent)
       } else if (event.event === 'end') {
-        // console.trace()
         const encodedEvent = encodeEvent(event)
         stream.push(encodedEvent)
         close && stream.push(null) // End the stream
@@ -1068,7 +1070,6 @@ export class Ai {
     }
 
     if (buffer.length > 0) {
-      console.log(' buffer', buffer)
       this.logger.error({ history }, 'Incomplete response in storage')
       throw new Error('Incomplete response in storage')
     }

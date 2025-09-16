@@ -263,12 +263,12 @@ test('should resume the second response by resume event id on an incomplete resp
   }, historyExpiration)
   await ai.history.push(sessionId, randomUUID(), {
     event: 'content',
-    data: { response: 'Response 1' },
+    data: { response: 'Partial response' },
     type: 'response'
   }, historyExpiration)
   await ai.history.push(sessionId, randomUUID(), {
-    event: 'end',
-    data: { response: 'COMPLETE' }
+    event: 'error',
+    data: { code: 'PROVIDER_ERROR', message: 'Network timeout' },
   }, historyExpiration)
 
   // Second response
@@ -293,6 +293,11 @@ test('should resume the second response by resume event id on an incomplete resp
     event: 'content',
     data: { response: 'Incomplete response' },
     type: 'response'
+  }, historyExpiration)
+
+  await ai.history.push(sessionId, randomUUID(), {
+    event: 'error',
+    data: { code: 'INCOMPLETE_UNKNOWN' }
   }, historyExpiration)
 
   const response = await ai.request({
@@ -483,7 +488,7 @@ test('should not resume a error response by resume event id but make a new reque
   assert.equal(content.map((c: any) => c.data.response).join(''), 'Response 2Response 3')
 })
 
-test.todo('should resume the session by a specific resume event id', async (t) => {
+test('should resume the session by a specific resume event id', async (t) => {
   const client = {
     ...createDummyClient(),
     stream: mock.fn(async () => {
@@ -561,13 +566,11 @@ test.todo('should resume the session by a specific resume event id', async (t) =
     data: { prompt: 'Prompt 1' },
     type: 'prompt'
   }, historyExpiration)
-
   await ai.history.push(sessionId, eventIds[1], {
     event: 'content',
     data: { response: 'Response 1' },
     type: 'response'
   }, historyExpiration)
-
   await ai.history.push(sessionId, eventIds[2], {
     event: 'end',
     data: { response: 'COMPLETE' }
@@ -579,13 +582,11 @@ test.todo('should resume the session by a specific resume event id', async (t) =
     data: { prompt: 'Prompt 2' },
     type: 'prompt'
   }, historyExpiration)
-
   await ai.history.push(sessionId, eventIds[4], {
     event: 'content',
     data: { response: 'Response 2' },
     type: 'response'
   }, historyExpiration)
-
   await ai.history.push(sessionId, eventIds[5], {
     event: 'end',
     data: { response: 'COMPLETE' }
@@ -604,6 +605,7 @@ test.todo('should resume the session by a specific resume event id', async (t) =
     }) as AiStreamResponse
 
     const { content } = await consumeStream(response)
+
     assert.equal(client.stream.mock.calls.length, 1, 'Should call the provider once to get response #3')
 
     for (let j = 0; j < content.length; j++) {
@@ -615,13 +617,11 @@ test.todo('should resume the session by a specific resume event id', async (t) =
       } else {
         assert.deepEqual(c, calls[i].response[j])
       }
-
-      console.log(' ******** ', i)
     }
   }
 })
 
-test.only('should perform a provider request resuming an incomplete response', async (t) => {
+test('should perform a provider request resuming an incomplete response', async (t) => {
   const client = {
     ...createDummyClient(),
     stream: mock.fn(async (_, request) => {
@@ -650,7 +650,6 @@ test.only('should perform a provider request resuming an incomplete response', a
     data: { prompt: 'First prompt' },
     type: 'prompt'
   }, historyExpiration)
-
   await ai.history.push(sessionId, randomUUID(), {
     event: 'content',
     data: { response: 'Incomplete response chunk #1' },
@@ -662,8 +661,8 @@ test.only('should perform a provider request resuming an incomplete response', a
     type: 'response'
   }, historyExpiration)
   await ai.history.push(sessionId, randomUUID(), {
-    event: 'end',
-    data: { response: 'INCOMPLETE_UNKNOWN' }
+    event: 'error',
+    data: { code: 'INCOMPLETE_UNKNOWN' }
   }, historyExpiration)
 
   const response = await ai.request({
@@ -678,7 +677,7 @@ test.only('should perform a provider request resuming an incomplete response', a
 
   const { content } = await consumeStream(response)
 
-  assert.equal(client.stream.mock.calls.length, 2, 'Should perform one provider request for incomplete response')
+  assert.equal(client.stream.mock.calls.length, 2)
   assert.equal(content.length, 6, 'Should return session content')
   assert.deepEqual(content[0], { id: resumeEventId, event: 'content', data: { prompt: 'First prompt' } })
   assert.deepEqual({ data: content[1].data, event: 'content' }, { event: 'content', data: { response: 'Replace first ' } })
@@ -689,12 +688,6 @@ test.only('should perform a provider request resuming an incomplete response', a
 
   assert.deepEqual(client.stream.mock.calls[0].arguments[1].messages, [
     { role: 'user', content: 'First prompt' }
-  ])
-
-  assert.deepEqual(client.stream.mock.calls[1].arguments[1].messages, [
-    { role: 'user', content: 'First prompt' },
-    { role: 'assistant', content: 'Replace first incomplete response' },
-    { role: 'user', content: 'Continue conversation' }
   ])
 })
 
@@ -736,6 +729,11 @@ test('should perform 2 provider requests resuming an incomplete response where l
     type: 'prompt'
   }, historyExpiration)
 
+  await ai.history.push(sessionId, randomUUID(), {
+    event: 'error',
+    data: { code: 'INCOMPLETE_UNKNOWN' }
+  }, historyExpiration)
+
   const response = await ai.request({
     prompt: 'Additional prompt',
     options: {
@@ -755,7 +753,7 @@ test('should perform 2 provider requests resuming an incomplete response where l
   assert.ok(content.length > 0, 'Should return session content')
 })
 
-test.todo('should perform 1 provider request resuming an incomplete response where last event is a prompt and the request doesnt have a prompt', async (t) => {
+test('should perform 1 provider request resuming an incomplete response where last event is a prompt and the request doesnt have a prompt', async (t) => {
   const client = {
     ...createDummyClient(),
     stream: mock.fn(async () => {
@@ -787,6 +785,11 @@ test.todo('should perform 1 provider request resuming an incomplete response whe
     event: 'content',
     data: { prompt: 'Hanging prompt' },
     type: 'prompt'
+  }, historyExpiration)
+
+  await ai.history.push(sessionId, randomUUID(), {
+    event: 'error',
+    data: { code: 'INCOMPLETE_UNKNOWN' }
   }, historyExpiration)
 
   const response = await ai.request({

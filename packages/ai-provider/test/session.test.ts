@@ -2,7 +2,6 @@ import { test, mock, describe } from 'node:test'
 import assert from 'node:assert'
 import pino from 'pino'
 import { Ai, type AiStreamEvent, type AiContentResponse, type AiStreamResponse } from '../src/index.ts'
-import { type HistoryContentEvent } from '../src/lib/ai.ts'
 import { consumeStream, createAi, createDummyClient, mockOpenAiStream, storages } from './helper/helper.ts'
 import { isStream } from '../src/lib/utils.ts'
 import { randomUUID } from 'node:crypto'
@@ -537,6 +536,11 @@ describe('_compactHistory', () => {
           event: 'content',
           data: { response: 'Second response' },
           type: 'response'
+        },
+        {
+          id: randomUUID(),
+          event: 'error',
+          data: { code: 'INCOMPLETE_UNKNOWN' }
         }
       ]
 
@@ -591,6 +595,11 @@ describe('_compactHistory', () => {
           event: 'content',
           data: { response: ' experience and improve' },
           type: 'response'
+        },
+        {
+          id: randomUUID(),
+          event: 'error',
+          data: { code: 'INCOMPLETE_UNKNOWN' }
         }
       ]
 
@@ -630,6 +639,11 @@ describe('_compactHistory', () => {
           event: 'content',
           data: { response: 'This is a proper response' },
           type: 'response'
+        },
+        {
+          id: randomUUID(),
+          event: 'error',
+          data: { code: 'INCOMPLETE_UNKNOWN' }
         }
       ]
 
@@ -668,6 +682,11 @@ describe('_compactHistory', () => {
           event: 'content',
           data: { response: '' },
           type: 'response'
+        },
+        {
+          id: randomUUID(),
+          event: 'error',
+          data: { code: 'INCOMPLETE_UNKNOWN' }
         }
       ]
 
@@ -686,46 +705,59 @@ describe('_compactHistory', () => {
     test(`should handle complex alternating pattern with multiple responses per prompt, with ${storage.type} storage`, async (t) => {
       const ai = await createAi({ t, storage })
 
-      const contentEvents: HistoryContentEvent[] = [
+      const contentEvents: AiStreamEvent[] = [
         {
+          id: randomUUID(),
           event: 'content',
           data: { prompt: 'Explain quantum physics' },
           type: 'prompt'
         },
         {
+          id: randomUUID(),
           event: 'content',
           data: { response: 'Quantum physics is' },
           type: 'response'
         },
         {
+          id: randomUUID(),
           event: 'content',
           data: { response: ' a branch of physics' },
           type: 'response'
         },
         {
+          id: randomUUID(),
           event: 'content',
           data: { response: ' that studies matter and energy' },
           type: 'response'
         },
         {
+          id: randomUUID(),
           event: 'content',
           data: { prompt: 'Give me an example' },
           type: 'prompt'
         },
         {
+          id: randomUUID(),
           event: 'content',
           data: { response: 'An example is' },
           type: 'response'
         },
         {
+          id: randomUUID(),
           event: 'content',
           data: { response: ' the double-slit experiment' },
           type: 'response'
         },
         {
+          id: randomUUID(),
           event: 'content',
           data: { prompt: 'Tell me about wave-particle duality' },
           type: 'prompt'
+        },
+        {
+          id: randomUUID(),
+          event: 'error',
+          data: { code: 'INCOMPLETE_UNKNOWN' }
         }
       ]
 
