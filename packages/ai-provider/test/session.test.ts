@@ -419,17 +419,19 @@ describe('_compactHistory', () => {
         data: { prompt: 'Explain quantum physics' },
         type: 'prompt'
       }, historyExpiration)
-
       await ai.history.push(sessionId, randomUUID(), {
         event: 'content',
         data: { response: 'Quantum physics is' },
         type: 'response'
       }, historyExpiration)
-
       await ai.history.push(sessionId, randomUUID(), {
         event: 'content',
         data: { response: ' the branch of physics that deals' },
         type: 'response'
+      }, historyExpiration)
+      await ai.history.push(sessionId, randomUUID(), {
+        event: 'error',
+        data: { code: 'INCOMPLETE_UNKNOWN' }
       }, historyExpiration)
 
       // Test the compactHistory method directly - pass all events

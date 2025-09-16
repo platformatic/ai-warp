@@ -566,9 +566,27 @@ export class Ai {
     if (context.request.resumeEventId && context.request.sessionId && context.request.stream) {
       const sessionId = context.request.sessionId!
       context.response.stream = createResponseStream(sessionId)
+
       this.resumeRequest(context.response.stream, sessionId, context.request.resumeEventId)
         .then(({ complete, prompt, promptEventId }) => {
-          if (complete && !prompt && !context.request.prompt) {
+          if (!prompt && !context.request.prompt) {
+            if (!complete) {
+              const endEvent: AiStreamEvent = {
+                id: createEventId(),
+                event: 'end',
+                data: { response: 'INCOMPLETE_UNKNOWN' }
+              }
+              // remove the subscription
+              this.pubsub.remove(sessionId)
+              // send end event
+              this.history.push(sessionId, endEvent.id, endEvent, this.options.limits.historyExpiration)
+                .catch((error) => {
+                  this.logger.error({ error, sessionId }, 'Failed to push end event')
+                })
+              context.response.stream!.push(encodeEvent(endEvent))
+              // close the stream
+              context.response.stream!.push(null)
+            }
             return
           }
 
@@ -721,10 +739,10 @@ export class Ai {
                 return
               }
               // on success
-              // close the stream
-              context.response.stream!.push(null)
               // remove the subscription
               this.pubsub.remove(sessionId)
+              // close the stream
+              context.response.stream!.push(null)
             })
             .catch((error: any) => {
               err = error
@@ -862,6 +880,7 @@ export class Ai {
           // collect request-response pair only when complete
           events.push(lastPrompt)
           events.push(...buffer)
+          events.push(event)
           buffer.length = 0
           lastPrompt = undefined
           complete = event.data.response === 'COMPLETE'
@@ -899,6 +918,7 @@ export class Ai {
         const encodedEvent = encodeEvent(event)
         stream.push(encodedEvent)
       } else if (event.event === 'end') {
+        // console.trace()
         const encodedEvent = encodeEvent(event)
         stream.push(encodedEvent)
         close && stream.push(null) // End the stream
@@ -973,6 +993,10 @@ export class Ai {
     }
   }
 
+  /**
+   * Get history from storage in provider messages format
+   * In case of incomplete response or inconsistent history, throw an error
+   */
   async getHistory (sessionId?: AiSessionId, history?: AiChatHistory): Promise<{ messages: AiChatHistory, promptEventId?: AiEventId }> {
     if (history) {
       return { messages: history, promptEventId: undefined }
@@ -989,14 +1013,14 @@ export class Ai {
       }
 
       contentHistory = this._compactHistory(storedHistory)
+
       if (contentHistory.length < 1) {
         return { messages: [], promptEventId: undefined }
       }
     } catch (err) {
       this.logger.error({ err, sessionId }, 'Failed to get history')
+      throw err
     }
-
-    // TODO !!! HANDLE INCOMPLETE RESPONSE: FINALIZE? CLEAN UP?
 
     const lastEvent: AiStreamEventContent = contentHistory!.at(-1)!
     let promptEventId: AiEventId | undefined
@@ -1019,6 +1043,7 @@ export class Ai {
 
   /**
    * Merge consecutive events of the same type into a single event
+   * Discard incomplete response events
    */
   private _compactHistory (history: AiStreamEvent[]): AiStreamEventContent[] {
     const compactHistory: AiStreamEventContent[] = []
@@ -1040,6 +1065,12 @@ export class Ai {
         continue
       }
       buffer.push(event)
+    }
+
+    if (buffer.length > 0) {
+      console.log(' buffer', buffer)
+      this.logger.error({ history }, 'Incomplete response in storage')
+      throw new Error('Incomplete response in storage')
     }
 
     return compactHistory
