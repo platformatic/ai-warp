@@ -187,7 +187,7 @@ Make an AI request with automatic fallback and session management.
   - `stream` (boolean, optional): Enable streaming responses (default: false)
   - `sessionId` (string, optional): Session ID for conversation history (mutually exclusive with `history`)
   - `history` (array, optional): Previous conversation history array (mutually exclusive with `sessionId`)
-  - `resumeEventId` (string, optional): Event ID to resume streaming from (requires `sessionId` and `stream: true`)
+  - `resumeEventId` (string, optional): Event ID to resume streaming from (requires `sessionId` and `stream: true`); stream will includes also `prompt` events.
 
 #### `ai.close()`
 Close all provider connections and storage.
@@ -387,11 +387,154 @@ This format provides complete conversation context, making it ideal for applicat
 
 ### Edge cases
 
-TODO 
-- when last event in storage is a prompt
-- when last event in storage is a response error
-- when the last response in the storage is not complete
-- when last event in storage is a prompt and another prompt has been requested
+The auto-resume functionality handles several complex edge cases that can occur during streaming conversations:
+
+#### Last Event is an Incomplete Response
+
+When the last stored event is a partial response without an `end` event, the system automatically completes the response:
+
+```javascript
+// Original request was interrupted mid-response
+const resumeStream = await ai.request({
+  options: {
+    stream: true,
+    sessionId: 'session-123',
+    resumeEventId: 'prompt-event-id' // Resume from the incomplete prompt
+  }
+})
+
+// System behavior:
+// 1. Streams existing partial response from storage
+// 2. Makes new API call to complete the response
+// 3. Continues streaming the completion
+```
+
+#### Last Event is a Response Error
+
+When the last stored event is an error, the system retries the failed request:
+
+```javascript
+// Previous response ended with error
+const resumeStream = await ai.request({
+  prompt: 'New prompt', // Optional new prompt
+  options: {
+    stream: true,
+    sessionId: 'session-123',
+    resumeEventId: 'prompt-before-error-id'
+  }
+})
+
+// System behavior:
+// 1. Streams stored events up to the error point
+// 2. Retries the failed prompt with new API call
+// 3. If new prompt provided, processes it after retry
+```
+
+#### Last Event is an Unanswered Prompt
+
+When the last stored event is a prompt without a corresponding response, the system generates the missing response:
+
+```javascript
+// Storage contains a prompt that never got a response
+const resumeStream = await ai.request({
+  options: {
+    stream: true,
+    sessionId: 'session-123',
+    resumeEventId: 'some-earlier-event-id'
+  }
+})
+
+// System behavior:
+// 1. Streams stored conversation history
+// 2. Detects hanging prompt at the end
+// 3. Makes API call to generate response for the hanging prompt
+```
+
+#### Dual Prompts (Hanging Prompt + New Prompt)
+
+The most complex edge case occurs when there's an unanswered prompt in storage AND a new prompt in the request:
+
+```javascript
+// Storage has incomplete conversation with hanging prompt
+const resumeStream = await ai.request({
+  prompt: 'Additional question', // New prompt while one is pending
+  options: {
+    stream: true,
+    sessionId: 'session-123',
+    resumeEventId: 'event-before-hanging-prompt'
+  }
+})
+
+// System behavior:
+// 1. Streams stored conversation history
+// 2. Makes first API call for the hanging prompt
+// 3. Makes second API call for the new prompt
+// 4. Streams both responses sequentially
+```
+
+#### No Stored Events After Resume Point
+
+When `resumeEventId` points to the last event or no events exist after it, the system makes a fresh API call:
+
+```javascript
+// Resume from the very last event in storage
+const resumeStream = await ai.request({
+  prompt: 'Fresh start',
+  options: {
+    stream: true,
+    sessionId: 'session-123',
+    resumeEventId: 'last-event-id'
+  }
+})
+
+// System behavior:
+// 1. No events to stream from storage
+// 2. Makes direct API call with conversation history
+// 3. Streams fresh response
+```
+
+#### Resume Without Prompt
+
+When resuming without providing a new prompt, the system only streams stored content:
+
+```javascript
+// Retrieve stored conversation without new prompt
+const resumeStream = await ai.request({
+  options: {
+    stream: true,
+    sessionId: 'session-123',
+    resumeEventId: 'middle-event-id'
+  }
+})
+
+// System behavior:
+// 1. Streams stored events from resumeEventId onwards
+// 2. No API calls made unless incomplete responses need completion
+// 3. Stream ends when all stored content is delivered
+```
+
+#### Rate Limiting During Resume
+
+If resume operations encounter rate limits, the system applies the same fallback strategy:
+
+```javascript
+// Rate limit hit during resume completion
+const resumeStream = await ai.request({
+  options: {
+    stream: true,
+    sessionId: 'session-123',
+    resumeEventId: 'some-event-id'
+  }
+})
+
+// System behavior:
+// 1. Streams stored events normally
+// 2. When API call needed, encounters rate limit
+// 3. Automatically falls back to next available model
+// 4. Continues streaming with fallback model
+```
+
+These edge cases ensure robust conversation continuity even when interruptions, errors, or complex request patterns occur during streaming interactions.
 
 ---
 
