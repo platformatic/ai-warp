@@ -9,16 +9,16 @@ export const storages = [
   {
     type: 'memory' as const,
   },
-  // {
-  //   type: 'valkey' as const,
-  //   valkey: {
-  //     host: 'localhost',
-  //     port: 6379,
-  //     database: 0,
-  //     username: 'default',
-  //     password: 'password'
-  //   }
-  // }
+  {
+    type: 'valkey' as const,
+    valkey: {
+      host: 'localhost',
+      port: 6379,
+      database: 0,
+      username: 'default',
+      password: 'password'
+    }
+  }
 ]
 
 export function createDummyClient () {

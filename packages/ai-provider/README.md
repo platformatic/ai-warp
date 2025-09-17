@@ -8,7 +8,7 @@ Core implementation for AI communication with multiple providers, offering unifi
 - **Automatic Fallback**: Seamless switching between providers when one fails
 - **Session Management**: Persistent conversation history with multiple storage backends
 - **Auto-Resume**: Seamless stream resumption from interruption points using event IDs
-- **Hash-Based Storage**: Efficient O(1) event access with Redis hash operations
+- **Hash-Based Storage**: Efficient O(1) event access with Valkey/Redis hash operations
 - **Rate Limiting**: Per-model rate limiting with automatic restoration
 - **Streaming Support**: Real-time response streaming with event identification
 - **Error Recovery**: Intelligent error handling with configurable retry policies
@@ -542,7 +542,7 @@ These edge cases ensure robust conversation continuity even when interruptions, 
 
 ### Hash-Based Event Storage
 
-The new storage system uses Redis hash operations for O(1) event access:
+The storage system uses Valkey/Redis hash operations for O(1) event access:
 
 ```javascript
 // Storage structure: sessionId -> { eventUUID: eventData }
@@ -579,7 +579,7 @@ const ai = new Ai({
 
 #### Valkey/Redis Storage
 
-Production-ready with Redis hash commands and dedicated pub/sub:
+Production-ready with Valkey/Redis hash commands and dedicated pub/sub:
 
 ```javascript
 const ai = new Ai({
