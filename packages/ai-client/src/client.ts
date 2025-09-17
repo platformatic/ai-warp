@@ -35,10 +35,13 @@ export class Client {
     const shouldResume = isStreaming && options.resume !== false // Resume only applies to streaming
     let resumeEventId
 
-    // Determine resumeEventId: explicit override, or from tracked events, or undefined
-    // Only for streaming requests with sessionId
-    if (shouldResume && options.sessionId) {
-      resumeEventId = options.resumeEventId ?? this.lastEventIds.get(options.sessionId)
+    // Determine resumeEventId: explicit override, or from tracked events (for streaming only), or undefined
+    if (options.resumeEventId) {
+      // Always use explicit resumeEventId if provided (for both streaming and non-streaming)
+      resumeEventId = options.resumeEventId
+    } else if (shouldResume && options.sessionId) {
+      // Use tracked resumeEventId only for streaming requests with sessionId
+      resumeEventId = this.lastEventIds.get(options.sessionId)
     }
 
     this.logger.debug('Making AI request', {
@@ -57,18 +60,20 @@ export class Client {
         context: options.context,
         temperature: options.temperature,
         models: options.models,
-        history: options.history,
-        stream: isStreaming
+        history: options.history
       }
 
-      // Only include resume parameters for streaming requests
+      // Include stream parameter for streaming requests
       if (isStreaming) {
+        requestBody.stream = true
         requestBody.resume = shouldResume
+      } else {
+        requestBody.stream = false
+      }
 
-        // Include resumeEventId if we have one
-        if (resumeEventId) {
-          requestBody.resumeEventId = resumeEventId
-        }
+      // Include resumeEventId for both streaming and non-streaming requests if available
+      if (resumeEventId) {
+        requestBody.resumeEventId = resumeEventId
       }
 
       const response = await fetch(endpoint, {

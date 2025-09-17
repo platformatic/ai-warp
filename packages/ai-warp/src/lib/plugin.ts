@@ -15,6 +15,7 @@ export type AiRequestBody = {
   temperature?: number
   history?: AiChatHistory
   sessionId?: AiSessionId
+  resumeEventId?: string
 }
 
 const InternalServerError = createError('INTERNAL_SERVER_ERROR', 'Internal Server Error', 500)
@@ -58,7 +59,8 @@ export async function aiWarp (app: FastifyInstance, config: AIWarpConfiguration)
         })
       )
     ),
-    sessionId: Type.Optional(Type.String())
+    sessionId: Type.Optional(Type.String()),
+    resumeEventId: Type.Optional(Type.String())
   })
 
   app.route({
@@ -81,7 +83,7 @@ export async function aiWarp (app: FastifyInstance, config: AIWarpConfiguration)
     },
     handler: async (request: FastifyRequest<{ Body: AiRequestBody }>, reply: FastifyReply) => {
       try {
-        const { prompt, context, temperature, history, sessionId } = request.body
+        const { prompt, context, temperature, history, sessionId, resumeEventId } = request.body
         const response = await app.ai.request(
           {
             request,
@@ -90,6 +92,7 @@ export async function aiWarp (app: FastifyInstance, config: AIWarpConfiguration)
             temperature,
             history,
             sessionId,
+            resumeEventId,
             stream: false
           },
           reply
@@ -118,7 +121,7 @@ export async function aiWarp (app: FastifyInstance, config: AIWarpConfiguration)
     },
     handler: async (request: FastifyRequest<{ Body: AiRequestBody }>, reply: FastifyReply) => {
       try {
-        const { prompt, context, temperature, history, sessionId } = request.body
+        const { prompt, context, temperature, history, sessionId, resumeEventId } = request.body
         const response = await app.ai.request(
           {
             request,
@@ -127,6 +130,7 @@ export async function aiWarp (app: FastifyInstance, config: AIWarpConfiguration)
             temperature,
             history,
             sessionId,
+            resumeEventId,
             stream: true
           },
           reply

@@ -23,6 +23,7 @@ export type FastifyAiRequest = {
   stream?: boolean
   history?: AiChatHistory
   sessionId?: AiSessionId
+  resumeEventId?: string
   resume?: boolean
 }
 
@@ -72,7 +73,8 @@ export default fp(async (fastify, options: AiPluginOptions) => {
           temperature: request.temperature,
           stream: request.stream,
           history: request.history,
-          sessionId: request.sessionId
+          sessionId: request.sessionId,
+          resumeEventId: request.resumeEventId
         }
       } as any)
       reply.header(options.headerSessionIdName!, response.sessionId)

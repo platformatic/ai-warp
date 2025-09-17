@@ -29,6 +29,6 @@
     "check": "pnpm -r --workspace-concurrency=1 --if-present check"
   },
   "engines": {
-    "node": ">=22.18.0"
+    "node": ">=22.19.0"
   }
 }

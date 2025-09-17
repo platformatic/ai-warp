@@ -25,12 +25,15 @@
   "types": "./dist/index.d.ts",
   "type": "module",
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
-    "lint": "eslint --cache",
-    "test": "c8 --reporter text --reporter html node --disable-warning=ExperimentalWarning --experimental-strip-types --test --test-reporter=cleaner-spec-reporter --test-concurrency=1 --test-timeout=300000 test/*.test.ts",
-    "typecheck": "tsc --noEmit",
-    "ci": "pnpm run lint && pnpm run test && pnpm run typecheck && pnpm run build",
     "clean": "rm -rf dist",
+    "ci": "pnpm run lint && pnpm run test:ci && pnpm run typecheck && pnpm run build",
+    "test": "c8 -c test/config/c8-local.json node --env-file=test/config/env --no-warnings --test --test-concurrency=1 --test-timeout=300000 'test/**/*.test.ts'",
+    "test:ci": "c8 -c test/config/c8-ci.json node --env-file=test/config/env --no-warnings --test --test-concurrency=1 --test-timeout=300000 'test/**/*.test.ts'",
+    "lint": "eslint --cache",
+    "lint:fix": "eslint --fix",
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "check": "pnpm run lint && pnpm run test && pnpm run typecheck && pnpm run build",
     "prepublishOnly": "pnpm run build",
     "postpublish": "git push origin && git push origin -f --tags"
   },
@@ -54,6 +57,6 @@
     "typescript": "^5.8.2"
   },
   "engines": {
-    "node": ">=22.18.0"
+    "node": ">=22.19.0"
   }
 }
