@@ -9,6 +9,8 @@ import { BaseProvider } from './lib/base.ts'
 import { DEFAULT_UNDICI_POOL_OPTIONS, OPENAI_DEFAULT_API_PATH, OPENAI_DEFAULT_BASE_URL, OPENAI_PROVIDER_NAME, UNDICI_USER_AGENT } from '../lib/config.ts'
 import { createOpenAiClient } from './lib/openai-undici-client.ts'
 
+const pipelineAsync = promisify(pipeline)
+
 // @see https://github.com/openai/openai-node
 // @see https://platform.openai.com/docs/api-reference/chat/create
 
@@ -93,7 +95,6 @@ export class OpenAIProvider extends BaseProvider {
       const transformer = new OpenAiStreamTransformer(this.providerName, options.onStreamChunk)
 
       // Use pipeline to connect the response stream to the transformer
-      const pipelineAsync = promisify(pipeline)
 
       // Create the pipeline but don't await it - return the transformer stream
       pipelineAsync(response, transformer).catch((err) => {
@@ -107,7 +108,7 @@ export class OpenAIProvider extends BaseProvider {
     this.logger.debug({ request }, `${this.providerName} request`)
     const response = await this.client.request(this.api, request, this.context)
 
-    this.logger.debug({ response }, `${this.providerName} full response (no stream)`)
+    this.logger.debug({ response }, `${this.providerName} full response (non-streaming)`)
 
     const text = response.choices?.[0]?.message?.content
     if (!text) {
@@ -127,8 +128,12 @@ export class OpenAIProvider extends BaseProvider {
 
     const messages: OpenAIMessage[] = []
     for (const previousInteraction of chatHistory) {
-      messages.push({ role: 'user', content: previousInteraction.prompt })
-      messages.push({ role: 'assistant', content: previousInteraction.response })
+      if (previousInteraction.prompt) {
+        messages.push({ role: 'user', content: previousInteraction.prompt })
+      }
+      if (previousInteraction.response) {
+        messages.push({ role: 'assistant', content: previousInteraction.response })
+      }
     }
 
     return messages
@@ -168,8 +173,8 @@ class OpenAiStreamTransformer extends Transform {
           }
 
           const data = JSON.parse(event.data)
-          const { content } = data.choices[0].delta
-          let response = content ?? ''
+          let response = data.choices?.[0]?.delta?.content ?? ''
+
           if (this.chunkCallback) {
             response = await this.chunkCallback(response)
           }
@@ -177,16 +182,29 @@ class OpenAiStreamTransformer extends Transform {
           const eventData: AiStreamEvent = {
             id: event.id ?? createEventId(),
             event: 'content',
+            type: 'response',
             data: { response }
           }
           this.push(encodeEvent(eventData))
 
-          const finish = data.choices[0].finish_reason
+          const finish = data.choices?.[0]?.finish_reason
           if (finish) {
             const eventData: AiStreamEvent = {
               id: event.id ?? createEventId(),
               event: 'end',
               data: { response: mapResponseResult(finish) }
+            }
+            this.push(encodeEvent(eventData))
+            return callback()
+          }
+
+          // unknown event
+          if (!response) {
+            const error = new ProviderResponseNoContentError(`${this.providerName} stream`)
+            const eventData: AiStreamEvent = {
+              id: event.id ?? createEventId(),
+              event: 'error',
+              data: error
             }
             this.push(encodeEvent(eventData))
             return callback()

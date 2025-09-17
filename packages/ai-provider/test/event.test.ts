@@ -220,7 +220,7 @@ test('parseEventStream should handle multiple consecutive empty lines', () => {
   ])
 })
 
-test('parseEventStream should parse the MDN data-only example', () => {
+test('parseEventStream should parse the Event Stream format data-only example', () => {
   const input = `: this is a test stream
 
 data: some text
@@ -236,7 +236,7 @@ data: with two lines
   ])
 })
 
-test('parseEventStream should parse the MDN named events example', () => {
+test('parseEventStream should parse the Event Stream format named events example', () => {
   const input = `event: userconnect
 data: {"username": "bobby", "time": "02:33:48"}
 
@@ -259,7 +259,7 @@ data: {"username": "sean", "time": "02:34:36", "text": "Bye, bobby."}
   ])
 })
 
-test('parseEventStream should parse the MDN mixing example', () => {
+test('parseEventStream should parse the Event Stream format mixing example', () => {
   const input = `event: userconnect
 data: {"username": "bobby", "time": "02:33:48"}
 

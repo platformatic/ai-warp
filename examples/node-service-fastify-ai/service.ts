@@ -142,10 +142,18 @@ export async function app({ start = false, logger }: AppOptions) {
       })
     }, reply)
 
+    if(request.headers['x-resume'] === 'true' && stream) {
+      // send random error on stream
+      setTimeout(() => {
+        console.log('\n\n\n\n>>> RESUME')
+      }, 1000)
+    }
+
     return response
   })
 
   app.get('/history/:sessionId', async (request: FastifyRequest<{ Params: { sessionId: string } }>, reply) => {
+    // TODO stream or compact
     const history = await app.ai.retrieveHistory(request.params.sessionId)
     return history
   })

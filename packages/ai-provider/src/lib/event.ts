@@ -8,35 +8,53 @@ const stringifyEventData = fastJson({
   properties: {
     // Success
     response: { type: 'string' },
+    prompt: { type: 'string' },
     // Error
     code: { type: 'string' },
     message: { type: 'string' }
   }
 })
 
-export interface AiStreamEventContent {
+export interface AiStreamEventContentResponseData {
   response: string
 }
 
-export interface AiStreamEventEnd {
+export interface AiStreamEventPromptData {
+  prompt: string
+}
+
+export interface AiStreamEventEndData {
   response: AiResponseResult
 }
 
-export type AiStreamEvent = {
+export type AiStreamEventType = 'prompt' | 'response'
+export type AiStreamEventContentResponse = {
   id: string
   event: 'content'
-  data: AiStreamEventContent
-} |
-{
+  type: 'response'
+  data: AiStreamEventContentResponseData
+}
+export type AiStreamEventContentPrompt = {
+  id: string
+  event: 'content'
+  type: 'prompt'
+  data: AiStreamEventPromptData
+}
+
+export type AiStreamEventContent = AiStreamEventContentResponse | AiStreamEventContentPrompt
+
+export type AiStreamEventEnd = {
   id: string
   event: 'end'
-  data: AiStreamEventEnd
-} |
-{
+  data: AiStreamEventEndData
+}
+export type AiStreamEventError = {
   id: string
   event: 'error'
   data: FastifyError
 }
+
+export type AiStreamEvent = AiStreamEventContent | AiStreamEventEnd | AiStreamEventError
 
 export function createEventId (): string {
   return crypto.randomUUID()
@@ -63,12 +81,15 @@ export function decodeEventStream (chunk: string): AiStreamEvent[] {
 
   let currentEvent: string | null = null
   let currentData: string | null = null
+  let currentType: AiStreamEventType | null = null
 
   for (const line of lines) {
     if (line.startsWith('event: ')) {
       currentEvent = line.substring(7).trim()
     } else if (line.startsWith('data: ')) {
       currentData = line.substring(6).trim()
+    } else if (line.startsWith('type: ')) {
+      currentType = line.substring(6).trim() as AiStreamEventType
     } else if (line === '' && currentEvent && currentData) {
       // End of event, parse the data
       try {
@@ -77,13 +98,14 @@ export function decodeEventStream (chunk: string): AiStreamEvent[] {
           events.push({
             id: createEventId(),
             event: 'content',
-            data: parsedData as AiStreamEventContent
+            data: parsedData,
+            type: currentType ?? 'response'
           })
         } if (currentEvent === 'end') {
           events.push({
             id: createEventId(),
             event: 'end',
-            data: parsedData as AiStreamEventEnd
+            data: parsedData as AiStreamEventEndData
           })
         } else if (currentEvent === 'error') {
           events.push({

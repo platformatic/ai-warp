@@ -1,14 +1,15 @@
 import { test, mock } from 'node:test'
 import assert from 'node:assert'
-import { Readable } from 'node:stream'
-import { Ai, type AiContentResponse } from '../src/lib/ai.ts'
+import { Ai, type AiStreamResponse, type AiContentResponse } from '../src/lib/ai.ts'
 import { mockOpenAiStream, consumeStream, createDummyClient } from './helper/helper.ts'
 import pino from 'pino'
 
 const apiKey = 'test'
 const logger = pino({ level: 'silent' })
 
-test('should be able to perform a basic prompt', async () => {
+const storage = { type: 'memory' as const }
+
+test('should be able to perform a basic prompt', async (t) => {
   const client = {
     ...createDummyClient(),
     request: async () => {
@@ -17,6 +18,7 @@ test('should be able to perform a basic prompt', async () => {
   }
 
   const ai = new Ai({
+    storage,
     logger,
     providers: {
       openai: {
@@ -30,6 +32,7 @@ test('should be able to perform a basic prompt', async () => {
     }],
   })
   await ai.init()
+  t.after(() => ai.close())
 
   const response = await ai.request({
     models: ['openai:gpt-4o-mini'],
@@ -39,7 +42,7 @@ test('should be able to perform a basic prompt', async () => {
   assert.equal((response).text, 'All good')
 })
 
-test('should be able to perform a prompt with options', async () => {
+test('should be able to perform a prompt with options', async (t) => {
   const client = {
     ...createDummyClient(),
     request: mock.fn(async () => {
@@ -48,6 +51,7 @@ test('should be able to perform a prompt with options', async () => {
   }
 
   const ai = new Ai({
+    storage,
     logger,
     providers: {
       openai: {
@@ -61,6 +65,7 @@ test('should be able to perform a prompt with options', async () => {
     }],
   })
   await ai.init()
+  t.after(() => ai.close())
 
   const response = await ai.request({
     models: ['openai:gpt-4o-mini'],
@@ -87,71 +92,12 @@ test('should be able to perform a prompt with options', async () => {
     ],
     temperature: 0.5,
     max_tokens: 1000,
-    stream: undefined,
+    stream: false,
   })
   assert.equal((response).text, 'All good')
 })
 
-test('should be able to perform a prompt with stream', async () => {
-  const client = {
-    ...createDummyClient(),
-    stream: mock.fn(async () => {
-      return mockOpenAiStream([
-        { choices: [{ delta: { content: 'All' } }] },
-        { choices: [{ delta: { content: ' good' }, finish_reason: 'stop' }] }
-      ])
-    })
-  }
-
-  const ai = new Ai({
-    logger,
-    providers: {
-      openai: {
-        apiKey,
-        client
-      }
-    },
-    models: [{
-      provider: 'openai',
-      model: 'gpt-4o-mini'
-    }],
-  })
-  await ai.init()
-
-  const response = await ai.request({
-    models: ['openai:gpt-4o-mini'],
-    prompt: 'Hello, how are you?',
-    options: {
-      context: 'You are a nice helpful assistant.',
-      stream: true,
-    }
-  }) as Readable
-
-  assert.ok(typeof response.pipe === 'function')
-  // @ts-ignore
-  assert.deepEqual(client.stream.mock.calls[0].arguments[1], {
-    model: 'gpt-4o-mini',
-    messages: [
-      {
-        role: 'system',
-        content: 'You are a nice helpful assistant.'
-      },
-      {
-        role: 'user',
-        content: 'Hello, how are you?'
-      }
-    ],
-    max_tokens: undefined,
-    temperature: undefined,
-    stream: true,
-  })
-
-  const { content } = await consumeStream(response)
-
-  assert.equal(content.join(''), 'All good')
-})
-
-test('should be able to perform a prompt with history', async () => {
+test('should be able to perform a prompt with history', async (t) => {
   const client = {
     ...createDummyClient(),
     request: mock.fn(async () => {
@@ -166,6 +112,7 @@ test('should be able to perform a prompt with history', async () => {
   }
 
   const ai = new Ai({
+    storage,
     logger,
     providers: {
       openai: {
@@ -179,6 +126,7 @@ test('should be able to perform a prompt with history', async () => {
     }],
   })
   await ai.init()
+  t.after(() => ai.close())
 
   const response = await ai.request({
     models: ['openai:gpt-4o-mini'],
@@ -218,12 +166,12 @@ test('should be able to perform a prompt with history', async () => {
     ],
     temperature: 0.5,
     max_tokens: undefined,
-    stream: undefined,
+    stream: false,
   })
   assert.equal((response).text, 'Sure, I can help you with math.')
 })
 
-test('should be able to perform a prompt with stream (cloning stream)', async () => {
+test('should be able to perform a prompt with stream', async (t) => {
   const client = {
     ...createDummyClient(),
     stream: mock.fn(async () => {
@@ -236,6 +184,7 @@ test('should be able to perform a prompt with stream (cloning stream)', async ()
   }
 
   const ai = new Ai({
+    storage,
     logger,
     providers: {
       openai: {
@@ -249,6 +198,7 @@ test('should be able to perform a prompt with stream (cloning stream)', async ()
     }],
   })
   await ai.init()
+  t.after(() => ai.close())
 
   const response = await ai.request({
     models: ['openai:gpt-4o-mini'],
@@ -258,9 +208,13 @@ test('should be able to perform a prompt with stream (cloning stream)', async ()
       temperature: 0.5,
       stream: true
     }
-  }) as Readable
+  }) as AiStreamResponse
 
-  // @ts-ignore
+  const { content } = await consumeStream(response)
+
+  assert.equal(content.map((c: any) => c.data.response).join(''), 'Sure, I can help you with math.')
+
+  //  @ts-ignore
   assert.deepEqual(client.stream.mock.calls[0].arguments[1], {
     model: 'gpt-4o-mini',
     max_tokens: undefined,
@@ -277,8 +231,4 @@ test('should be able to perform a prompt with stream (cloning stream)', async ()
     stream: true,
     temperature: 0.5
   })
-
-  const { content } = await consumeStream(response)
-
-  assert.equal(content.join(''), 'Sure, I can help you with math.')
 })

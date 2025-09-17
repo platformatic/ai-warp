@@ -1,0 +1,4 @@
+{
+  "check-coverage": false,
+  "reporter": ["text", "json"]
+}

@@ -30,7 +30,7 @@ export async function createApp ({ client, logger, customOptions }: { client: an
     url: '/prompt',
     method: 'POST',
     handler: async (request, reply) => {
-      const { prompt, context, temperature, history, sessionId, resume } = request.body as { prompt: string, context: string, temperature: number, history: AiChatHistory, sessionId: string, resume: boolean }
+      const { prompt, context, temperature, history, sessionId, resume, resumeEventId } = request.body as { prompt: string, context: string, temperature: number, history: AiChatHistory, sessionId: string, resume: boolean, resumeEventId: string }
       const response = await app.ai.request({
         request,
         prompt,
@@ -39,6 +39,7 @@ export async function createApp ({ client, logger, customOptions }: { client: an
         history,
         sessionId,
         resume,
+        resumeEventId,
         stream: false
       } as any, reply)
 
@@ -50,7 +51,7 @@ export async function createApp ({ client, logger, customOptions }: { client: an
     url: '/stream',
     method: 'POST',
     handler: async (request, reply) => {
-      const { prompt, context, temperature, history, sessionId, resume } = request.body as { prompt: string, context: string, temperature: number, history: AiChatHistory, sessionId: string, resume: boolean }
+      const { prompt, context, temperature, history, sessionId, resume, resumeEventId } = request.body as { prompt: string, context: string, temperature: number, history: AiChatHistory, sessionId: string, resume: boolean, resumeEventId: string }
       const response = await app.ai.request({
         request,
         prompt,
@@ -59,6 +60,7 @@ export async function createApp ({ client, logger, customOptions }: { client: an
         history,
         sessionId,
         resume,
+        resumeEventId,
         stream: true
       } as any, reply)
 

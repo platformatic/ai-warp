@@ -7,10 +7,10 @@ Core implementation for AI communication with multiple providers, offering unifi
 - **Multi-Provider Support**: OpenAI, DeepSeek, and Google Gemini
 - **Automatic Fallback**: Seamless switching between providers when one fails
 - **Session Management**: Persistent conversation history with multiple storage backends
-- **Auto-Resume**: Seamless stream resumption from interruption points using UUID event IDs
-- **Hash-Based Storage**: Efficient O(1) event access with Redis hash operations
+- **Auto-Resume**: Seamless stream resumption from interruption points using event IDs
+- **Hash-Based Storage**: Efficient O(1) event access with Valkey/Redis hash operations
 - **Rate Limiting**: Per-model rate limiting with automatic restoration
-- **Streaming Support**: Real-time response streaming with UUID event identification
+- **Streaming Support**: Real-time response streaming with event identification
 - **Error Recovery**: Intelligent error handling with configurable retry policies
 
 ## 📦 Installation
@@ -57,6 +57,7 @@ const response = await ai.request({
   }
 })
 
+// Response
 console.log(response.text)
 console.log(response.sessionId)
 
@@ -69,7 +70,7 @@ const streamResponse = await ai.request({
   }
 })
 
-// Process Node.js stream with for await loop
+// Process stream response
 try {
   for await (const chunk of streamResponse) {
     console.log('Chunk:', chunk.toString())
@@ -86,9 +87,9 @@ await ai.close()
 
 Configuration file settings are grouped as follows:
 
-### AiOptions
+### AI Options
 
-Main configuration object for the Ai class:
+Main configuration object for the AI class:
 
 - `logger` (Logger, required): Pino logger instance
 - `providers` (object, required): Provider configurations with API keys and optional custom clients
@@ -176,16 +177,17 @@ Initialize the AI instance, storage, and providers. Must be called before making
 #### `ai.request(request)`
 Make an AI request with automatic fallback and session management.
 
-**Options:**
-- `prompt` (string, required): User input prompt
+**Parameters:**
+- `prompt` (string, optional): User input prompt. It's required unless `resumeEventId` is set, in that case the response will be retrieved from the session, without performing a new request to the AI provider
 - `models` (array, optional): Specific models to use for this request
 - `options` (object, optional): Request configuration options
-  - `context` (string, optional): System context/instructions
-  - `temperature` (number, optional): Model temperature (0-1)
-  - `maxTokens` (number, optional): Maximum tokens to generate
+  - `context` (string, optional): System context/instructions for the AI
+  - `temperature` (number, optional): Model creativity/randomness (0-1, default varies by model)
+  - `maxTokens` (number, optional): Maximum tokens to generate in response
   - `stream` (boolean, optional): Enable streaming responses (default: false)
-  - `sessionId` (string, optional): Session identifier for conversation history
-  - `history` (array, optional): Previous conversation history
+  - `sessionId` (string, optional): Session ID for conversation history (mutually exclusive with `history`)
+  - `history` (array, optional): Previous conversation history array (mutually exclusive with `sessionId`)
+  - `resumeEventId` (string, optional): Event ID to resume streaming from (requires `sessionId` and `stream: true`); stream will includes also `prompt` events.
 
 #### `ai.close()`
 Close all provider connections and storage.
@@ -241,14 +243,14 @@ try {
 
 ## 🔄 Auto-Resume Functionality
 
-The AI provider includes advanced auto-resume capabilities that automatically recover interrupted streaming conversations:
+The AI provider includes advanced auto-resume capabilities that automatically recover interrupted streaming conversations by streaming stored events from the configured storage backend:
 
-### Automatic Stream Resumption
+### Stream Resumption with Storage
 
-When a streaming request is interrupted, the system can automatically resume from the last successfully received event:
+When a streaming request includes a `resumeEventId`, the system retrieves and streams stored events without calling the AI model again:
 
 ```javascript
-// First streaming request
+// First streaming request - events are automatically stored
 const stream1 = await ai.request({
   prompt: 'Write a long story about space exploration',
   options: {
@@ -257,25 +259,77 @@ const stream1 = await ai.request({
   }
 })
 
-// If interrupted, resume automatically with same sessionId
+// If interrupted after receiving some events, resume from specific event ID
 const stream2 = await ai.request({
   prompt: 'Continue the story', // This prompt is ignored for resume
   options: {
     stream: true,
-    sessionId: 'conversation-123', // Same session triggers auto-resume
-    resume: true                   // Explicitly enable resume (default: true)
+    sessionId: 'conversation-123',
+    resumeEventId: 'f47ac10b-58cc-4372-a567-0e02b2c3d479' // Resume from this event
   }
 })
 
-// Only missing events will be streamed
+// Only events after the resumeEventId will be streamed from storage
 ```
 
-### UUID Event Identification
+### Storage-Based Stream Response
 
-All streaming events include unique UUID identifiers for precise resumption:
+When `resumeEventId` is provided, the response stream retrieve the events from storage:
+
+1. **Event Retrieval**: The provider queries the storage backend for all events in the session after the specified event ID
+2. **Storage Streaming**: Events are streamed directly from storage (memory/Valkey) in chronological order
+3. **AI Model Call**: When the respose is not complete, the AI model is called
+4. **Real-time Delivery**: Events are delivered as Server-Sent Events just like a fresh AI response
 
 ```javascript
-// Streaming events include UUID IDs
+// Example: Resume streaming retrieves stored events
+const resumeStream = await ai.request({
+  options: {
+    stream: true,
+    sessionId: 'session-123',
+    resumeEventId: 'event-uuid-123'
+  }
+})
+
+// This stream contains events from storage, not from AI model
+for await (const chunk of resumeStream) {
+  const data = chunk.toString()
+  // Contains SSE events retrieved from storage:
+  // id: event-uuid-124
+  // event: content
+  // data: {"response": "stored content"}
+  console.log('Stored event:', data)
+}
+```
+
+```javascript
+// Example: Resume streaming retrieves stored events then run the prompt
+const resumeStream = await ai.request({
+  prompt: 'Next prompt',
+  options: {
+    stream: true,
+    sessionId: 'session-123',
+    resumeEventId: 'event-uuid-123'
+  }
+})
+
+// This stream contains events from storage, then from AI model
+for await (const chunk of resumeStream) {
+  const data = chunk.toString()
+  // Contains SSE events retrieved from storage:
+  // id: event-uuid-124
+  // event: content
+  // data: {"response": "stored content"}
+  console.log('Event:', data)
+}
+```
+
+### Event ID Identification
+
+All streaming events include unique identifiers for precise resumption:
+
+```javascript
+// Streaming events include IDs for resumption tracking
 const reader = streamResponse.getReader()
 const decoder = new TextDecoder()
 
@@ -284,44 +338,211 @@ while (true) {
   if (done) break
   
   const chunk = decoder.decode(value)
-  // Example SSE format:
+  // Example SSE format with unique ID:
   // id: f47ac10b-58cc-4372-a567-0e02b2c3d479
   // event: content
   // data: {"response": "Text chunk"}
+  
+  // Client can track last received event ID for resume
 }
 ```
 
-### Resume Configuration
+### Resume Response
 
-Control resume behavior per request:
+When resuming streams, includes both user prompts and AI responses, providing complete conversation context. This is recommended when resuming streams as it offers full visibility into the conversation flow:
 
 ```javascript
-// Disable resume for fresh response
-const response = await ai.request({
-  prompt: 'New conversation',
+const resumeStream = await ai.request({
+  prompt: 'Continue the story', // Will perform another prompt following the resume
   options: {
-    sessionId: 'existing-session',
     stream: true,
-    resume: false  // Force new request instead of resume
+    sessionId: 'session-123',
+    resumeEventId: 'event-uuid-123'
   }
 })
 
-// Resume is enabled by default when sessionId + stream = true
-const autoResumeResponse = await ai.request({
-  prompt: 'Continue',
+// Stream contains both prompts and responses in chronological order:
+// id: event-uuid-123
+// event: content
+// data: {"prompt": "Write a story about space", "type": "prompt"}
+// 
+// id: event-uuid-124
+// event: content
+// data: {"response": "Once upon a time, in a galaxy far away...", "type": "response"}
+// 
+// id: event-uuid-125
+// event: content
+// data: {"prompt": "Add more details about the spaceship", "type": "prompt"}
+// 
+// id: event-uuid-126
+// event: content
+// data: {"response": "The spaceship was massive, with gleaming metal hull...", "type": "response"}
+// 
+// id: event-uuid-127
+// event: end
+// data: {"response": "COMPLETE"}
+```
+
+This format provides complete conversation context, making it ideal for applications that need to distinguish between user inputs and AI responses during stream resumption.
+
+### Edge cases
+
+The auto-resume functionality handles several complex edge cases that can occur during streaming conversations:
+
+#### Last Event is an Incomplete Response
+
+When the last stored event is a partial response without an `end` event, the system automatically completes the response:
+
+```javascript
+// Original request was interrupted mid-response
+const resumeStream = await ai.request({
   options: {
-    sessionId: 'existing-session',
-    stream: true
-    // resume: true (default)
+    stream: true,
+    sessionId: 'session-123',
+    resumeEventId: 'prompt-event-id' // Resume from the incomplete prompt
   }
 })
+
+// System behavior:
+// 1. Streams existing partial response from storage
+// 2. Makes new API call to complete the response
+// 3. Continues streaming the completion
 ```
+
+#### Last Event is a Response Error
+
+When the last stored event is an error, the system retries the failed request:
+
+```javascript
+// Previous response ended with error
+const resumeStream = await ai.request({
+  prompt: 'New prompt', // Optional new prompt
+  options: {
+    stream: true,
+    sessionId: 'session-123',
+    resumeEventId: 'prompt-before-error-id'
+  }
+})
+
+// System behavior:
+// 1. Streams stored events up to the error point
+// 2. Retries the failed prompt with new API call
+// 3. If new prompt provided, processes it after retry
+```
+
+#### Last Event is an Unanswered Prompt
+
+When the last stored event is a prompt without a corresponding response, the system generates the missing response:
+
+```javascript
+// Storage contains a prompt that never got a response
+const resumeStream = await ai.request({
+  options: {
+    stream: true,
+    sessionId: 'session-123',
+    resumeEventId: 'some-earlier-event-id'
+  }
+})
+
+// System behavior:
+// 1. Streams stored conversation history
+// 2. Detects hanging prompt at the end
+// 3. Makes API call to generate response for the hanging prompt
+```
+
+#### Dual Prompts (Hanging Prompt + New Prompt)
+
+The most complex edge case occurs when there's an unanswered prompt in storage AND a new prompt in the request:
+
+```javascript
+// Storage has incomplete conversation with hanging prompt
+const resumeStream = await ai.request({
+  prompt: 'Additional question', // New prompt while one is pending
+  options: {
+    stream: true,
+    sessionId: 'session-123',
+    resumeEventId: 'event-before-hanging-prompt'
+  }
+})
+
+// System behavior:
+// 1. Streams stored conversation history
+// 2. Makes first API call for the hanging prompt
+// 3. Makes second API call for the new prompt
+// 4. Streams both responses sequentially
+```
+
+#### No Stored Events After Resume Point
+
+When `resumeEventId` points to the last event or no events exist after it, the system makes a fresh API call:
+
+```javascript
+// Resume from the very last event in storage
+const resumeStream = await ai.request({
+  prompt: 'Fresh start',
+  options: {
+    stream: true,
+    sessionId: 'session-123',
+    resumeEventId: 'last-event-id'
+  }
+})
+
+// System behavior:
+// 1. No events to stream from storage
+// 2. Makes direct API call with conversation history
+// 3. Streams fresh response
+```
+
+#### Resume Without Prompt
+
+When resuming without providing a new prompt, the system only streams stored content:
+
+```javascript
+// Retrieve stored conversation without new prompt
+const resumeStream = await ai.request({
+  options: {
+    stream: true,
+    sessionId: 'session-123',
+    resumeEventId: 'middle-event-id'
+  }
+})
+
+// System behavior:
+// 1. Streams stored events from resumeEventId onwards
+// 2. No API calls made unless incomplete responses need completion
+// 3. Stream ends when all stored content is delivered
+```
+
+#### Rate Limiting During Resume
+
+If resume operations encounter rate limits, the system applies the same fallback strategy:
+
+```javascript
+// Rate limit hit during resume completion
+const resumeStream = await ai.request({
+  options: {
+    stream: true,
+    sessionId: 'session-123',
+    resumeEventId: 'some-event-id'
+  }
+})
+
+// System behavior:
+// 1. Streams stored events normally
+// 2. When API call needed, encounters rate limit
+// 3. Automatically falls back to next available model
+// 4. Continues streaming with fallback model
+```
+
+These edge cases ensure robust conversation continuity even when interruptions, errors, or complex request patterns occur during streaming interactions.
+
+---
 
 ## 🗄️ Storage Architecture
 
 ### Hash-Based Event Storage
 
-The new storage system uses Redis hash operations for O(1) event access:
+The storage system uses Valkey/Redis hash operations for O(1) event access:
 
 ```javascript
 // Storage structure: sessionId -> { eventUUID: eventData }
@@ -358,7 +579,7 @@ const ai = new Ai({
 
 #### Valkey/Redis Storage
 
-Production-ready with Redis hash commands and dedicated pub/sub:
+Production-ready with Valkey/Redis hash commands and dedicated pub/sub:
 
 ```javascript
 const ai = new Ai({
@@ -375,17 +596,6 @@ const ai = new Ai({
   }
 })
 ```
-
-### Storage Operations
-
-The storage interface provides hash-based operations:
-
-- `hashSet(sessionId, eventId, value, expiration)` - Store event with UUID key
-- `hashGetAll(sessionId)` - Retrieve all events for session
-- `hashGet(sessionId, eventId)` - Get specific event by UUID
-- `rangeFromId(sessionId, fromEventId)` - Get events starting from UUID
-- `publish(channel, data)` - Publish real-time events
-- `subscribe(channel, callback)` - Subscribe to event streams
 
 ## 🔄 Advanced Features
 

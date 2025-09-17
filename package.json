@@ -19,9 +19,16 @@
   },
   "scripts": {
     "clean": "rm -rf node_modules pnpm-lock.yaml && rm -rf packages/*/node_modules && rm -rf examples/node_modules",
-    "sync-version": "pnpm -r --workspace-concurrency=1 --if-present build && ./scripts/sync-version.sh && pnpm i"
+    "sync-version": "pnpm -r --workspace-concurrency=1 --if-present build && ./scripts/sync-version.sh && pnpm i",
+    "test": "pnpm -r --workspace-concurrency=1 --if-present test",
+    "test:coverage": "pnpm -r --workspace-concurrency=1 --if-present test:coverage",
+    "lint": "pnpm -r --workspace-concurrency=1 --if-present lint",
+    "lint:fix": "pnpm -r --workspace-concurrency=1 --if-present lint:fix",
+    "build": "pnpm -r --workspace-concurrency=1 --if-present build",
+    "typecheck": "pnpm -r --workspace-concurrency=1 --if-present typecheck",
+    "check": "pnpm -r --workspace-concurrency=1 --if-present check"
   },
   "engines": {
-    "node": ">=22.18.0"
+    "node": ">=22.19.0"
   }
 }
