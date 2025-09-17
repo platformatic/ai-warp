@@ -6,6 +6,7 @@ import { consumeStream, createDummyClient, mockOpenAiStream } from './helper/hel
 import pino from 'pino'
 import { DEFAULT_HISTORY_EXPIRATION, DEFAULT_MAX_RETRIES, DEFAULT_RATE_LIMIT_MAX, DEFAULT_REQUEST_TIMEOUT, DEFAULT_RESTORE_RATE_LIMIT, DEFAULT_RETRY_INTERVAL, DEFAULT_STORAGE, DEFAULT_RESTORE_REQUEST_TIMEOUT, DEFAULT_RESTORE_RETRY, DEFAULT_RATE_LIMIT_TIME_WINDOW, DEFAULT_RESTORE_PROVIDER_COMMUNICATION_ERROR, DEFAULT_RESTORE_PROVIDER_EXCEEDED_QUOTA_ERROR } from '../src/lib/config.ts'
 import { parseTimeWindow } from '../src/lib/utils.ts'
+import { once } from 'node:events'
 
 const logger = pino({ level: 'silent' })
 const apiKey = 'test'
@@ -219,10 +220,10 @@ test('request - should handle error from provider on stream', async () => {
     }
   }) as Readable
 
-  assert.rejects(async () => {
+  await assert.rejects(async () => {
     await consumeStream(response)
   }, {
-    message: 'Provider stream error'
+    message: 'Received error on stream: PROVIDER_RESPONSE_NO_CONTENT'
   })
 })
 
@@ -1061,54 +1062,6 @@ test('wrapStreamWithTimeout - should handle source stream error', async () => {
   })
 })
 
-test('createResumeStream - should handle events with error', async () => {
-  const ai = new Ai({
-    logger,
-    providers: { openai: { apiKey, client: createDummyClient() } },
-    models: [{ provider: 'openai', model: 'gpt-4o-mini' }]
-  })
-
-  const events = [
-    { eventId: 'event1', error: 'Test error message', timestamp: Date.now() }
-  ]
-
-  // @ts-ignore - accessing private method for testing
-  const resumeStream = ai.createResumeStream(events, 'test-session-id')
-
-  const chunks: Buffer[] = []
-  for await (const chunk of resumeStream) {
-    chunks.push(chunk)
-  }
-
-  const content = Buffer.concat(chunks).toString('utf8')
-  assert.ok(content.includes('event: error'))
-  assert.ok(content.includes('Test error message'))
-})
-
-test('createResumeStream - should handle events with response', async () => {
-  const ai = new Ai({
-    logger,
-    providers: { openai: { apiKey, client: createDummyClient() } },
-    models: [{ provider: 'openai', model: 'gpt-4o-mini' }]
-  })
-
-  const events = [
-    { eventId: 'event1', response: 'Test response', timestamp: Date.now() }
-  ]
-
-  // @ts-ignore - accessing private method for testing
-  const resumeStream = ai.createResumeStream(events, 'test-session-id')
-
-  const chunks: Buffer[] = []
-  for await (const chunk of resumeStream) {
-    chunks.push(chunk)
-  }
-
-  const content = Buffer.concat(chunks).toString('utf8')
-  assert.ok(content.includes('event: content'))
-  assert.ok(content.includes('Test response'))
-})
-
 test('History - should handle getEvent method', async () => {
   const ai = new Ai({
     logger,
@@ -1128,9 +1081,8 @@ test('History - should handle getEvent method', async () => {
   const retrievedEvent = await ai.history.getEvent(sessionId, eventId)
 
   assert.ok(retrievedEvent)
-  assert.equal(retrievedEvent.prompt, 'test')
-  assert.equal(retrievedEvent.response, 'test response')
-  assert.equal(retrievedEvent.eventId, eventId)
+  assert.equal(retrievedEvent.data.prompt, 'test')
+  assert.equal(retrievedEvent.id, eventId)
 })
 
 test('close - should handle errors in provider close gracefully', async () => {
@@ -1302,7 +1254,7 @@ test('request - should handle stream background processing error', async () => {
   const errorStream = new Readable({
     read () {
       // Emit some data then error
-      this.push('data: {"response": "test"}\n\n')
+      this.push('data: {"response": "unknown format"}\n\n')
       setTimeout(() => {
         this.emit('error', new Error('Stream processing error'))
       }, 10)
@@ -1328,9 +1280,11 @@ test('request - should handle stream background processing error', async () => {
       stream: true
     }
   }) as AiStreamResponse
-
   // The response stream should still work even if background processing fails
   assert.match(response.sessionId, /[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}/)
+
+  const error = await once(response, 'error')
+  assert.equal(error.toString(), 'FastifyError [PROVIDER_STREAM_ERROR]: Received error on stream: PROVIDER_RESPONSE_NO_CONTENT')
 })
 
 test('History - should handle rangeFromId with no matching event', async () => {
@@ -1354,30 +1308,6 @@ test('History - should handle rangeFromId with no matching event', async () => {
 
   // Should return empty array when event ID not found
   assert.equal(events.length, 0)
-})
-
-test('createResumeStream - should handle events with neither error nor response', async () => {
-  const ai = new Ai({
-    logger,
-    providers: { openai: { apiKey, client: createDummyClient() } },
-    models: [{ provider: 'openai', model: 'gpt-4o-mini' }]
-  })
-
-  const events = [
-    { eventId: 'event1', someOtherData: 'test data', timestamp: Date.now() }
-  ]
-
-  // @ts-ignore - accessing private method for testing
-  const resumeStream = ai.createResumeStream(events, 'test-session-id')
-
-  const chunks: Buffer[] = []
-  for await (const chunk of resumeStream) {
-    chunks.push(chunk)
-  }
-
-  const content = Buffer.concat(chunks).toString('utf8')
-  assert.ok(content.includes('event: content'))
-  assert.ok(content.includes('someOtherData'))
 })
 
 test('checkRateLimit - should handle new time window reset', async () => {

@@ -90,7 +90,7 @@ export function decodeEventStream (chunk: string): AiStreamEvent[] {
       currentData = line.substring(6).trim()
     } else if (line.startsWith('type: ')) {
       currentType = line.substring(6).trim() as AiStreamEventType
-    } else if (line === '' && currentEvent && currentData && currentType) {
+    } else if (line === '' && currentEvent && currentData) {
       // End of event, parse the data
       try {
         const parsedData = JSON.parse(currentData)
@@ -99,7 +99,7 @@ export function decodeEventStream (chunk: string): AiStreamEvent[] {
             id: createEventId(),
             event: 'content',
             data: parsedData,
-            type: currentType
+            type: currentType ?? 'response'
           })
         } if (currentEvent === 'end') {
           events.push({

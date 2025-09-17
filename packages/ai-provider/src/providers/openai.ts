@@ -173,8 +173,8 @@ class OpenAiStreamTransformer extends Transform {
           }
 
           const data = JSON.parse(event.data)
-          const { content } = data.choices[0].delta
-          let response = content ?? ''
+          let response = data.choices?.[0]?.delta?.content ?? ''
+
           if (this.chunkCallback) {
             response = await this.chunkCallback(response)
           }
@@ -187,12 +187,24 @@ class OpenAiStreamTransformer extends Transform {
           }
           this.push(encodeEvent(eventData))
 
-          const finish = data.choices[0].finish_reason
+          const finish = data.choices?.[0]?.finish_reason
           if (finish) {
             const eventData: AiStreamEvent = {
               id: event.id ?? createEventId(),
               event: 'end',
               data: { response: mapResponseResult(finish) }
+            }
+            this.push(encodeEvent(eventData))
+            return callback()
+          }
+
+          // unknown event
+          if (!response) {
+            const error = new ProviderResponseNoContentError(`${this.providerName} stream`)
+            const eventData: AiStreamEvent = {
+              id: event.id ?? createEventId(),
+              event: 'error',
+              data: error
             }
             this.push(encodeEvent(eventData))
             return callback()
