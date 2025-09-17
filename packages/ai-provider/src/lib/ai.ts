@@ -9,7 +9,7 @@ import { createStorage, type Storage, type AiStorageOptions } from './storage/in
 import { isStream, parseTimeWindow } from './utils.ts'
 import { HistoryGetError, ModelStateError, OptionError, ProviderNoModelsAvailableError, ProviderRateLimitError, ProviderRequestEndError, ProviderRequestStreamTimeoutError, ProviderRequestTimeoutError, ProviderStreamError } from './errors.ts'
 import { DEFAULT_HISTORY_EXPIRATION, DEFAULT_MAX_RETRIES, DEFAULT_RATE_LIMIT_MAX, DEFAULT_RATE_LIMIT_TIME_WINDOW, DEFAULT_REQUEST_TIMEOUT, DEFAULT_RESTORE_PROVIDER_COMMUNICATION_ERROR, DEFAULT_RESTORE_PROVIDER_EXCEEDED_QUOTA_ERROR, DEFAULT_RESTORE_RATE_LIMIT, DEFAULT_RESTORE_REQUEST_TIMEOUT, DEFAULT_RESTORE_RETRY, DEFAULT_RETRY_INTERVAL, DEFAULT_STORAGE } from './config.ts'
-import { createEventId, decodeEventStream, encodeEvent, type AiStreamEvent, type AiStreamEventContent, type AiStreamEventPrompt } from './event.ts'
+import { createEventId, decodeEventStream, encodeEvent, type AiStreamEvent, type AiStreamEventContent, type AiStreamEventContentPrompt } from './event.ts'
 
 // supported providers
 export type AiProvider = 'openai' | 'deepseek' | 'gemini'
@@ -853,7 +853,7 @@ export class Ai {
   async resumeRequest (stream: AiStreamResponse, sessionId: AiSessionId, resumeEventId: AiEventId)
     : Promise<{ complete: boolean, prompt: string | undefined, promptEventId: AiEventId | undefined }> {
     let complete = false
-    let lastPrompt: AiStreamEventPrompt | undefined
+    let lastPrompt: AiStreamEventContentPrompt | undefined
 
     try {
       const existingHistory = await this.history.rangeFromId(sessionId, resumeEventId)
@@ -864,11 +864,8 @@ export class Ai {
       // stop in case of error
       const buffer: AiStreamEvent[] = []
       for (const event of existingHistory) {
-        // TODO fix types
-        // @ts-ignore
-        if (event?.type === 'prompt') {
-          // @ts-ignore
-          lastPrompt = event
+        if ((event as AiStreamEventContent)?.type === 'prompt') {
+          lastPrompt = event as AiStreamEventContentPrompt
           continue
         }
 
@@ -904,7 +901,6 @@ export class Ai {
       this.logger.error({ error, sessionId }, 'Failed to resume stream')
     }
 
-    // @ts-ignore TODO fix types
     return { complete, prompt: lastPrompt?.data?.prompt, promptEventId: lastPrompt?.id }
   }
 
@@ -1035,7 +1031,6 @@ export class Ai {
     // in this case, remove the last prompt to be replaced by the new prompt
 
     // when last event is not end, last request is incomplete
-    // @ts-ignore TODO fix types
     if (lastEvent.type === 'prompt') {
       promptEventId = lastEvent.id
     }
@@ -1051,10 +1046,8 @@ export class Ai {
     const compactHistory: AiStreamEventContent[] = []
     const buffer: AiStreamEventContent[] = []
     for (const event of history) {
-    // @ts-ignore TODO fix types
-      if (event?.type === 'prompt') {
-      // @ts-ignore
-        compactHistory.push(event!)
+      if ((event as AiStreamEventContent)?.type === 'prompt') {
+        compactHistory.push(event as AiStreamEventContentPrompt)
         continue
       }
       if (event?.event === 'error') {
@@ -1082,13 +1075,9 @@ export class Ai {
     let lastResponse: string = ''
     let lastPrompt: string = ''
     for (const event of history) {
-      // @ts-ignore TODO fix types
       if (event.type === 'response') {
-        // @ts-ignore TODO fix types
         lastResponse = event.data.response!
-        // @ts-ignore TODO fix types
       } else if (event.type === 'prompt') {
-        // @ts-ignore TODO fix types
         lastPrompt = event.data.prompt!
       }
       if (lastResponse && lastPrompt) {
