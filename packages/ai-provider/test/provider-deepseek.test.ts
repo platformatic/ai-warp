@@ -1,7 +1,7 @@
 import { test, mock } from 'node:test'
 import assert from 'node:assert'
 import { Ai, type AiStreamResponse, type AiContentResponse } from '../src/lib/ai.ts'
-import { OptionError, ProviderExceededQuotaError, ProviderResponseError, ProviderResponseNoContentError, ProviderResponseMaxTokensError } from '../src/lib/errors.ts'
+import { OptionError, ProviderExceededQuotaError, ProviderResponseError, ProviderResponseNoContentError } from '../src/lib/errors.ts'
 import { mockOpenAiStream, consumeStream, createDummyClient } from './helper/helper.ts'
 import pino from 'pino'
 import { isStream } from '../src/lib/utils.ts'
@@ -444,6 +444,7 @@ test('DeepSeekProvider - should handle different finish reasons', async () => {
     { finish_reason: undefined, expectedResult: 'INCOMPLETE_UNKNOWN' }
   ]
 
+  // eslint-disable-next-line
   for (const { finish_reason, expectedResult } of testCases) {
     const client = {
       ...createDummyClient(),
@@ -453,6 +454,7 @@ test('DeepSeekProvider - should handle different finish reasons', async () => {
             message: {
               content: 'Test response'
             },
+            // eslint-disable-next-line
             finish_reason
           }]
         }
@@ -479,6 +481,7 @@ test('DeepSeekProvider - should handle different finish reasons', async () => {
       prompt: 'Test prompt'
     }) as AiContentResponse
 
+    // eslint-disable-next-line
     assert.equal(response.result, expectedResult, `Failed for finish_reason: ${finish_reason}`)
   }
 })
