@@ -38,7 +38,7 @@ jobs:
     timeout-minutes: 20
     services:
       redis:
-        image: redis:7-alpine
+        image: redis:8-alpine
         ports:
           - 6379:6379
         options: >-
@@ -77,7 +77,7 @@ jobs:
     timeout-minutes: 20
     services:
       redis:
-        image: redis:7-alpine
+        image: redis:8-alpine
         ports:
           - 6379:6379
         options: >-
@@ -116,7 +116,7 @@ jobs:
     timeout-minutes: 20
     services:
       redis:
-        image: redis:7-alpine
+        image: redis:8-alpine
         ports:
           - 6379:6379
         options: >-
@@ -155,7 +155,7 @@ jobs:
     timeout-minutes: 20
     services:
       redis:
-        image: redis:7-alpine
+        image: redis:8-alpine
         ports:
           - 6379:6379
         options: >-
