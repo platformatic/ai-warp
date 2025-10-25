@@ -122,7 +122,7 @@ importers:
     devDependencies:
       '@platformatic/generators':
         specifier: ^3.0.2
-        version: 3.13.1
+        version: 3.14.0
       '@types/node':
         specifier: ^22.13.9
         version: 22.18.12
@@ -659,8 +659,16 @@ packages:
     resolution: {integrity: sha512-MST81l2O8lQx0QJgjbmdvaZsCo9v7naPYQm5+wBzW2Gv+bCRZSWIcfduNWhDg9nFccILCW6Ox66eAaL0FbDD4A==}
     engines: {node: '>=22.19.0'}
 
+  '@platformatic/foundation@3.14.0':
+    resolution: {integrity: sha512-f9czymVDo9zZQcUTEjxU5ll6HXGEFoE3SUrnT1igrzYv3T3usCSwXdKoM33YSD3vPmKEVlA7u3BlwFEbt7R4Rg==}
+    engines: {node: '>=22.19.0'}
+
   '@platformatic/generators@3.13.1':
     resolution: {integrity: sha512-TopllvH8a8plZqh5d5/lH/N89TvqYuhHBa/rVyrAzWg8iRSjcURHK10JdGzHj6rVjqvSck0CyCL//sy6isRTyQ==}
+    engines: {node: '>=22.19.0'}
+
+  '@platformatic/generators@3.14.0':
+    resolution: {integrity: sha512-Cqgmj4NfqIkNZLeI+pbmwXFwwhApFEeLJQK8svtRZOblTRzWqtrzwMamWQLIcgicMZGYr4KPuritBRKH3yrfZw==}
     engines: {node: '>=22.19.0'}
 
   '@platformatic/http-metrics@0.2.1':
@@ -3569,10 +3577,39 @@ snapshots:
       undici: 7.11.0
       yaml: 2.8.1
 
+  '@platformatic/foundation@3.14.0':
+    dependencies:
+      '@fastify/deepmerge': 2.0.2
+      '@fastify/error': 4.2.0
+      '@iarna/toml': 2.2.5
+      '@watchable/unpromise': 1.0.2
+      ajv: 8.17.1
+      boring-name-generator: 1.0.3
+      colorette: 2.0.20
+      dotenv: 16.6.1
+      fast-json-patch: 3.1.1
+      json5: 2.2.3
+      leven: 3.1.0
+      pino: 9.14.0
+      pino-pretty: 13.1.2
+      semver: 7.7.3
+      undici: 7.11.0
+      yaml: 2.8.1
+
   '@platformatic/generators@3.13.1':
     dependencies:
       '@fastify/error': 4.2.0
       '@platformatic/foundation': 3.13.1
+      change-case-all: 2.1.0
+      execa: 9.6.0
+      fastify: 5.6.1
+      pino: 9.14.0
+      undici: 7.16.0
+
+  '@platformatic/generators@3.14.0':
+    dependencies:
+      '@fastify/error': 4.2.0
+      '@platformatic/foundation': 3.14.0
       change-case-all: 2.1.0
       execa: 9.6.0
       fastify: 5.6.1
