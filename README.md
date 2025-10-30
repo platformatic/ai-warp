@@ -28,7 +28,7 @@ npx wattpm@latest create
 ```
 
 ```txt
-Hello Alice, welcome to Watt 2.72.0!
+Hello Alice, welcome to Watt 3.0!
 ? Where would you like to create your project? warp-service
 ? Which package manager do you want to use? pnpm
 ? Which kind of service do you want to create? @platformatic/ai-warp
