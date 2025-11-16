@@ -30,7 +30,7 @@ importers:
         version: 4.3.0(@typescript-eslint/eslint-plugin@8.46.2(@typescript-eslint/parser@8.46.2(eslint@9.39.1)(typescript@5.9.3))(eslint@9.39.1)(typescript@5.9.3))(eslint@9.39.1)
       fastify:
         specifier: ^5.4.0
-        version: 5.6.1
+        version: 5.6.2
       neostandard:
         specifier: ^0.12.1
         version: 0.12.2(@typescript-eslint/utils@8.46.2(eslint@9.39.1)(typescript@5.9.3))(eslint@9.39.1)(typescript@5.9.3)
@@ -143,7 +143,7 @@ importers:
         version: 4.0.6
       fastify:
         specifier: ^5.2.1
-        version: 5.6.1
+        version: 5.6.2
       json-schema-to-typescript:
         specifier: ^15.0.4
         version: 15.0.4
@@ -167,7 +167,7 @@ importers:
         version: link:../ai-provider
       fastify:
         specifier: ^5.2.1
-        version: 5.6.1
+        version: 5.6.2
       fastify-plugin:
         specifier: ^5.0.1
         version: 5.1.0
@@ -1599,8 +1599,8 @@ packages:
   fastify-user@1.4.0:
     resolution: {integrity: sha512-VqGa60xX3nFCz2gIJHfdVjDlJIsdJ9bwigDdazaKlZ/lSxsyeXOnxsyxtZ9XeMht2drc6WLUtJ0MMeo1BSvXCg==}
 
-  fastify@5.6.1:
-    resolution: {integrity: sha512-WjjlOciBF0K8pDUPZoGPhqhKrQJ02I8DKaDIfO51EL0kbSMwQFl85cRwhOvmSDWoukNOdTo27gLN549pLCcH7Q==}
+  fastify@5.6.2:
+    resolution: {integrity: sha512-dPugdGnsvYkBlENLhCgX8yhyGCsCPrpA8lFWbTNU428l+YOnLgYHR69hzV8HWPC79n536EqzqQtvhtdaCE0dKg==}
 
   fastparallel@2.4.1:
     resolution: {integrity: sha512-qUmhxPgNHmvRjZKBFUNI0oZuuH9OlSIOXmJ98lhKPxMZZ7zS/Fi0wRHOihDSz0R1YiIOjxzOY4bq65YTcdBi2Q==}
@@ -2399,6 +2399,10 @@ packages:
   pino-std-serializers@7.0.0:
     resolution: {integrity: sha512-e906FRY0+tV27iq4juKzSYPbUj2do2X2JX4EzSca1631EB2QJQUqGbDuERal7LCtOpxl6x3+nvo9NPZcmjkiFA==}
 
+  pino@10.1.0:
+    resolution: {integrity: sha512-0zZC2ygfdqvqK8zJIr1e+wT1T/L+LF6qvqvbzEQ6tiMAoTqEVK9a1K3YRu8HEUvGEvNqZyPJTtb2sNIoTkB83w==}
+    hasBin: true
+
   pino@9.14.0:
     resolution: {integrity: sha512-8OEwKp5juEvb/MjpIc4hjqfgCNysrS94RIOMXYvpYCdm/jglrKEiAYmiumbmGhCvs+IcInsphYDFwqrjr7398w==}
     hasBin: true
@@ -2583,8 +2587,8 @@ packages:
     engines: {node: '>=10'}
     hasBin: true
 
-  set-cookie-parser@2.7.1:
-    resolution: {integrity: sha512-IOc8uWeOZgnb3ptbCURJWNjWUPcO3ZnTTdzsurqERrP6nPyv+paC55vJM0LpOlT2ne+Ix+9+CRG1MNLlyZ4GjQ==}
+  set-cookie-parser@2.7.2:
+    resolution: {integrity: sha512-oeM1lpU/UvhTxw+g3cIfxXHyJRc/uidd3yK1P242gzHds0udQBYzs3y8j4gCCW+ZJ7ad0yctld8RYO+bdurlvw==}
 
   set-function-length@1.2.2:
     resolution: {integrity: sha512-pgRc4hJ4/sNjWCSS9AmnS40x3bNMDTknHgL5UaMBTMyJnU90EgWh1Rz+MC9eFu4BuN/UwZjKQuY/1v3rM7HMfg==}
@@ -3584,7 +3588,7 @@ snapshots:
       '@platformatic/foundation': 3.14.0
       change-case-all: 2.1.0
       execa: 9.6.0
-      fastify: 5.6.1
+      fastify: 5.6.2
       pino: 9.14.0
       undici: 7.16.0
 
@@ -3640,7 +3644,7 @@ snapshots:
       env-schema: 6.1.0
       execa: 9.6.0
       fast-json-patch: 3.1.1
-      fastify: 5.6.1
+      fastify: 5.6.2
       fastify-plugin: 5.1.0
       graphql: 16.11.0
       help-me: 5.0.0
@@ -4784,11 +4788,11 @@ snapshots:
     dependencies:
       '@fastify/error': 4.2.0
       '@fastify/jwt': 9.1.0
-      fastify: 5.6.1
+      fastify: 5.6.2
       fastify-plugin: 5.1.0
       get-jwks: 11.0.3
 
-  fastify@5.6.1:
+  fastify@5.6.2:
     dependencies:
       '@fastify/ajv-compiler': 4.0.5
       '@fastify/error': 4.2.0
@@ -4799,7 +4803,7 @@ snapshots:
       fast-json-stringify: 6.1.1
       find-my-way: 9.3.0
       light-my-request: 6.6.0
-      pino: 9.14.0
+      pino: 10.1.0
       process-warning: 5.0.0
       rfdc: 1.4.1
       secure-json-parse: 4.1.0
@@ -5320,7 +5324,7 @@ snapshots:
     dependencies:
       cookie: 1.0.2
       process-warning: 4.0.1
-      set-cookie-parser: 2.7.1
+      set-cookie-parser: 2.7.2
 
   locate-path@6.0.0:
     dependencies:
@@ -5648,6 +5652,20 @@ snapshots:
 
   pino-std-serializers@7.0.0: {}
 
+  pino@10.1.0:
+    dependencies:
+      '@pinojs/redact': 0.4.0
+      atomic-sleep: 1.0.0
+      on-exit-leak-free: 2.1.2
+      pino-abstract-transport: 2.0.0
+      pino-std-serializers: 7.0.0
+      process-warning: 5.0.0
+      quick-format-unescaped: 4.0.4
+      real-require: 0.2.0
+      safe-stable-stringify: 2.5.0
+      sonic-boom: 4.2.0
+      thread-stream: 3.1.0
+
   pino@9.14.0:
     dependencies:
       '@pinojs/redact': 0.4.0
@@ -5853,7 +5871,7 @@ snapshots:
 
   semver@7.7.3: {}
 
-  set-cookie-parser@2.7.1: {}
+  set-cookie-parser@2.7.2: {}
 
   set-function-length@1.2.2:
     dependencies:
