@@ -106,7 +106,7 @@ importers:
         version: link:../fastify-ai
       '@platformatic/foundation':
         specifier: ^3.0.2
-        version: 3.14.0
+        version: 3.24.0
       '@platformatic/service':
         specifier: ^3.0.2
         version: 3.14.0(typescript@5.9.3)
@@ -657,6 +657,10 @@ packages:
 
   '@platformatic/foundation@3.14.0':
     resolution: {integrity: sha512-f9czymVDo9zZQcUTEjxU5ll6HXGEFoE3SUrnT1igrzYv3T3usCSwXdKoM33YSD3vPmKEVlA7u3BlwFEbt7R4Rg==}
+    engines: {node: '>=22.19.0'}
+
+  '@platformatic/foundation@3.24.0':
+    resolution: {integrity: sha512-CtCt0qRHtnmBRGvWbuLjGsVocaHbTPUrTm/7vz1cCwrGb/fwIZlWTW1fX53EPuAOg+PVyHP8jmNZw9d087aVFA==}
     engines: {node: '>=22.19.0'}
 
   '@platformatic/generators@3.14.0':
@@ -3573,6 +3577,24 @@ snapshots:
       boring-name-generator: 1.0.3
       colorette: 2.0.20
       dotenv: 16.6.1
+      fast-json-patch: 3.1.1
+      json5: 2.2.3
+      leven: 3.1.0
+      pino: 9.14.0
+      pino-pretty: 13.1.2
+      semver: 7.7.3
+      undici: 7.11.0
+      yaml: 2.8.1
+
+  '@platformatic/foundation@3.24.0':
+    dependencies:
+      '@fastify/deepmerge': 2.0.2
+      '@fastify/error': 4.2.0
+      '@iarna/toml': 2.2.5
+      '@watchable/unpromise': 1.0.2
+      ajv: 8.17.1
+      boring-name-generator: 1.0.3
+      colorette: 2.0.20
       fast-json-patch: 3.1.1
       json5: 2.2.3
       leven: 3.1.0
