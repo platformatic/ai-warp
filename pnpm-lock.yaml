@@ -30,7 +30,7 @@ importers:
         version: 4.3.0(@typescript-eslint/eslint-plugin@8.47.0(@typescript-eslint/parser@8.47.0(eslint@9.39.1)(typescript@5.9.3))(eslint@9.39.1)(typescript@5.9.3))(eslint@9.39.1)
       fastify:
         specifier: ^5.4.0
-        version: 5.8.3
+        version: 5.8.5
       neostandard:
         specifier: ^0.12.1
         version: 0.12.2(@typescript-eslint/utils@8.47.0(eslint@9.39.1)(typescript@5.9.3))(eslint@9.39.1)(typescript@5.9.3)
@@ -143,7 +143,7 @@ importers:
         version: 4.0.6
       fastify:
         specifier: ^5.2.1
-        version: 5.8.3
+        version: 5.8.5
       json-schema-to-typescript:
         specifier: ^15.0.4
         version: 15.0.4
@@ -167,7 +167,7 @@ importers:
         version: link:../ai-provider
       fastify:
         specifier: ^5.2.1
-        version: 5.8.3
+        version: 5.8.5
       fastify-plugin:
         specifier: ^5.0.1
         version: 5.1.0
@@ -1613,8 +1613,8 @@ packages:
   fastify-user@1.4.0:
     resolution: {integrity: sha512-VqGa60xX3nFCz2gIJHfdVjDlJIsdJ9bwigDdazaKlZ/lSxsyeXOnxsyxtZ9XeMht2drc6WLUtJ0MMeo1BSvXCg==}
 
-  fastify@5.8.3:
-    resolution: {integrity: sha512-XJXpRQ41+rsJ/GLeP9vyDC+fBXilcTlEXokMSexkdEkla4uf7ZQNaI5xl3el+kW5TZQulqYxLr659ey/KX7XmQ==}
+  fastify@5.8.5:
+    resolution: {integrity: sha512-Yqptv59pQzPgQUSIm87hMqHJmdkb1+GPxdE6vW6FRyVE9G86mt7rOghitiU4JHRaTyDUk9pfeKmDeu70lAwM4Q==}
 
   fastparallel@2.4.1:
     resolution: {integrity: sha512-qUmhxPgNHmvRjZKBFUNI0oZuuH9OlSIOXmJ98lhKPxMZZ7zS/Fi0wRHOihDSz0R1YiIOjxzOY4bq65YTcdBi2Q==}
@@ -3626,7 +3626,7 @@ snapshots:
       '@platformatic/foundation': 3.24.0
       change-case-all: 2.1.0
       execa: 9.6.0
-      fastify: 5.8.3
+      fastify: 5.8.5
       pino: 9.14.0
       undici: 7.24.1
 
@@ -3686,7 +3686,7 @@ snapshots:
       env-schema: 6.1.0
       execa: 9.6.0
       fast-json-patch: 3.1.1
-      fastify: 5.8.3
+      fastify: 5.8.5
       fastify-plugin: 5.1.0
       graphql: 16.12.0
       help-me: 5.0.0
@@ -4848,11 +4848,11 @@ snapshots:
     dependencies:
       '@fastify/error': 4.2.0
       '@fastify/jwt': 9.1.0
-      fastify: 5.8.3
+      fastify: 5.8.5
       fastify-plugin: 5.1.0
       get-jwks: 11.0.3
 
-  fastify@5.8.3:
+  fastify@5.8.5:
     dependencies:
       '@fastify/ajv-compiler': 4.0.5
       '@fastify/error': 4.2.0
