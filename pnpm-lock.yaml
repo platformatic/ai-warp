@@ -106,7 +106,7 @@ importers:
         version: link:../fastify-ai
       '@platformatic/foundation':
         specifier: ^3.0.2
-        version: 3.24.0
+        version: 3.52.4
       '@platformatic/service':
         specifier: ^3.0.2
         version: 3.24.0(typescript@5.9.3)
@@ -659,6 +659,10 @@ packages:
     resolution: {integrity: sha512-CtCt0qRHtnmBRGvWbuLjGsVocaHbTPUrTm/7vz1cCwrGb/fwIZlWTW1fX53EPuAOg+PVyHP8jmNZw9d087aVFA==}
     engines: {node: '>=22.19.0'}
 
+  '@platformatic/foundation@3.52.4':
+    resolution: {integrity: sha512-SN/fHYxln7vKy7YEiK0wf8wWE9Gh/uZ4CDIXJG6Ya3pCkbkPXfIRvWppntJLfxiNqHfPmUUMgXhEcPyw9mzX6Q==}
+    engines: {node: '>=22.19.0'}
+
   '@platformatic/generators@3.24.0':
     resolution: {integrity: sha512-13boqURZJtLM5H3aE9RJ90Xe9M77qbm4VY9Q8VKAfNC0GZU3oHLHbK3M8PapFSmaz4lKjsVbK9ZnEHXKze/Dmw==}
     engines: {node: '>=22.19.0'}
@@ -1041,6 +1045,9 @@ packages:
 
   ajv@8.18.0:
     resolution: {integrity: sha512-PlXPeEWMXMZ7sPYOHqmDyCJzcfNrUr3fGNKtezX14ykXOEIvyK81d+qydx89KY5O71FKMPaQ2vBfBFI5NHR63A==}
+
+  ajv@8.20.0:
+    resolution: {integrity: sha512-Thbli+OlOj+iMPYFBVBfJ3OmCAnaSyNn4M1vz9T6Gka5Jt9ba/HIR56joy65tY6kx/FCF5VXNB819Y7/GUrBGA==}
 
   ansi-regex@5.0.1:
     resolution: {integrity: sha512-quJQXlTSUGL2LH9SUXo8VwsY4soanhgo6LNSm84E1LBcE8s3O0wpdiRzyR9z/ZZJMlMWv37qOOb9pdJlMUEKFQ==}
@@ -2124,6 +2131,9 @@ packages:
   lodash@4.17.21:
     resolution: {integrity: sha512-v2kDEe57lecTulaDIuNTPy3Ry4gLGJ6Z1O3vE1krgXZNrsQ+LFTGHVxVjcXPs17LhbZVGedAJv8XZ1tvj5FvSg==}
 
+  lodash@4.18.1:
+    resolution: {integrity: sha512-dMInicTPVE8d1e5otfwmmjlxkZoUpiVLwyeTdUsi/Caj/gfzzblBcCE5sRHV/AsjuCmxWrte2TNGSYuCeCq+0Q==}
+
   log-symbols@5.1.0:
     resolution: {integrity: sha512-l0x2DvrW294C9uDCoQe1VSU4gf529FkSZ6leBl4TiqZH/e+0R7hSfHQBNut2mNygDgHwvYHfFLn6Oxb3VWj2rA==}
     engines: {node: '>=12'}
@@ -2605,11 +2615,6 @@ packages:
     resolution: {integrity: sha512-BR7VvDCVHO+q2xBEWskxS6DJE1qRnb7DxzUrogb71CWoSficBxYsiAGd+Kl0mmq/MprG9yArRkyrQxTO6XjMzA==}
     hasBin: true
 
-  semver@7.7.3:
-    resolution: {integrity: sha512-SdsKMrI9TdgjdweUSR9MweHA4EJ8YxHn8DFaDisvhVlUOe4BF1tLD7GAj0lIqWVl+dPb/rExr0Btby5loQm20Q==}
-    engines: {node: '>=10'}
-    hasBin: true
-
   semver@7.7.4:
     resolution: {integrity: sha512-vFKC2IEtQnVhpT78h1Yp8wzwrf8CM+MzKMHGJZfBtzhZNycRFnXsHk6E5TxIkkMsgNS7mdX3AGB7x2QM2di4lA==}
     engines: {node: '>=10'}
@@ -2882,8 +2887,8 @@ packages:
     resolution: {integrity: sha512-raqeBD6NQK4SkWhQzeYKd1KmIG6dllBOTt55Rmkt4HtI9mwdWtJljnrXjAFUBLTSN67HWrOIZ3EPF4kjUw80Bg==}
     engines: {node: '>=14.0'}
 
-  undici@6.24.0:
-    resolution: {integrity: sha512-lVLNosgqo5EkGqh5XUDhGfsMSoO8K0BAN0TyJLvwNRSl4xWGZlCVYsAIpa/OpA3TvmnM01GWcoKmc3ZWo5wKKA==}
+  undici@6.25.0:
+    resolution: {integrity: sha512-ZgpWDC5gmNiuY9CnLVXEH8rl50xhRCuLNA97fAUnKi8RRuV4E6KG31pDTsLVUKnohJE0I3XDrTeEydAXRw47xg==}
     engines: {node: '>=18.17'}
 
   undici@7.11.0:
@@ -2991,8 +2996,8 @@ packages:
     engines: {node: '>= 14.6'}
     hasBin: true
 
-  yaml@2.8.1:
-    resolution: {integrity: sha512-lcYcMxX2PO9XMGvAJkJ3OsNMw+/7FKes7/hgerGUYWIoWu5j/+YQqcZr5JnPZWzOsEBgMbSbiSTn/dv/69Mkpw==}
+  yaml@2.8.3:
+    resolution: {integrity: sha512-AvbaCLOO2Otw/lW5bmh9d/WEdcDFdQp2Z2ZUH3pX9U2ihyUY0nvLv7J6TrWowklRGPYbB/IuIMfYgxaCPg5Bpg==}
     engines: {node: '>= 14.6'}
     hasBin: true
 
@@ -3129,8 +3134,8 @@ snapshots:
 
   '@fastify/ajv-compiler@4.0.5':
     dependencies:
-      ajv: 8.18.0
-      ajv-formats: 3.0.1(ajv@8.18.0)
+      ajv: 8.20.0
+      ajv-formats: 3.0.1(ajv@8.20.0)
       fast-uri: 3.1.0
 
   '@fastify/autoload@6.3.1': {}
@@ -3198,7 +3203,7 @@ snapshots:
       json-schema-resolver: 3.0.0
       openapi-types: 12.1.3
       rfdc: 1.4.1
-      yaml: 2.8.1
+      yaml: 2.8.3
     transitivePeerDependencies:
       - supports-color
 
@@ -3616,9 +3621,30 @@ snapshots:
       leven: 3.1.0
       pino: 9.14.0
       pino-pretty: 13.1.2
-      semver: 7.7.3
+      semver: 7.7.4
       undici: 7.11.0
-      yaml: 2.8.1
+      yaml: 2.8.3
+
+  '@platformatic/foundation@3.52.4':
+    dependencies:
+      '@fastify/deepmerge': 2.0.2
+      '@fastify/error': 4.2.0
+      '@iarna/toml': 2.2.5
+      '@watchable/unpromise': 1.0.2
+      ajv: 8.18.0
+      boring-name-generator: 1.0.3
+      colorette: 2.0.20
+      debug: 4.4.3
+      fast-json-patch: 3.1.1
+      json5: 2.2.3
+      leven: 3.1.0
+      pino: 9.14.0
+      pino-pretty: 13.1.2
+      semver: 7.7.4
+      undici: 7.24.0
+      yaml: 2.8.3
+    transitivePeerDependencies:
+      - supports-color
 
   '@platformatic/generators@3.24.0':
     dependencies:
@@ -3654,7 +3680,7 @@ snapshots:
       long: 5.3.2
       prom-client: 15.1.3
       protobufjs: 7.5.4
-      undici: 6.24.0
+      undici: 6.25.0
 
   '@platformatic/scalar-theme@3.24.0': {}
 
@@ -4086,6 +4112,10 @@ snapshots:
     optionalDependencies:
       ajv: 8.18.0
 
+  ajv-formats@3.0.1(ajv@8.20.0):
+    optionalDependencies:
+      ajv: 8.20.0
+
   ajv@6.12.6:
     dependencies:
       fast-deep-equal: 3.1.3
@@ -4101,6 +4131,13 @@ snapshots:
       require-from-string: 2.0.2
 
   ajv@8.18.0:
+    dependencies:
+      fast-deep-equal: 3.1.3
+      fast-uri: 3.1.0
+      json-schema-traverse: 1.0.0
+      require-from-string: 2.0.2
+
+  ajv@8.20.0:
     dependencies:
       fast-deep-equal: 3.1.3
       fast-uri: 3.1.0
@@ -4213,7 +4250,7 @@ snapshots:
   boring-name-generator@1.0.3:
     dependencies:
       commander: 6.2.1
-      lodash: 4.17.21
+      lodash: 4.18.1
 
   borp@0.20.2:
     dependencies:
@@ -4222,7 +4259,7 @@ snapshots:
       execa: 9.6.0
       find-up: 7.0.0
       glob: 10.5.0
-      yaml: 2.8.1
+      yaml: 2.8.3
     transitivePeerDependencies:
       - monocart-coverage-reports
 
@@ -4804,8 +4841,8 @@ snapshots:
   fast-json-stringify@6.3.0:
     dependencies:
       '@fastify/merge-json-schemas': 0.2.1
-      ajv: 8.18.0
-      ajv-formats: 3.0.1(ajv@8.18.0)
+      ajv: 8.20.0
+      ajv-formats: 3.0.1(ajv@8.20.0)
       fast-uri: 3.1.0
       json-schema-ref-resolver: 3.0.0
       rfdc: 1.4.1
@@ -5408,6 +5445,8 @@ snapshots:
 
   lodash@4.17.21: {}
 
+  lodash@4.18.1: {}
+
   log-symbols@5.1.0:
     dependencies:
       chalk: 5.6.2
@@ -5935,8 +5974,6 @@ snapshots:
 
   semver@6.3.1: {}
 
-  semver@7.7.3: {}
-
   semver@7.7.4: {}
 
   set-cookie-parser@2.7.2: {}
@@ -6251,7 +6288,7 @@ snapshots:
     dependencies:
       '@fastify/busboy': 2.1.1
 
-  undici@6.24.0: {}
+  undici@6.25.0: {}
 
   undici@7.11.0: {}
 
@@ -6382,7 +6419,7 @@ snapshots:
 
   yaml@2.8.0: {}
 
-  yaml@2.8.1: {}
+  yaml@2.8.3: {}
 
   yargs-parser@21.1.1: {}
 
